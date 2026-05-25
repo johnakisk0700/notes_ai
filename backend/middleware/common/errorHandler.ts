@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction, ErrorRequestHandler } from "express";
+import type { Request, Response, NextFunction, ErrorRequestHandler } from "express";
 import { AppError } from "./AppError.js";
 import { logger } from "../../utils/logger.js"; // Ensure your logger is correctly initialized
 
@@ -22,16 +22,13 @@ export const errorHandler: ErrorRequestHandler = (
   // --- Determine Core Error Properties ---
   let statusCode = 500;
   const errorName = err.name || "InternalServerError";
-  const actualErrorMessage =
-    err.message || "An unexpected internal server error occurred.";
+  const actualErrorMessage = err.message || "An unexpected internal server error occurred.";
   let errorDetails: Record<string, any> | undefined;
 
   // The `err.stack` should include cause information if `Error` was constructed with a `cause` option (Node.js v16.9.0+)
   // or if AppError.captureStackTrace handles it.
   const loggedStack = err.stack || `${errorName}: ${actualErrorMessage}`;
-  let loggedCause:
-    | { name: string; message: string; stack?: string }
-    | undefined;
+  let loggedCause: { name: string; message: string; stack?: string } | undefined;
 
   if (err.cause instanceof Error) {
     loggedCause = {
@@ -132,8 +129,7 @@ export const errorHandler: ErrorRequestHandler = (
         ...requestContext,
         originalErrorName: errorName,
         originalErrorMessage: actualErrorMessage,
-        warning:
-          "Headers already sent; could not send error response to client.",
+        warning: "Headers already sent; could not send error response to client.",
       },
       "Error Handler: Headers already sent"
     );

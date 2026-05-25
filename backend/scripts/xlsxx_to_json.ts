@@ -17,7 +17,7 @@ function xlsxToJson(filePath) {
   const result = {};
 
   // Iterate over every sheet in the workbook.
-  workbook.SheetNames.forEach((sheetName) => {
+  workbook.SheetNames.forEach(sheetName => {
     // Get the current sheet.
     const worksheet = workbook.Sheets[sheetName];
 

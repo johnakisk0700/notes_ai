@@ -12,15 +12,10 @@ const TITLE_MAX = 50;
 export function deriveThreadTitle(firstMessage: string): string {
   const clean = firstMessage.replace(/\s+/g, " ").trim();
   if (!clean) return "New chat";
-  return clean.length <= TITLE_MAX
-    ? clean
-    : clean.slice(0, TITLE_MAX).trimEnd() + "…";
+  return clean.length <= TITLE_MAX ? clean : clean.slice(0, TITLE_MAX).trimEnd() + "…";
 }
 
-export async function createThread(
-  userId: string,
-  title: string
-): Promise<{ id: string; title: string }> {
+export async function createThread(userId: string, title: string): Promise<{ id: string; title: string }> {
   const thread = await UserThread.create({
     user_id: userId,
     title,
@@ -45,9 +40,7 @@ export async function listThreads(
   userId: string,
   opts?: { limit?: number; offset?: number }
 ): Promise<ThreadSummary[]> {
-  const query = UserThread.find({ user_id: userId })
-    .select("title inserted_at")
-    .sort({ inserted_at: -1 });
+  const query = UserThread.find({ user_id: userId }).select("title inserted_at").sort({ inserted_at: -1 });
   if (opts?.offset) query.skip(opts.offset);
   if (opts?.limit && opts.limit > 0) query.limit(opts.limit);
 
@@ -59,10 +52,7 @@ export async function countThreads(userId: string): Promise<number> {
   return UserThread.countDocuments({ user_id: userId });
 }
 
-export async function getThread(
-  threadId: string,
-  userId: string
-): Promise<ThreadDetail | null> {
+export async function getThread(threadId: string, userId: string): Promise<ThreadDetail | null> {
   if (!mongoose.isValidObjectId(threadId)) return null;
   const doc = await UserThread.findOne({
     _id: threadId,
@@ -81,10 +71,7 @@ export async function getThread(
   };
 }
 
-export async function deleteThread(
-  threadId: string,
-  userId: string
-): Promise<boolean> {
+export async function deleteThread(threadId: string, userId: string): Promise<boolean> {
   if (!mongoose.isValidObjectId(threadId)) return false;
   const res = await UserThread.deleteOne({ _id: threadId, user_id: userId });
   return (res.deletedCount ?? 0) > 0;

@@ -8,8 +8,7 @@ import { drizzlePg } from "clients/drizzle_postgres_client.js";
 Decimal.set({ precision: 15 }); // enough to handle 10 decimals safely
 
 export async function getLatestUsdToEurRate() {
-  const url =
-    "https://data-api.ecb.europa.eu/service/data/EXR/D.USD.EUR.SP00.A?format=jsondata&lastNObservations=1";
+  const url = "https://data-api.ecb.europa.eu/service/data/EXR/D.USD.EUR.SP00.A?format=jsondata&lastNObservations=1";
 
   const response = await fetch(url);
   if (!response.ok) {
@@ -28,8 +27,7 @@ export async function getLatestUsdToEurRate() {
 
   // Get the rate and the date
   const rate = observation[0];
-  const date =
-    data.structure.dimensions.observation[0].values[Number(obsKey)].id;
+  const date = data.structure.dimensions.observation[0].values[Number(obsKey)].id;
 
   // Upsert using Drizzle
   await drizzlePg
@@ -52,9 +50,7 @@ export async function getLatestUsdToEurRate() {
   // Set
   redis.set("conversion_rate", rate.toFixed(10).toString());
   redis.set("conversion_date", date.toString());
-  logger.info(
-    `Updated ECB Conversion Rates. New rate for USD->EUR: [${rate}]-[${date}]`
-  );
+  logger.info(`Updated ECB Conversion Rates. New rate for USD->EUR: [${rate}]-[${date}]`);
 
   // elevenLabs
   const elevenRate = await setApiRate("elevenlabs_conversion", 0.00014);
@@ -69,12 +65,7 @@ export async function initializeECBRates() {
   const res = await drizzlePg
     .select()
     .from(ecbConversionRatesTable)
-    .where(
-      and(
-        eq(ecbConversionRatesTable.from, "USD"),
-        eq(ecbConversionRatesTable.to, "EUR")
-      )
-    )
+    .where(and(eq(ecbConversionRatesTable.from, "USD"), eq(ecbConversionRatesTable.to, "EUR")))
     .limit(1);
 
   if (!res || res.length === 0) {
@@ -83,9 +74,7 @@ export async function initializeECBRates() {
   } else {
     const rate = res[0];
     logger.info(`ECB Conversion Rates loaded from database.`);
-    logger.info(
-      `EUR to USD = [${rate.rate}] - Official Rate Date: ${rate.rateDate}`
-    );
+    logger.info(`EUR to USD = [${rate.rate}] - Official Rate Date: ${rate.rateDate}`);
     redis.set("conversion_rate", rate.rate);
     redis.set("conversion_date", rate.rateDate);
 
@@ -94,10 +83,7 @@ export async function initializeECBRates() {
     logger.info(`ElevenLabs rate set to: [${elevenRate}]`);
 
     // google voice - chirp
-    const googleRate = await setApiRate(
-      "googlevoice_chirp_conversion",
-      0.00003
-    );
+    const googleRate = await setApiRate("googlevoice_chirp_conversion", 0.00003);
     logger.info(`Google Voice Chirp rate set to: [${googleRate}]`);
   }
 }
@@ -113,9 +99,7 @@ export async function usdToEur(usdValue: Decimal): Promise<Decimal> {
   if (eurToUsdRate) {
     const rate = new Decimal(eurToUsdRate);
     const usdToEurRate = new Decimal(1).div(rate);
-    return usdValue
-      .times(usdToEurRate)
-      .toDecimalPlaces(10, Decimal.ROUND_HALF_UP);
+    return usdValue.times(usdToEurRate).toDecimalPlaces(10, Decimal.ROUND_HALF_UP);
   } else {
     logger.error(
       "Couldnt find conversion rate even though it was fine on startup? Anyways, I will use the default 1.25 for now..."

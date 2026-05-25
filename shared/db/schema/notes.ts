@@ -14,21 +14,15 @@ export const notesTable = pgTable(
     content: text("content").notNull(),
     ...timestamps,
   },
-  (table) => [
+  table => [
     // Index for finding notes by user_id (most common query pattern)
     index("idx_notes_user_id").on(table.userId),
 
     // Composite index for user-specific date-ordered queries (creation date)
-    index("idx_notes_user_created_desc").on(
-      table.userId,
-      table.created_at.desc()
-    ),
+    index("idx_notes_user_created_desc").on(table.userId, table.created_at.desc()),
 
     // Composite index for user-specific date-ordered queries (update date) - ADDED
-    index("idx_notes_user_updated_desc").on(
-      table.userId,
-      table.updated_at.desc()
-    ),
+    index("idx_notes_user_updated_desc").on(table.userId, table.updated_at.desc()),
 
     // Composite index for user-specific title searches
     index("idx_notes_user_title").on(table.userId, table.title),

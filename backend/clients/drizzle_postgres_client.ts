@@ -39,10 +39,10 @@ export const drizzlePg = drizzle({
     // },
 
     // Callbacks
-    onconnect: (client) => {
+    onconnect: client => {
       // console.log("Connected to database");
     },
-    onclose: (client) => {
+    onclose: client => {
       // console.log("Connection closed");
     },
   },

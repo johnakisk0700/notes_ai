@@ -1,39 +1,21 @@
 {
-    "extends": "../tsconfig.json",
-    "compilerOptions": {
-        "composite": true,
-        "module": "esnext",
-        "moduleResolution": "bundler",
-        "target": "esnext",
-        "skipLibCheck": true,
-        "declaration": true,
-        "declarationMap": true,
-        "lib": [
-            "ES2020"
-        ],
-        "rootDir": "./",
-        "baseUrl": "./",
-        "paths": {
-            "@shared": [
-                "./index.ts"
-            ],
-            "@shared/*": [
-                "./*"
-            ]
-        }
-    },
-    "include": [
-        "./**/*.ts",
-        "./**/*.tsx",
-        "./**/*.js",
-        "./**/*.jsx"
-    ],
-    "exclude": [
-        "./node_modules",
-        "./dist",
-        "./build",
-        "./**/node_modules",
-        "./**/*.test.ts",
-        "./**/*.spec.ts"
-    ]
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "esnext",
+    "skipLibCheck": true,
+    "declaration": true,
+    "declarationMap": true,
+    "lib": ["ES2020"],
+    "rootDir": "./",
+    "baseUrl": "./",
+    "paths": {
+      "@shared": ["./index.ts"],
+      "@shared/*": ["./*"]
+    }
+  },
+  "include": ["./**/*.ts", "./**/*.tsx", "./**/*.js", "./**/*.jsx"],
+  "exclude": ["./node_modules", "./dist", "./build", "./**/node_modules", "./**/*.test.ts", "./**/*.spec.ts"]
 }

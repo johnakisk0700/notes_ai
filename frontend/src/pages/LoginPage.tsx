@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { api } from '@/integrations/api';
 import { useSignIn, useSignUp } from '@clerk/clerk-react';
 import { Loader2Icon } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
@@ -28,6 +28,14 @@ export const LoginPage = () => {
   const [loading, setLoading] = useState(false);
   const [pendingVerification, setPendingVerification] = useState(false);
   const [code, setCode] = useState('');
+
+  // If the user refreshed mid-verification, Clerk still holds the in-progress
+  // signUp — resume the verification step automatically.
+  useEffect(() => {
+    if (signUpLoaded && signUp?.status === 'missing_requirements') {
+      setPendingVerification(true);
+    }
+  }, [signUpLoaded, signUp?.status]);
 
   const [formData, setFormData] = useState({
     email: '',
@@ -76,9 +84,6 @@ export const LoginPage = () => {
       await signUp.create({
         emailAddress: formData.email,
         password: formData.password,
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        unsafeMetadata: { phone_number: formData.phoneNumber },
       });
 
       // Clerk sends a one-time code to the email; collect it in the next step.

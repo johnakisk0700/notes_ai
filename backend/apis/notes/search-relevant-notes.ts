@@ -1,22 +1,11 @@
-import {
-  gptSystemUserQuery,
-  gptSystemUserQueryWithTools,
-  openai,
-} from "clients/openai_client";
+import { gptSystemUserQueryWithTools, openai } from "clients/openai_client";
 import { qdrantClient } from "clients/qdrant_client";
-import { Request, Response } from "express";
-import {
-  generateNoteSearchSystemPrompt,
-  generateNoteSearchToolSystemPrompt,
-} from "../../utils/gptPromptGenerator.js";
-import { ChatCompletionTool } from "openai/resources/index.mjs";
+import type { Request, Response } from "express";
+import { generateNoteSearchSystemPrompt, generateNoteSearchToolSystemPrompt } from "../../utils/gptPromptGenerator.js";
+import type { ChatCompletionTool } from "openai/resources/index.mjs";
 import { handleAiStream } from "services/ai/ai_chat";
-import { Message } from "model/mongo-db/Message";
-import {
-  appendMessage,
-  createThread,
-  deriveThreadTitle,
-} from "services/chat-threads";
+import type { Message } from "model/mongo-db/Message";
+import { appendMessage, createThread, deriveThreadTitle } from "services/chat-threads";
 import { logger } from "utils/logger";
 
 interface SearchRelevantNotesRequest {
@@ -34,26 +23,16 @@ interface SearchRelevantNotesRequest {
 const PAGE_SIZE = 100;
 
 async function searchRelevantNotes(req: Request, res: Response) {
-  const {
-    query: initialQuery,
-    selectedUsers,
-    previousQueries,
-    now,
-    threadId,
-  }: SearchRelevantNotesRequest = req.body;
+  const { query: initialQuery, selectedUsers, previousQueries, now, threadId }: SearchRelevantNotesRequest = req.body;
   const userId = req.user.id;
   const userIds = selectedUsers ? [userId, ...selectedUsers] : [userId];
 
   // Resolve (or create) the thread this turn belongs to and persist the user's
   // message. Best-effort: a Mongo hiccup must never block the streamed answer.
-  let activeThreadId =
-    typeof threadId === "string" && threadId ? threadId : undefined;
+  let activeThreadId = typeof threadId === "string" && threadId ? threadId : undefined;
   try {
     if (!activeThreadId) {
-      const created = await createThread(
-        userId,
-        deriveThreadTitle(initialQuery)
-      );
+      const created = await createThread(userId, deriveThreadTitle(initialQuery));
       activeThreadId = created.id;
       // Hand the new id to the client so it can route to /thread/:id.
       res.write(`event: thread\ndata: ${activeThreadId}\n\n`);
@@ -76,11 +55,7 @@ async function searchRelevantNotes(req: Request, res: Response) {
   //   userIds
   // );
 
-  const qdrantQuery: QdrantQueryBody = await generateQdrantQueryClassic(
-    initialQuery,
-    userIds,
-    res
-  );
+  const qdrantQuery: QdrantQueryBody = await generateQdrantQueryClassic(initialQuery, userIds, res);
 
   const relevantNotes = await qdrantClient.query("notes", qdrantQuery);
   const filteredNotes = relevantNotes.points
@@ -133,9 +108,7 @@ async function searchRelevantNotes(req: Request, res: Response) {
         appendMessage(activeThreadId, userId, {
           role: "assistant",
           content: answer,
-        }).catch((err) =>
-          logger.error("Thread persistence (assistant message) failed:", err)
-        );
+        }).catch(err => logger.error("Thread persistence (assistant message) failed:", err));
       },
     }
   );
@@ -221,19 +194,13 @@ async function generateQdrantQueryUsingTools(
 ) {
   const gptQueryToolCall = {
     systemQuery: generateNoteSearchToolSystemPrompt(now),
-    userQuery: `My search query is: ${initialQuery} ${getLastUserMessage(
-      previousQueries
-    )}`
+    userQuery: `My search query is: ${initialQuery} ${getLastUserMessage(previousQueries)}`
       .replace(/\s*\r?\n\s*/g, " ")
       .trim(),
   };
 
   res.write(`manual: Consulting advanced AI.\n\n`);
-  const gptQueryToolCallAnswer = await gptSystemUserQueryWithTools(
-    "gpt-4o",
-    gptQueryToolCall,
-    tools
-  );
+  const gptQueryToolCallAnswer = await gptSystemUserQueryWithTools("gpt-4o", gptQueryToolCall, tools);
   res.write(`manual: Searching through your notes.\n\n`);
   const qdrantQuery: QdrantQueryBody = {
     with_payload: true,
@@ -247,9 +214,8 @@ async function generateQdrantQueryUsingTools(
       ],
     },
   };
-  let pageNumber = 0;
-  for (const tool_call of gptQueryToolCallAnswer.choices[0].message
-    .tool_calls || []) {
+  const pageNumber = 0;
+  for (const tool_call of gptQueryToolCallAnswer.choices[0].message.tool_calls || []) {
     if (tool_call.function.name === "query-search") {
       const query = JSON.parse(tool_call.function.arguments).query as string;
 

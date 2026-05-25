@@ -1,4 +1,4 @@
-import { SQL } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
 
 /**
  * Defines the structure for a single sort criterion.

@@ -50,9 +50,7 @@ export class AppError extends Error {
     let stack = this.stack || `${this.name}: ${this.message}`;
 
     if (this.cause instanceof Error) {
-      stack +=
-        "\nCaused by: " +
-        (this.cause.stack || `${this.cause.name}: ${this.cause.message}`);
+      stack += "\nCaused by: " + (this.cause.stack || `${this.cause.name}: ${this.cause.message}`);
     }
 
     return stack;

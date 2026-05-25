@@ -2,7 +2,7 @@ import { validateRequestBody } from "middleware/common/validation/requiredValida
 import { createAndSaveNoteEmbedding } from "services/embeddings";
 import { drizzlePg } from "clients/drizzle_postgres_client";
 import { notesTable } from "@shared/db/schema/notes";
-import { Reminder, remindersTable } from "@shared/db/schema/reminders";
+import { remindersTable } from "@shared/db/schema/reminders";
 import { AppError } from "middleware/common/AppError";
 
 export async function storeNote(req, res, next) {
@@ -13,7 +13,7 @@ export async function storeNote(req, res, next) {
     let noteRecord;
     let reminderRecord: any = null;
 
-    await drizzlePg.transaction(async (tx) => {
+    await drizzlePg.transaction(async tx => {
       // Save the note
       const noteResult = await tx
         .insert(notesTable)

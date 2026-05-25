@@ -12,7 +12,7 @@ export const updateNote = async (req, res) => {
     let noteRecord;
     let reminderRecord: any = null;
 
-    await drizzlePg.transaction(async (tx) => {
+    await drizzlePg.transaction(async tx => {
       // 1. Update the note
       const noteResult = await tx
         .update(notesTable)
@@ -70,9 +70,7 @@ export const updateNote = async (req, res) => {
         reminderRecord = reminderResult[0];
       } else {
         // 2b. Delete reminder if it exists
-        await tx
-          .delete(remindersTable)
-          .where(eq(remindersTable.noteId, noteId));
+        await tx.delete(remindersTable).where(eq(remindersTable.noteId, noteId));
         // reminderRecord remains null
       }
 

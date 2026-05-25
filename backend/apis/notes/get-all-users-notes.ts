@@ -1,4 +1,4 @@
-import { FullNote } from "@shared/dto/GetNoteDTO";
+import type { FullNote } from "@shared/dto/GetNoteDTO";
 import { drizzlePg } from "clients/drizzle_postgres_client";
 import { AppError } from "middleware/common/AppError";
 

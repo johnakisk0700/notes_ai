@@ -11,7 +11,7 @@ export const customersTable = pgTable(
     title: text("title"),
     ...timestamps,
   },
-  (table) => [index("idx_customers_name").on(table.name)]
+  table => [index("idx_customers_name").on(table.name)]
 );
 
 export type Customer = typeof customersTable.$inferSelect;

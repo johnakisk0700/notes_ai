@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { Button } from './ui/button';
-import { ArrowBigUp, ArrowUp, Square } from 'lucide-react';
+import { ArrowUp, Square } from 'lucide-react';
 import AudioRecorder from './Common/AudioRecorder';
 import { toast } from 'sonner';
 import { api } from '@/integrations/api';

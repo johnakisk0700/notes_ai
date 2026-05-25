@@ -1,4 +1,4 @@
-import { useUser } from '@clerk/clerk-react';
+import type { useUser } from '@clerk/clerk-react';
 import { createContext, useContext } from 'react';
 
 type ClerkUser = ReturnType<typeof useUser>['user'];

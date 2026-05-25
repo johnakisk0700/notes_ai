@@ -1,19 +1,14 @@
-import { TextBlock } from "@anthropic-ai/sdk/resources/index.mjs";
-import { ChatCompletionRequestMessage } from "@fireworksai/sdk";
-import Decimal from "decimal.js";
-import {
-  ParsedResponseStreamEvent,
-  ResponseTextDeltaEvent,
-} from "openai/lib/responses/EventTypes.mjs";
-import {
-  ResponseCompletedEvent,
-  ResponseErrorEvent,
-} from "openai/resources/responses/responses.mjs";
+import type { TextBlock } from "@anthropic-ai/sdk/resources/index.mjs";
+import type { ChatCompletionRequestMessage } from "@fireworksai/sdk";
+import type Decimal from "decimal.js";
+import type { ParsedResponseStreamEvent, ResponseTextDeltaEvent } from "openai/lib/responses/EventTypes.mjs";
+import type { ResponseCompletedEvent, ResponseErrorEvent } from "openai/resources/responses/responses.mjs";
 import { anthropic } from "../../clients/claude_client.js";
 import { fireworksClient } from "../../clients/fireworks_client.js";
 import { openai } from "../../clients/openai_client.js";
 import { calculateCompletionCost } from "./ai_utils.js";
-import { AI_MODELS, ModelNames } from "./ai_models.js";
+import type { ModelNames } from "./ai_models.js";
+import { AI_MODELS } from "./ai_models.js";
 import { logger } from "utils/logger";
 
 interface Message {
@@ -57,9 +52,7 @@ export async function getAiChatResponse({
       case "claude": {
         const DEFAULT_CLAUDE_MODEL = "claude-3-5-haiku-latest";
         // Claude needs system messages converted to assistant
-        const claudeMessages = messages.map((msg) =>
-          msg.role === "system" ? { ...msg, role: "assistant" } : msg
-        );
+        const claudeMessages = messages.map(msg => (msg.role === "system" ? { ...msg, role: "assistant" } : msg));
 
         const response = await anthropic.messages.create({
           model: model || DEFAULT_CLAUDE_MODEL, // Use the provided model
@@ -70,12 +63,11 @@ export async function getAiChatResponse({
           }[],
         });
 
-        const { inputCost, outputCost, totalCost } =
-          await calculateCompletionCost(
-            response.usage?.input_tokens || 0,
-            response.usage?.output_tokens || 0,
-            model || DEFAULT_CLAUDE_MODEL
-          );
+        const { inputCost, outputCost, totalCost } = await calculateCompletionCost(
+          response.usage?.input_tokens || 0,
+          response.usage?.output_tokens || 0,
+          model || DEFAULT_CLAUDE_MODEL
+        );
 
         return {
           content: (response.content[0] as TextBlock).text || "No response.",
@@ -96,12 +88,11 @@ export async function getAiChatResponse({
           max_output_tokens: maxTokens,
         });
 
-        const { inputCost, outputCost, totalCost } =
-          await calculateCompletionCost(
-            response.usage?.input_tokens || 0,
-            response.usage?.output_tokens || 0,
-            model || DEFAULT_GPT_MODEL
-          );
+        const { inputCost, outputCost, totalCost } = await calculateCompletionCost(
+          response.usage?.input_tokens || 0,
+          response.usage?.output_tokens || 0,
+          model || DEFAULT_GPT_MODEL
+        );
 
         return {
           content: response.output_text || "No response.",
@@ -130,7 +121,7 @@ export async function* getAiStreamingChatResponse({
   temperature = 0.65,
   maxTokens = 8000,
 }: AiChatParams) {
-  const cleanMessages = messages.map((m) => ({
+  const cleanMessages = messages.map(m => ({
     role: m.role,
     content: m.content,
   }));
@@ -173,13 +164,12 @@ export async function* getAiStreamingChatResponse({
   if (name === "fireworks-ai") {
     // prepend systemPrompt as a true system role if one hasn’t been provided
     const fwMessages: ChatCompletionRequestMessage[] =
-      systemPrompt && !cleanMessages.some((m) => m.role === "system")
+      systemPrompt && !cleanMessages.some(m => m.role === "system")
         ? [{ role: "system", content: systemPrompt }, ...cleanMessages]
         : cleanMessages;
 
     const stream = await fireworksClient.chat.completions.create({
-      model:
-        model || "accounts/fireworks/models/llama4-maverick-instruct-basic",
+      model: model || "accounts/fireworks/models/llama4-maverick-instruct-basic",
       messages: fwMessages,
       stream: true,
       maxTokens: maxTokens, // Fireworks uses snake_case
@@ -224,12 +214,11 @@ export async function handleAiStream(
           break;
         case "usage":
           const usage = chunk.data;
-          const { inputCost, outputCost, totalCost } =
-            await calculateCompletionCost(
-              usage.input_tokens || 0,
-              usage.output_tokens || 0,
-              streamParams.model
-            );
+          const { inputCost, outputCost, totalCost } = await calculateCompletionCost(
+            usage.input_tokens || 0,
+            usage.output_tokens || 0,
+            streamParams.model
+          );
           req.addCost({
             model: streamParams.model,
             inputCost,
@@ -237,9 +226,7 @@ export async function handleAiStream(
             totalCost,
           });
           // Optionally, send usage/cost info to client:
-          res.write(
-            `event: usage\ndata: ${JSON.stringify({ inputCost, outputCost, totalCost })}\n\n`
-          );
+          res.write(`event: usage\ndata: ${JSON.stringify({ inputCost, outputCost, totalCost })}\n\n`);
           break;
         case "done":
           res.write(`event: done\ndata: )}\n\n`);
@@ -250,10 +237,7 @@ export async function handleAiStream(
           return; // Exit after handling 'done'
         case "error":
           logger.error("Streaming error from AI provider:", chunk.data);
-          const errorDataString =
-            typeof chunk.data === "string"
-              ? chunk.data
-              : JSON.stringify(chunk.data);
+          const errorDataString = typeof chunk.data === "string" ? chunk.data : JSON.stringify(chunk.data);
           res.write(`event: error\ndata: ${errorDataString}\n\n`);
           res.end();
           if (callbacks?.onError) {
@@ -264,9 +248,7 @@ export async function handleAiStream(
     }
 
     // Fallback if iterator finishes without 'done' or 'error'
-    logger.info(
-      'AI stream iterator completed without an explicit "done" or "error" chunk.'
-    );
+    logger.info('AI stream iterator completed without an explicit "done" or "error" chunk.');
 
     if (ai_answer) {
       res.write(`event: done\ndata: )}\n\n`);
@@ -296,16 +278,12 @@ export async function handleAiStream(
 }
 
 /** Utility: true only for text-delta events */
-function isTextDelta(
-  ev: ParsedResponseStreamEvent
-): ev is ResponseTextDeltaEvent {
+function isTextDelta(ev: ParsedResponseStreamEvent): ev is ResponseTextDeltaEvent {
   return ev.type === "response.output_text.delta";
 }
 
 /** Utility: true only for “done” events  */
-function isCompleted(
-  ev: ParsedResponseStreamEvent
-): ev is ResponseCompletedEvent {
+function isCompleted(ev: ParsedResponseStreamEvent): ev is ResponseCompletedEvent {
   return ev.type === "response.completed";
 }
 

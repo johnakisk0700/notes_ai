@@ -20,9 +20,7 @@ export async function init_collections() {
           }
           // If it's a conflict, it means the collection is being created concurrently.
           // You might want to log this or handle it differently.  For example:
-          console.warn(
-            `Collection ${col} creation conflict. Likely created concurrently.`
-          );
+          console.warn(`Collection ${col} creation conflict. Likely created concurrently.`);
         }
       }
     }

@@ -9,7 +9,7 @@ const AudioRecorder = ({ onTranscriptionComplete, isTranscribing = false, ...pro
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
 
-  let mediaRecorderOptions = { mimeType: 'audio/mp4' };
+  const mediaRecorderOptions = { mimeType: 'audio/mp4' };
   let mediaBlobFormat = 'audio/mp4';
 
   if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {

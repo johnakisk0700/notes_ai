@@ -15,7 +15,7 @@ export async function embedWithGPT(textsToEmbed: string[]) {
       });
 
       // Extract embeddings
-      const batchEmbeddings = response.data.map((entry) => entry.embedding);
+      const batchEmbeddings = response.data.map(entry => entry.embedding);
       embeddings.push(...batchEmbeddings);
     } catch (error) {
       console.error("Error fetching embeddings:", error);

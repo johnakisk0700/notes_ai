@@ -1,13 +1,4 @@
-import {
-  pgTable,
-  uuid,
-  text,
-  index,
-  integer,
-  boolean,
-  jsonb,
-  timestamp,
-} from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, index, integer, boolean, jsonb, timestamp } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { timestamps } from "../timestamps";
 
@@ -27,13 +18,10 @@ export const threadsTable = pgTable(
     metadata: jsonb("metadata"), // For model settings, temperature, etc.
     ...timestamps,
   },
-  (table) => [
+  table => [
     // Core indexes for chat app queries
     index("idx_threads_user_id").on(table.userId),
-    index("idx_threads_user_last_message").on(
-      table.userId,
-      table.lastMessageAt.desc()
-    ),
+    index("idx_threads_user_last_message").on(table.userId, table.lastMessageAt.desc()),
 
     // For recent conversations
     index("idx_threads_user_created").on(table.userId, table.created_at.desc()),
@@ -42,11 +30,7 @@ export const threadsTable = pgTable(
     index("idx_threads_user_updated").on(table.userId, table.updated_at.desc()),
 
     // For active (non-archived) threads
-    index("idx_threads_user_active").on(
-      table.userId,
-      table.isArchived,
-      table.lastMessageAt.desc()
-    ),
+    index("idx_threads_user_active").on(table.userId, table.isArchived, table.lastMessageAt.desc()),
 
     // For pinned threads
     index("idx_threads_user_pinned").on(table.userId, table.isPinned),

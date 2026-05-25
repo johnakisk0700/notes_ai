@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { ChatCompletionTool, ChatModel } from "openai/resources/index.mjs";
+import type { ChatCompletionTool, ChatModel } from "openai/resources/index.mjs";
 
 export const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY, // Make sure to set this in your environment variables
@@ -34,7 +34,7 @@ export async function gptSystemUserQuery(
   ];
 
   if (previousMessages) {
-    previousMessages.forEach((previousMessage) => {
+    previousMessages.forEach(previousMessage => {
       messages.push({
         role: previousMessage.role || "user",
         content: previousMessage.content,

@@ -1,8 +1,4 @@
-import {
-  QueryMiddlewareOptions,
-  QueryParameters,
-  SortCriterion,
-} from "@shared/interfaces/QueryParameters";
+import type { QueryMiddlewareOptions, SortCriterion } from "@shared/interfaces/QueryParameters";
 
 export function createQueryMiddleware(options: QueryMiddlewareOptions) {
   const { defaultSort = [], defaultLimit = -1, maxLimit } = options;
@@ -16,17 +12,13 @@ export function createQueryMiddleware(options: QueryMiddlewareOptions) {
       const sortParams = Array.isArray(sort) ? sort : [sort];
 
       sortCriteria = sortParams
-        .map((sortParam) => {
+        .map(sortParam => {
           if (typeof sortParam !== "string") return null;
 
           const [field, direction] = sortParam.split(":");
 
           // Only validate direction, let the endpoint validate fields
-          if (
-            !field ||
-            !direction ||
-            !["ASC", "DESC"].includes(direction.toUpperCase())
-          ) {
+          if (!field || !direction || !["ASC", "DESC"].includes(direction.toUpperCase())) {
             return null;
           }
 

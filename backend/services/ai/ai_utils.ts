@@ -2,11 +2,7 @@ import { usdToEur } from "utils/ecbConversionRates";
 import { AI_MODELS } from "./ai_models.js";
 
 // input/output in x$/1 million tokens
-export const calculateCompletionCost = async (
-  inputTokens: number,
-  outputTokens: number,
-  modelName: string
-) => {
+export const calculateCompletionCost = async (inputTokens: number, outputTokens: number, modelName: string) => {
   const { inputCost, outputCost } = AI_MODELS[modelName];
 
   // Calculate the actual cost based on the number of tokens

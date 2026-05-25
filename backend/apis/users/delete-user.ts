@@ -24,7 +24,7 @@ export async function deleteUser(req, res) {
       .from(notesTable)
       .where(eq(notesTable.userId, userId));
 
-    await drizzlePg.transaction(async (tx) => {
+    await drizzlePg.transaction(async tx => {
       await tx.delete(remindersTable).where(eq(remindersTable.userId, userId));
       await tx.delete(notesTable).where(eq(notesTable.userId, userId));
       await tx.delete(profileTable).where(eq(profileTable.id, userId));
@@ -32,7 +32,7 @@ export async function deleteUser(req, res) {
 
     if (userNotes.length > 0) {
       await qdrantClient.delete("notes", {
-        points: userNotes.map((n) => n.id),
+        points: userNotes.map(n => n.id),
       });
     }
 

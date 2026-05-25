@@ -1,9 +1,6 @@
 import { notesTable } from "@shared/db/schema/notes";
-import { FullNote } from "@shared/dto/GetNoteDTO";
-import {
-  PaginationResponse,
-  QueryParameters,
-} from "@shared/interfaces/QueryParameters";
+import type { FullNote } from "@shared/dto/GetNoteDTO";
+import type { PaginationResponse, QueryParameters } from "@shared/interfaces/QueryParameters";
 import { drizzlePg } from "clients/drizzle_postgres_client";
 import { count, eq } from "drizzle-orm";
 
@@ -14,10 +11,7 @@ export async function getNotes(req, res) {
   try {
     const whereClause = eq(notesTable.userId, userId);
 
-    const countQuery = drizzlePg
-      .select({ count: count() })
-      .from(notesTable)
-      .where(whereClause);
+    const countQuery = drizzlePg.select({ count: count() }).from(notesTable).where(whereClause);
 
     const notesQuery = drizzlePg.query.notesTable.findMany({
       where: whereClause,
@@ -26,20 +20,13 @@ export async function getNotes(req, res) {
       },
       orderBy: (notes, { asc, desc }) =>
         sorting?.length
-          ? sorting.map((s) =>
-              s.direction.toLowerCase() === "asc"
-                ? asc(notes[s.field])
-                : desc(notes[s.field])
-            )
+          ? sorting.map(s => (s.direction.toLowerCase() === "asc" ? asc(notes[s.field]) : desc(notes[s.field])))
           : [desc(notes.updated_at)],
       limit: pagination.fetchAll ? undefined : pagination.limit,
       offset: pagination.fetchAll ? undefined : pagination.offset,
     });
 
-    const [[{ count: totalCount }], notesWithReminders] = await Promise.all([
-      countQuery,
-      notesQuery,
-    ]);
+    const [[{ count: totalCount }], notesWithReminders] = await Promise.all([countQuery, notesQuery]);
 
     const response: PaginationResponse<FullNote> = {
       data: notesWithReminders,
@@ -47,12 +34,8 @@ export async function getNotes(req, res) {
         page: pagination.page,
         limit: pagination.limit,
         totalCount,
-        totalPages: pagination.fetchAll
-          ? 1
-          : Math.ceil(totalCount / pagination.limit),
-        hasNext:
-          !pagination.fetchAll &&
-          pagination.page * pagination.limit < totalCount,
+        totalPages: pagination.fetchAll ? 1 : Math.ceil(totalCount / pagination.limit),
+        hasNext: !pagination.fetchAll && pagination.page * pagination.limit < totalCount,
         hasPrev: pagination.page > 1,
       },
     };

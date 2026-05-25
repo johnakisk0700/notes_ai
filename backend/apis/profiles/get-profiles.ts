@@ -1,9 +1,8 @@
-import { Profile, profileTable } from "@shared/db/schema/profile";
-import { Tefteri, tefteriTable } from "@shared/db/schema/tefteri";
-import {
-  PaginationResponse,
-  QueryParameters,
-} from "@shared/interfaces/QueryParameters";
+import type { Profile } from "@shared/db/schema/profile";
+import { profileTable } from "@shared/db/schema/profile";
+import type { Tefteri } from "@shared/db/schema/tefteri";
+import { tefteriTable } from "@shared/db/schema/tefteri";
+import type { PaginationResponse, QueryParameters } from "@shared/interfaces/QueryParameters";
 import { drizzlePg } from "clients/drizzle_postgres_client";
 import { count, desc, eq, sql } from "drizzle-orm";
 import { applyPagination } from "utils/drizzleHelpers";
@@ -21,10 +20,7 @@ export async function getProfiles(req, res) {
   // if (sorting) query = applyOrdering(query, profileTable, sorting);
   if (!pagination?.fetchAll) query = applyPagination(query, pagination);
 
-  const [countResult, result] = await Promise.all([
-    drizzlePg.select({ count: count() }).from(profileTable),
-    query,
-  ]);
+  const [countResult, result] = await Promise.all([drizzlePg.select({ count: count() }).from(profileTable), query]);
 
   const totalCount = countResult[0].count;
 
@@ -37,11 +33,8 @@ export async function getProfiles(req, res) {
       page: pagination.page,
       limit: pagination.limit,
       totalCount,
-      totalPages: pagination.fetchAll
-        ? 1
-        : Math.ceil(totalCount / pagination.limit),
-      hasNext:
-        !pagination.fetchAll && pagination.page * pagination.limit < totalCount,
+      totalPages: pagination.fetchAll ? 1 : Math.ceil(totalCount / pagination.limit),
+      hasNext: !pagination.fetchAll && pagination.page * pagination.limit < totalCount,
       hasPrev: pagination.page > 1,
     },
   };

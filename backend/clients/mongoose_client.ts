@@ -1,5 +1,6 @@
 // src/config/database.ts
-import mongoose, { ConnectOptions } from "mongoose";
+import type { ConnectOptions } from "mongoose";
+import mongoose from "mongoose";
 import { logger } from "utils/logger";
 
 // Connection options
@@ -28,7 +29,7 @@ export const connectToDatabase = async (): Promise<typeof mongoose> => {
     logger.info("MongoDB connected.");
 
     if (!mongoose.connection.listenerCount("error")) {
-      mongoose.connection.on("error", (error) => {
+      mongoose.connection.on("error", error => {
         logger.error("MongoDB connection error:", error);
         isConnected = false;
       });

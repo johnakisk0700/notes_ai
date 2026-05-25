@@ -4,7 +4,6 @@ import { useNoteEditor } from '@/context/NoteEditorContext';
 import { useNotes } from '@/context/NotesContext';
 import { useDebouncedLocalstorageSync } from '@/hooks/useDebouncedLocalstorageSync';
 import { useNoteOperations } from '@/hooks/useNoteOperations';
-import { api } from '@/integrations/api';
 import type { Note } from '@shared/db/schema/notes';
 import type { Reminder } from '@shared/db/schema/reminders';
 import { EditorContent } from '@tiptap/react';
@@ -13,7 +12,6 @@ import { Bell, Loader2Icon, RefreshCcw, SaveIcon, Trash2Icon, X } from 'lucide-r
 import { useCallback, useEffect, useRef, useState } from 'react'; // Removed useRef
 import { BarLoader } from 'react-spinners';
 import { toast } from 'sonner';
-import AudioRecorder from '../Common/AudioRecorder';
 import { useCustomTiptap } from '../Common/TiptapEditor/TiptapEditor';
 import { Button } from '../ui/button';
 import { Calendar } from '../ui/calendar';

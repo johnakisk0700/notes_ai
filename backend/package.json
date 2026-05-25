@@ -31,8 +31,12 @@
   "scripts": {
     "start": "bun run dist/server.js",
     "dev": "bun --watch run server.ts",
+    "dev:poll": "nodemon --legacy-watch --watch . --watch ../shared --ext ts,tsx,js,json --exec \"bun run server.ts\"",
     "dev-eu": "bun run server.ts",
     "build": "bun build ./server.ts --outdir ./dist --target bun --minify --external pino-pretty",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
     "gptmodels": "bun ./scripts/getAvailableGPTmodels.js"
   },
   "devDependencies": {
@@ -41,6 +45,7 @@
     "@types/express": "^5.0.3",
     "@types/node": "latest",
     "drizzle-kit": "^0.31.1",
+    "nodemon": "^3.1.0",
     "typescript": "latest"
   }
 }

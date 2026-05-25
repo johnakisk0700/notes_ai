@@ -1,21 +1,13 @@
-import { NextFunction, Request, Response } from "express";
-import Decimal from "decimal.js";
-import { CostEntry, costTracker } from "utils/costTracker";
+import type { NextFunction, Request, Response } from "express";
+import { costTracker } from "utils/costTracker";
 import { randomUUID } from "crypto";
-import { randomUUIDv7 } from "bun";
 import { sql } from "drizzle-orm";
-import {
-  InsertKataskopos,
-  kataskoposTable,
-} from "@shared/db/schema/kataskopos";
-import { tefteriTable, Tefteri } from "@shared/db/schema/tefteri";
+import type { InsertKataskopos } from "@shared/db/schema/kataskopos";
+import { kataskoposTable } from "@shared/db/schema/kataskopos";
+import { tefteriTable } from "@shared/db/schema/tefteri";
 import { drizzlePg } from "clients/drizzle_postgres_client";
 
-export const costMiddleware = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const costMiddleware = (req: Request, res: Response, next: NextFunction) => {
   const requestId = `req-${randomUUID()}`;
 
   costTracker.run({ requestId }, () => {
@@ -26,15 +18,13 @@ export const costMiddleware = (
 
     res.on("finish", async () => {
       const totalCost = req.getTotalCost();
-      const kataskoposEntries: InsertKataskopos[] = costTracker
-        .getCostEntries()
-        .map((cost) => ({
-          userId: req.user.id,
-          model: cost.model,
-          inputCost: cost.inputCost.toString(),
-          outputCost: cost.outputCost.toString(),
-          totalCost: cost.totalCost.toString(),
-        }));
+      const kataskoposEntries: InsertKataskopos[] = costTracker.getCostEntries().map(cost => ({
+        userId: req.user.id,
+        model: cost.model,
+        inputCost: cost.inputCost.toString(),
+        outputCost: cost.outputCost.toString(),
+        totalCost: cost.totalCost.toString(),
+      }));
       if (kataskoposEntries.length > 0) {
         try {
           await Promise.all([

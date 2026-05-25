@@ -1,4 +1,3 @@
-import { PointStruct } from "@qdrant/qdrant-js/grpc";
 import { openai } from "clients/openai_client";
 import { qdrantClient } from "clients/qdrant_client";
 
@@ -18,9 +17,7 @@ export const updateUser = async (req, res, next) => {
     });
 
     if (searchResult.points.length === 0) {
-      console.warn(
-        `Customer ${customer.name} with title ${customer.title} not found.`
-      );
+      console.warn(`Customer ${customer.name} with title ${customer.title} not found.`);
       continue;
     }
 
@@ -46,8 +43,6 @@ export const updateUser = async (req, res, next) => {
       ],
     });
 
-    console.log(
-      `Associated customer ${customer.name} with user ${userId} and updated embedding.`
-    );
+    console.log(`Associated customer ${customer.name} with user ${userId} and updated embedding.`);
   }
 };

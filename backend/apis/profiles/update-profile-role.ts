@@ -1,12 +1,7 @@
-import { Profile, profileTable } from "@shared/db/schema/profile";
-import { Tefteri, tefteriTable } from "@shared/db/schema/tefteri";
-import {
-  PaginationResponse,
-  QueryParameters,
-} from "@shared/interfaces/QueryParameters";
+import { profileTable } from "@shared/db/schema/profile";
+
 import { drizzlePg } from "clients/drizzle_postgres_client";
-import { count, desc, eq, sql } from "drizzle-orm";
-import { applyPagination } from "utils/drizzleHelpers";
+import { eq } from "drizzle-orm";
 
 export async function updateProfileRole(req, res) {
   const { profileId, role } = req.body;

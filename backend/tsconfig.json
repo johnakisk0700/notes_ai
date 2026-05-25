@@ -1,56 +1,34 @@
 {
-    "compilerOptions": {
-        "module": "esnext",
-        "moduleResolution": "bundler",
-        "target": "esnext",
-        "baseUrl": ".", // Set baseUrl to the current directory (backend/)
-        "paths": {
-            "@shared": [
-                "../shared/index.ts"
-            ],
-            "@shared/*": [
-                "../shared/*"
-            ],
-            "clients/*": [
-                "./clients/*"
-            ],
-            "apis/*": [
-                "./apis/*"
-            ],
-            "services/*": [
-                "./services/*"
-            ],
-            "utils/*": [
-                "./utils/*"
-            ],
-            "authentication/*": [
-                "./authentication/*"
-            ],
-            "middleware/*": [
-                "./middleware/*"
-            ],
-            "model/*": [
-                "./model/*"
-            ]
-        },
-        "esModuleInterop": true,
-        "skipLibCheck": true,
-        "forceConsistentCasingInFileNames": true,
-        "strict": true,
-        "noImplicitAny": false,
-        "strictNullChecks": true,
-        "strictFunctionTypes": true,
-        "strictBindCallApply": true,
-        "strictPropertyInitialization": true,
-        "noImplicitThis": true,
-        "alwaysStrict": true,
-        "types": [
-            "bun-types"
-        ],
-        "declaration": true,
-        "declarationMap": true
+  "compilerOptions": {
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "esnext",
+    "baseUrl": ".", // Set baseUrl to the current directory (backend/)
+    "paths": {
+      "@shared": ["../shared/index.ts"],
+      "@shared/*": ["../shared/*"],
+      "clients/*": ["./clients/*"],
+      "apis/*": ["./apis/*"],
+      "services/*": ["./services/*"],
+      "utils/*": ["./utils/*"],
+      "authentication/*": ["./authentication/*"],
+      "middleware/*": ["./middleware/*"],
+      "model/*": ["./model/*"]
     },
-    "include": [
-        "./**/*"
-    ],
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "noImplicitAny": false,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": true,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
+    "types": ["bun-types"],
+    "declaration": true,
+    "declarationMap": true
+  },
+  "include": ["./**/*"]
 }

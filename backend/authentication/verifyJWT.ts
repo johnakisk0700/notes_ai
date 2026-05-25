@@ -21,9 +21,7 @@ export const verifyJWT = async (req, res, next) => {
 
     if (rows.length === 0) {
       const email =
-        user.primaryEmailAddress?.emailAddress ??
-        user.emailAddresses?.[0]?.emailAddress ??
-        `${userId}@no-email.local`;
+        user.primaryEmailAddress?.emailAddress ?? user.emailAddresses?.[0]?.emailAddress ?? `${userId}@no-email.local`;
 
       await drizzlePg
         .insert(profileTable)
@@ -36,10 +34,7 @@ export const verifyJWT = async (req, res, next) => {
         })
         .onConflictDoNothing();
 
-      rows = await drizzlePg
-        .select({ role: profileTable.role })
-        .from(profileTable)
-        .where(eq(profileTable.id, userId));
+      rows = await drizzlePg.select({ role: profileTable.role }).from(profileTable).where(eq(profileTable.id, userId));
     }
 
     req.user = user; // Clerk user object; req.user.id is the Clerk user ID

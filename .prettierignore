@@ -1,0 +1,10 @@
+node_modules
+**/dist
+**/build
+**/.vite
+**/*.tsbuildinfo
+**/drizzle
+data
+qdrant_data
+audios
+bun.lock

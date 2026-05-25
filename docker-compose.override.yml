@@ -1,7 +1,13 @@
 # DEV overrides — auto-applied by `docker compose up` (no -f needed).
-# Backend hot-reloads with `bun --watch`; frontend runs the Vite dev server.
-# Source is bind-mounted; the anonymous node_modules volumes keep the
-# container's (Linux) dependencies instead of the host's.
+# Backend + frontend hot-reload; source is bind-mounted; the anonymous
+# node_modules volumes keep the container's (Linux) deps instead of the host's.
+#
+# WATCH_POLLING (default true): poll for file changes instead of relying on
+# native OS events. Required when the repo lives on a Windows/macOS drive that's
+# bind-mounted into the Linux containers — inotify events don't cross that
+# boundary, so `bun --watch` / Vite HMR would silently miss your edits. Set
+# WATCH_POLLING=false (in .env) if you run from the WSL2/Linux filesystem, where
+# native events work and polling just wastes CPU.
 services:
   backend:
     build:
@@ -9,7 +15,12 @@ services:
     environment:
       MODE: dev
       NODE_ENV: development
-    command: ["bun", "--watch", "run", "server.ts"]
+      WATCH_POLLING: ${WATCH_POLLING:-true}
+    # Polling → nodemon (bun --watch has no polling mode); native → bun --watch.
+    command:
+      - sh
+      - -c
+      - 'if [ "$$WATCH_POLLING" = "true" ]; then exec bun run dev:poll; else exec bun run dev; fi'
     volumes:
       - ./backend:/app/backend
       - ./shared:/app/shared
@@ -24,6 +35,7 @@ services:
     environment:
       VITE_API_DEV_URL: ${VITE_API_DEV_URL:-http://localhost:5100/api/}
       VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY:-}
+      WATCH_POLLING: ${WATCH_POLLING:-true}
     ports:
       - "127.0.0.1:5173:5173"
     volumes:

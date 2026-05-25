@@ -3,10 +3,7 @@ import { eq, count, inArray, lt, and } from "drizzle-orm";
 import { remindersTable } from "@shared/db/schema/reminders";
 import { notesTable } from "@shared/db/schema/notes";
 import { applyOrdering, applyPagination } from "utils/drizzleHelpers";
-import {
-  PaginationResponse,
-  QueryParameters,
-} from "@shared/interfaces/QueryParameters";
+import type { QueryParameters } from "@shared/interfaces/QueryParameters";
 
 export async function getReminders(req, res) {
   const userId = req.user.id;
@@ -19,7 +16,7 @@ export async function getReminders(req, res) {
     .from(notesTable)
     .where(eq(notesTable.userId, userId));
 
-  const userNoteIds = userNotesResult.map((note) => note.id);
+  const userNoteIds = userNotesResult.map(note => note.id);
 
   if (userNoteIds.length === 0) {
     return res.status(200).json({
@@ -36,10 +33,7 @@ export async function getReminders(req, res) {
   }
 
   // Build WHERE conditions
-  const whereConditions = [
-    inArray(remindersTable.noteId, userNoteIds),
-    eq(remindersTable.status, "pending"),
-  ];
+  const whereConditions = [inArray(remindersTable.noteId, userNoteIds), eq(remindersTable.status, "pending")];
 
   if (due_only === "true") {
     whereConditions.push(lt(remindersTable.remindAt, new Date()));
@@ -52,7 +46,7 @@ export async function getReminders(req, res) {
     .select({ count: count() })
     .from(remindersTable)
     .where(whereClause)
-    .then((result) => result[0].count);
+    .then(result => result[0].count);
 
   // Build main query
   let query;
@@ -109,11 +103,8 @@ export async function getReminders(req, res) {
       page: pagination.page,
       limit: pagination.limit,
       totalCount,
-      totalPages: pagination.fetchAll
-        ? 1
-        : Math.ceil(totalCount / pagination.limit),
-      hasNext:
-        !pagination.fetchAll && pagination.page * pagination.limit < totalCount,
+      totalPages: pagination.fetchAll ? 1 : Math.ceil(totalCount / pagination.limit),
+      hasNext: !pagination.fetchAll && pagination.page * pagination.limit < totalCount,
       hasPrev: pagination.page > 1,
     },
   });

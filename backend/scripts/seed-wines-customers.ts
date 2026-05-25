@@ -22,8 +22,7 @@ function readJson(file: string): any | null {
 
 function extractName(item: any): string | null {
   if (typeof item === "string") return item.trim() || null;
-  if (item && typeof item === "object")
-    return (item.name ?? item.title ?? "").toString().trim() || null;
+  if (item && typeof item === "object") return (item.name ?? item.title ?? "").toString().trim() || null;
   return null;
 }
 
@@ -31,9 +30,7 @@ async function seedWines() {
   const raw = readJson("gptNormalizedWines_v2_grouped.json");
   if (!raw) return;
   const items: any[] = Array.isArray(raw) ? raw : (raw.Sheet ?? []);
-  const names = [
-    ...new Set(items.map(extractName).filter(Boolean) as string[]),
-  ];
+  const names = [...new Set(items.map(extractName).filter(Boolean) as string[])];
   for (const name of names) {
     await drizzlePg.insert(winesTable).values({ name }).onConflictDoNothing();
   }
@@ -65,7 +62,7 @@ async function main() {
   console.log("✅ Seed complete.");
 }
 
-main().catch((e) => {
+main().catch(e => {
   console.error("💥 Seed failed:", e);
   process.exit(1);
 });

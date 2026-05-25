@@ -1,10 +1,8 @@
 import { pgTable, text, index, pgEnum, jsonb } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { timestamps } from "../timestamps";
-import {
-  defaultUserSettings,
-  UserSettings,
-} from "@shared/interfaces/UserSettings";
+import type { UserSettings } from "@shared/interfaces/UserSettings";
+import { defaultUserSettings } from "@shared/interfaces/UserSettings";
 import { tefteriTable } from "./tefteri";
 
 // Define the enum for user roles
@@ -18,12 +16,10 @@ export const profileTable = pgTable(
     email: text("email").notNull().unique(),
     first_name: text("first_name"),
     last_name: text("last_name"),
-    settings: jsonb("settings")
-      .$type<UserSettings>()
-      .default(defaultUserSettings),
+    settings: jsonb("settings").$type<UserSettings>().default(defaultUserSettings),
     ...timestamps,
   },
-  (table) => [
+  table => [
     // Core indexes - only what you'll actually query
     index("idx_profile_role").on(table.role),
     index("idx_profile_created_at").on(table.created_at.desc()),

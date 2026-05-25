@@ -21,9 +21,7 @@ async function syncUsers() {
     if (clerkUsers.length === 0) break;
 
     for (const user of clerkUsers) {
-      const email =
-        user.primaryEmailAddress?.emailAddress ??
-        user.emailAddresses?.[0]?.emailAddress;
+      const email = user.primaryEmailAddress?.emailAddress ?? user.emailAddresses?.[0]?.emailAddress;
 
       if (!email) {
         console.log(`⚠️  Skipping ${user.id} - no email`);
@@ -57,15 +55,11 @@ async function syncUsers() {
     if (clerkUsers.length < limit) break;
   }
 
-  const finalCount = await drizzlePg
-    .select({ id: profileTable.id })
-    .from(profileTable);
-  console.log(
-    `🎉 Sync complete. Synced ${synced} Clerk users. Total profiles in database: ${finalCount.length}`
-  );
+  const finalCount = await drizzlePg.select({ id: profileTable.id }).from(profileTable);
+  console.log(`🎉 Sync complete. Synced ${synced} Clerk users. Total profiles in database: ${finalCount.length}`);
 }
 
-syncUsers().catch((error) => {
+syncUsers().catch(error => {
   console.error("💥 Sync failed:", error);
   process.exit(1);
 });

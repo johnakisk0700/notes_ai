@@ -11,11 +11,7 @@ export async function getProfile(req, res) {
   }
 
   try {
-    const result = await drizzlePg
-      .select()
-      .from(profileTable)
-      .where(eq(profileTable.id, userId))
-      .limit(1);
+    const result = await drizzlePg.select().from(profileTable).where(eq(profileTable.id, userId)).limit(1);
 
     if (result.length === 0) {
       return res.status(404).json({ error: "User not found" });

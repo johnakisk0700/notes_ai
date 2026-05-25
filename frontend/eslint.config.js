@@ -44,11 +44,15 @@ export default tseslint.config(
       ],
       // React Hooks v7 bundles the React-Compiler correctness rules. They flag
       // pervasive existing patterns (fetch-on-mount setState, debounced
-      // callbacks) and are NOT auto-fixable, so as errors they'd keep lint
-      // permanently red. Keep them visible as warnings; promote back to 'error'
-      // once the backlog is worked through.
+      // callbacks, mutation, impure render) and are NOT auto-fixable, so as
+      // errors they'd keep lint permanently red. Keep them visible as warnings;
+      // promote back to 'error' once the backlog is worked through. (The
+      // remaining hard errors are the finite `@typescript-eslint/no-explicit-any`
+      // backlog.)
       'react-hooks/set-state-in-effect': 'warn',
       'react-hooks/use-memo': 'warn',
+      'react-hooks/immutability': 'warn',
+      'react-hooks/purity': 'warn',
     },
   },
   // Must be last: turns off ESLint rules that would fight Prettier formatting.

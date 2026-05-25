@@ -12,4 +12,13 @@ export default defineConfig({
       '@shared': path.resolve(__dirname, '../shared'),
     },
   },
+  server: {
+    // On a Windows/macOS drive bind-mounted into Docker, native file events
+    // (inotify) don't fire, so HMR misses edits. Poll instead. Toggled by
+    // WATCH_POLLING (set in docker-compose.override.yml); unset = native.
+    watch: {
+      usePolling: process.env.WATCH_POLLING === 'true',
+      interval: 300,
+    },
+  },
 });

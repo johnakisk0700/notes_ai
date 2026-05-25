@@ -22,11 +22,8 @@ export async function getThreads(req, res) {
       page: pagination.page,
       limit: pagination.limit,
       totalCount,
-      totalPages: pagination.fetchAll
-        ? 1
-        : Math.ceil(totalCount / pagination.limit),
-      hasNext:
-        !pagination.fetchAll && pagination.page * pagination.limit < totalCount,
+      totalPages: pagination.fetchAll ? 1 : Math.ceil(totalCount / pagination.limit),
+      hasNext: !pagination.fetchAll && pagination.page * pagination.limit < totalCount,
       hasPrev: pagination.page > 1,
     },
   };

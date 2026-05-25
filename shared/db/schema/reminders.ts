@@ -1,21 +1,10 @@
-import {
-  pgTable,
-  uuid,
-  text,
-  timestamp,
-  pgEnum,
-  index,
-  uniqueIndex,
-} from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, pgEnum, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { sql, relations } from "drizzle-orm";
 import { timestamps } from "../timestamps"; // Assuming this provides createdAt and updatedAt
 import { notesTable } from "./notes"; // For foreign key relationship
 
 // Define the reminder_status enum based on your SQL
-export const reminderStatusEnum = pgEnum("reminder_status", [
-  "pending",
-  "completed",
-]);
+export const reminderStatusEnum = pgEnum("reminder_status", ["pending", "completed"]);
 
 export const remindersTable = pgTable(
   "reminders",
@@ -31,7 +20,7 @@ export const remindersTable = pgTable(
     status: reminderStatusEnum("status").default("pending").notNull(),
     ...timestamps, // Includes createdAt and updatedAt
   },
-  (table) => [
+  table => [
     // Changed from object to array for index definitions
     // Unique constraint on noteId to enforce the one-to-one relationship (a note can have at most one reminder).
     // PostgreSQL automatically creates an index for a unique constraint.

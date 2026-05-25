@@ -22,7 +22,9 @@ const NotesList: React.FC = () => {
   };
   return (
     <div className="flex flex-col gap-3 pb-24 shrink-0 w-full max-w-5xl mx-auto  ">
-      {filteredNotes?.map(note => <NoteComponent key={note.id} note={note} handleDelete={handleDelete} />)}
+      {filteredNotes?.map(note => (
+        <NoteComponent key={note.id} note={note} handleDelete={handleDelete} />
+      ))}
       <div className="my-20"></div>
     </div>
   );

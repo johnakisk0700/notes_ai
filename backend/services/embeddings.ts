@@ -5,10 +5,7 @@ import { qdrantClient } from "clients/qdrant_client";
 import { eq } from "drizzle-orm";
 import { logger } from "utils/logger";
 export async function createAndSaveNoteEmbedding(userId, reminder, note) {
-  const userInfo = await drizzlePg
-    .select()
-    .from(profileTable)
-    .where(eq(profileTable.id, userId));
+  const userInfo = await drizzlePg.select().from(profileTable).where(eq(profileTable.id, userId));
   logger.info(userInfo);
 
   const formattedDate = formatDateForNote(note.created_at);

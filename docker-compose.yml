@@ -1,8 +1,12 @@
 # Full stack: data services + backend API + frontend.
 #
-#   DEV   (default):  docker compose up --build          (or: bun run dev)
-#         → backend hot-reloads (bun --watch, plain HTTP), frontend on the Vite
-#           dev server with HMR. docker-compose.override.yml is auto-applied.
+#   DEV   (default):  docker compose up                  (or: bun run dev)
+#         → backend + frontend hot-reload (plain HTTP); docker-compose.override.yml
+#           is auto-applied. Source is bind-mounted, so code edits need NO rebuild.
+#         → after changing deps (package.json/bun.lock) or a Dockerfile, run
+#           `bun run dev:rebuild` (docker compose up --build --renew-anon-volumes):
+#           --build alone won't surface new deps because the anonymous
+#           node_modules volumes from the old container shadow the fresh image.
 #
 #   PROD:  docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
 #         → backend runs the bundle (HTTPS, certs from /etc/letsencrypt),
@@ -44,10 +48,17 @@ services:
     ports:
       - "127.0.0.1:5100:5100"
     depends_on:
-      - postgres-ai-assistant
-      - redis-ai-assistant
-      - qdrant-ai-assistant
-      - mongo-ai-assistant
+      postgres-ai-assistant:
+        condition: service_started
+      redis-ai-assistant:
+        condition: service_started
+      qdrant-ai-assistant:
+        condition: service_started
+      # Chat persistence connects to Mongo at worker startup, so wait until mongod
+      # actually accepts connections — `condition: service_started` alone races the
+      # mongod boot and the connect fails with ECONNREFUSED on a cold `up`.
+      mongo-ai-assistant:
+        condition: service_healthy
 
   frontend:
     build:
@@ -97,3 +108,9 @@ services:
       - "127.0.0.1:27018:27017"
     volumes:
       - ./data/mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 20s

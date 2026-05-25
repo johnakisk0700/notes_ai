@@ -56,8 +56,12 @@ Two paths:
 
 - **Docker (whole stack)** — `docker-compose.yml` (base) merges with
   `docker-compose.override.yml` (dev) or `docker-compose.prod.yml` (prod):
-  - `bun run dev` → `docker compose up --build`: backend hot-reloads (`bun --watch`,
-    HTTP) with the source bind-mounted, frontend on the Vite dev server (HMR).
+  - `bun run dev` → `docker compose up`: backend + frontend hot-reload (HTTP) with the
+    source bind-mounted, so code edits need no rebuild. Hot reload polls for changes by
+    default (`WATCH_POLLING=true`) since the repo sits on a Windows drive bind-mounted
+    into Linux, where native file events don't fire — backend via `nodemon`, Vite via
+    `server.watch.usePolling`. Use `bun run dev:rebuild` (adds `--build
+    --renew-anon-volumes`) after dependency or Dockerfile changes.
   - `bun run prod` → adds `docker-compose.prod.yml`: backend runs the bundle (HTTPS,
     certs mounted from `/etc/letsencrypt`), frontend is a static build served by nginx
     (`frontend/Dockerfile`, `frontend/nginx.conf`).

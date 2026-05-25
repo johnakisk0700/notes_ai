@@ -10,7 +10,7 @@ export const winesTable = pgTable(
     name: text("name").notNull().unique(),
     ...timestamps,
   },
-  (table) => [index("idx_wines_name").on(table.name)]
+  table => [index("idx_wines_name").on(table.name)]
 );
 
 export type Wine = typeof winesTable.$inferSelect;

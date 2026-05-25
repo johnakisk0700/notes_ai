@@ -5,18 +5,14 @@ export async function qdrantBatchUpsert(collectionName, points) {
   const totalPoints = points.length;
   const numBatches = Math.ceil(totalPoints / batchSize); // Calculate the number of batches
 
-  console.log(
-    `Total points: ${totalPoints}, Batch size: ${batchSize}, Number of batches: ${numBatches}`
-  );
+  console.log(`Total points: ${totalPoints}, Batch size: ${batchSize}, Number of batches: ${numBatches}`);
 
   for (let i = 0; i < numBatches; i++) {
     const batchStart = i * batchSize;
     const batchEnd = Math.min(batchStart + batchSize, totalPoints); // Ensure end doesn't exceed totalPoints
     const pointBatch = points.slice(batchStart, batchEnd);
 
-    console.log(
-      `Processing batch ${i + 1} of ${numBatches}, points ${batchStart} to ${batchEnd - 1}`
-    );
+    console.log(`Processing batch ${i + 1} of ${numBatches}, points ${batchStart} to ${batchEnd - 1}`);
 
     try {
       const operationInfo = await qdrantClient.upsert(collectionName, {

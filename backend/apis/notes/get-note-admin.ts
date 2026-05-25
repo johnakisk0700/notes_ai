@@ -1,6 +1,5 @@
 import { notesTable } from "@shared/db/schema/notes";
-import { remindersTable } from "@shared/db/schema/reminders";
-import { FullNote, GetNoteDTO } from "@shared/dto/GetNoteDTO";
+import type { FullNote } from "@shared/dto/GetNoteDTO";
 import { drizzlePg } from "clients/drizzle_postgres_client";
 import { eq, and } from "drizzle-orm";
 
@@ -11,13 +10,12 @@ export async function getNoteAdmin(req, res) {
     return res.status(400).json({ error: "noteId parameter is required" });
   }
 
-  const noteWithReminder: FullNote | undefined =
-    await drizzlePg.query.notesTable.findFirst({
-      where: and(eq(notesTable.id, noteId)),
-      with: {
-        reminder: true, // This includes the related reminder
-      },
-    });
+  const noteWithReminder: FullNote | undefined = await drizzlePg.query.notesTable.findFirst({
+    where: and(eq(notesTable.id, noteId)),
+    with: {
+      reminder: true, // This includes the related reminder
+    },
+  });
 
   if (!noteWithReminder) {
     return res.status(404).json({ error: "Note not found" });

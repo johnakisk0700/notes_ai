@@ -29,21 +29,21 @@ createRoot(document.getElementById('root')!).render(
       <BrowserRouter>
         <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
           <AuthProvider>
-          <UsersProvider>
-            <WineProvider>
-              <CustomerProvider>
-                <NotesProvider>
-                  <NoteEditorProvider>
-                    <SidebarProvider>
-                      <App />
-                      <NoteEditor />
-                    </SidebarProvider>
-                  </NoteEditorProvider>
-                </NotesProvider>
-                <Toaster />
-              </CustomerProvider>
-            </WineProvider>
-          </UsersProvider>
+            <UsersProvider>
+              <WineProvider>
+                <CustomerProvider>
+                  <NotesProvider>
+                    <NoteEditorProvider>
+                      <SidebarProvider>
+                        <App />
+                        <NoteEditor />
+                      </SidebarProvider>
+                    </NoteEditorProvider>
+                  </NotesProvider>
+                  <Toaster />
+                </CustomerProvider>
+              </WineProvider>
+            </UsersProvider>
           </AuthProvider>
         </ClerkProvider>
       </BrowserRouter>

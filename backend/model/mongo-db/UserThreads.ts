@@ -1,5 +1,7 @@
-import mongoose, { Document } from "mongoose";
-import { Message, MessageSchema } from "./Message.js";
+import type { Document } from "mongoose";
+import mongoose from "mongoose";
+import type { Message } from "./Message.js";
+import { MessageSchema } from "./Message.js";
 
 export interface IUserThread extends Document {
   user_id: string;
@@ -33,7 +35,4 @@ const UserThreadsSchema = new mongoose.Schema({
 UserThreadsSchema.index({ user_id: 1, thread_id: 1 });
 
 // Create the model with type
-export const UserThread = mongoose.model<IUserThread>(
-  "UserThread",
-  UserThreadsSchema
-);
+export const UserThread = mongoose.model<IUserThread>("UserThread", UserThreadsSchema);

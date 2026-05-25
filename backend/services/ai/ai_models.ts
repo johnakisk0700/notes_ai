@@ -1,5 +1,4 @@
 import Decimal from "decimal.js";
-import { usdToEur } from "utils/ecbConversionRates";
 
 // This is a list of AI models supported by the system.
 export type ModelNames =

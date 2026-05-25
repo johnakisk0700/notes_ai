@@ -74,9 +74,7 @@ export const costTracker = {
     try {
       const inputCost = new Decimal(data.inputCost || 0);
       const outputCost = new Decimal(data.outputCost || 0);
-      const finalTotalCost = data.totalCost
-        ? new Decimal(data.totalCost)
-        : inputCost.plus(outputCost);
+      const finalTotalCost = data.totalCost ? new Decimal(data.totalCost) : inputCost.plus(outputCost);
 
       store.costEntries.push({
         model: data.model || "unknown",

@@ -1,6 +1,6 @@
 import { useAuth } from '@/context/AuthContext/AuthContext';
 import { api } from '@/integrations/api';
-import type { FullNote, GetNoteDTO } from '@shared/dto/GetNoteDTO';
+import type { FullNote } from '@shared/dto/GetNoteDTO';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { useGlobalAbortController } from './useGlobalAbortController';

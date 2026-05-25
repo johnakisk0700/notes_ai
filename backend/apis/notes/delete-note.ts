@@ -14,19 +14,16 @@ export async function deleteNote(req, res) {
   try {
     let deletedNoteId;
 
-    await drizzlePg.transaction(async (tx) => {
+    await drizzlePg.transaction(async tx => {
       // Owners can delete their own notes; admins can delete any note.
       const whereClause = isAdmin
         ? eq(notesTable.id, noteId)
         : and(eq(notesTable.id, noteId), eq(notesTable.userId, userId));
 
       // Delete the note from the database and retrieve its ID
-      const noteDeleteResult = await tx
-        .delete(notesTable)
-        .where(whereClause)
-        .returning({
-          id: notesTable.id,
-        });
+      const noteDeleteResult = await tx.delete(notesTable).where(whereClause).returning({
+        id: notesTable.id,
+      });
 
       // Check if the note was actually found and deleted
       if (!noteDeleteResult || noteDeleteResult.length === 0) {
@@ -37,17 +34,13 @@ export async function deleteNote(req, res) {
 
       // Delete associated reminders
       // This will attempt to delete reminders and will not error if no reminders exist for the note.
-      await tx
-        .delete(remindersTable)
-        .where(eq(remindersTable.noteId, deletedNoteId));
+      await tx.delete(remindersTable).where(eq(remindersTable.noteId, deletedNoteId));
     });
 
     // Delete the note from Qdrant (outside transaction since it's external service)
     await qdrantClient.delete("notes", { points: [noteId] });
 
-    console.log(
-      `Note successfully deleted! (message id: [${deletedNoteId}] user id: [${userId}])`
-    );
+    console.log(`Note successfully deleted! (message id: [${deletedNoteId}] user id: [${userId}])`);
     res.send("Success.");
   } catch (error) {
     throw error;

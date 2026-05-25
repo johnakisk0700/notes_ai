@@ -6,7 +6,6 @@ import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Separator } from '../ui/separator';
 import type { FullNote } from '@shared/dto/GetNoteDTO';
-import { useTranslation } from 'react-i18next';
 
 interface NoteComponentProps {
   note: FullNote;

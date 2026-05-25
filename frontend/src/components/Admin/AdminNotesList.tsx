@@ -11,7 +11,9 @@ export const AdminNotesList: React.FC<AdminNotesListProps> = ({ userIdentifier, 
   return (
     <div className="flex flex-col gap-3 pb-16 shrink-0 w-full max-w-5xl mx-auto">
       <Badge className="size-10 w-fit">{userIdentifier}</Badge>
-      {notes?.map(note => <NoteComponent key={note.id} note={note} handleDelete={() => {}} />)}
+      {notes?.map(note => (
+        <NoteComponent key={note.id} note={note} handleDelete={() => {}} />
+      ))}
     </div>
   );
 };

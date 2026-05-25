@@ -17,10 +17,19 @@ Any `*_old` / `*_prototype` / `*_experimental` files are dead code — ignore.
 
 ```bash
 # Whole stack via Docker — from repo root (these wrap docker compose):
-bun run dev          # DEV:  backend hot-reload (bun --watch, HTTP) + Vite dev server
+bun run dev          # DEV:  hot-reload backend + Vite (HTTP). Source is bind-mounted,
+                     #       so code edits need NO rebuild — just save. Runs foreground.
+bun run dev:rebuild  # DEV:  rebuild images + renew anon volumes. Use this (not `dev`)
+                     #       after changing deps (package.json/bun.lock) or a Dockerfile.
 bun run prod         # PROD: bundled backend (HTTPS) + nginx-served frontend (detached)
 bun run dev:down     # stop the dev stack          (prod:down for prod)
 bun run logs         # tail all service logs
+
+# Hot reload uses POLLING by default (WATCH_POLLING=true) because the repo lives on
+# a Windows drive bind-mounted into Linux — native file events (inotify) don't cross
+# that boundary, so bun --watch/Vite would miss edits. Backend polls via nodemon
+# (bun --watch has no polling mode); Vite polls via server.watch.usePolling. Set
+# WATCH_POLLING=false in .env if you run from the WSL2/Linux filesystem.
 
 # Backend (from backend/)
 bun --watch run server.ts      # dev, hot reload

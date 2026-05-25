@@ -67,10 +67,7 @@ if (cluster.isPrimary) {
   try {
     await connectToDatabase();
   } catch (err) {
-    console.error(
-      "MongoDB connection failed at startup; chat persistence disabled until it recovers:",
-      err
-    );
+    console.error("MongoDB connection failed at startup; chat persistence disabled until it recovers:", err);
   }
 
   const app = express();
@@ -111,12 +108,7 @@ if (cluster.isPrimary) {
   app.get("/api/get-notes", verifyJWT, queryMiddleware, asyncHandler(getNotes));
   app.get("/api/get-note", verifyJWT, asyncHandler(getNote));
   app.get("/api/get-note-admin", verifyJWT, asyncHandler(getNoteAdmin));
-  app.get(
-    "/api/get-reminders",
-    verifyJWT,
-    queryMiddleware,
-    asyncHandler(getReminders)
-  );
+  app.get("/api/get-reminders", verifyJWT, queryMiddleware, asyncHandler(getReminders));
 
   app.post("/api/search-notes", verifyJWT, asyncHandler(searchRelevantNotes));
   app.post("/api/store-note", verifyJWT, asyncHandler(storeNote));
@@ -126,36 +118,18 @@ if (cluster.isPrimary) {
 
   // Transcription
   app.post("/api/get-transcription", verifyJWT, asyncHandler(getTranscription));
-  app.get(
-    "/api/get-openai-ephemeral-token",
-    verifyJWT,
-    asyncHandler(getOpenAIEphemeralToken)
-  );
+  app.get("/api/get-openai-ephemeral-token", verifyJWT, asyncHandler(getOpenAIEphemeralToken));
 
   // Google Voice
   app.post("/api/text-to-voice", verifyJWT, asyncHandler(textToVoice));
 
   // User Management
-  app.get(
-    "/api/get-profiles",
-    verifyJWT,
-    queryMiddleware,
-    asyncHandler(getProfiles)
-  );
+  app.get("/api/get-profiles", verifyJWT, queryMiddleware, asyncHandler(getProfiles));
   app.get("/api/get-profile", verifyJWT, asyncHandler(getProfile));
-  app.get(
-    "/api/get-all-users-notes",
-    verifyJWT,
-    queryMiddleware,
-    asyncHandler(getAllUsersNotes)
-  );
+  app.get("/api/get-all-users-notes", verifyJWT, queryMiddleware, asyncHandler(getAllUsersNotes));
   app.post("/api/update-user", verifyJWT, asyncHandler(updateUser));
   app.post("/api/delete-user", verifyJWT, asyncHandler(deleteUser));
-  app.post(
-    "/api/update-profile-role",
-    verifyJWT,
-    asyncHandler(updateProfileRole)
-  );
+  app.post("/api/update-profile-role", verifyJWT, asyncHandler(updateProfileRole));
   app.post("/api/create-profile", asyncHandler(createProfile));
 
   // Editor autocomplete data (wines / customers)
@@ -163,12 +137,7 @@ if (cluster.isPrimary) {
   app.get("/api/get-customers", verifyJWT, asyncHandler(getCustomers));
 
   // AI chat threads (persisted in Mongo)
-  app.get(
-    "/api/get-threads",
-    verifyJWT,
-    queryMiddleware,
-    asyncHandler(getThreads)
-  );
+  app.get("/api/get-threads", verifyJWT, queryMiddleware, asyncHandler(getThreads));
   app.get("/api/get-thread", verifyJWT, asyncHandler(getThread));
   app.post("/api/delete-thread", verifyJWT, asyncHandler(deleteThread));
 
@@ -178,27 +147,17 @@ if (cluster.isPrimary) {
 
   // --- Server: plain HTTP in dev (no TLS certs in container), HTTPS in prod ---
   const isDev = process.env.MODE === "dev";
-  const server = isDev
-    ? http.createServer(app)
-    : https.createServer(handleHTTPSCertificates(), app);
+  const server = isDev ? http.createServer(app) : https.createServer(handleHTTPSCertificates(), app);
 
   server.listen({ port: PORT, reusePort: true }, async () => {
-    console.log(
-      `Wine-Assistant Server (${isDev ? "HTTP" : "HTTPS"}) is running on port: [${PORT}]`
-    );
+    console.log(`Wine-Assistant Server (${isDev ? "HTTP" : "HTTPS"}) is running on port: [${PORT}]`);
   });
 }
 
 function handleHTTPSCertificates() {
   return {
-    key:
-      process.env.MODE !== "dev"
-        ? fs.readFileSync("/etc/letsencrypt/live/www.mysert.com/privkey.pem")
-        : "",
-    cert:
-      process.env.MODE !== "dev"
-        ? fs.readFileSync("/etc/letsencrypt/live/www.mysert.com/fullchain.pem")
-        : "",
+    key: process.env.MODE !== "dev" ? fs.readFileSync("/etc/letsencrypt/live/www.mysert.com/privkey.pem") : "",
+    cert: process.env.MODE !== "dev" ? fs.readFileSync("/etc/letsencrypt/live/www.mysert.com/fullchain.pem") : "",
   };
 }
 
