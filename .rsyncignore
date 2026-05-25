@@ -1,0 +1,12 @@
+audios/
+data/
+qdrant_data/
+dist/
+**/.env*
+.DS_Store
+.git/
+gui/
+gui_v2.0/
+*.log
+node_modules/
+proofOfConcept/

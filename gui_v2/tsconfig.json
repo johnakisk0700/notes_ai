@@ -1,0 +1,39 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ],
+      "@shared/*": [
+        "../shared/*"
+      ],
+      "@interfaces/*": [
+        "../shared/interfaces/*"
+      ],
+      "@db/*": [
+        "../shared/db/*"
+      ],
+      "@types/*": [
+        "../shared/types/*"
+      ],
+      "@dto/*": [
+        "../shared/dto/*"
+      ],
+    }
+  },
+  "files": [],
+  "references": [
+    {
+      "path": "./tsconfig.app.json"
+    },
+    {
+      "path": "./tsconfig.node.json"
+    },
+    {
+      "path": "../shared"
+    }
+  ],
+  "exclude": []
+}

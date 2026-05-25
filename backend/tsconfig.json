@@ -1,0 +1,68 @@
+{
+    "compilerOptions": {
+        "module": "esnext",
+        "moduleResolution": "bundler",
+        "target": "esnext",
+        "baseUrl": ".", // Set baseUrl to the current directory (backend/)
+        "paths": {
+            "@shared/*": [
+                "../shared/*"
+            ],
+            "@interfaces/*": [
+                "../shared/interfaces/*"
+            ],
+            "@db/*": [
+                "../shared/db/*"
+            ],
+            "@types/*": [
+                "../shared/types/*"
+            ],
+            "@dto/*": [
+                "../shared/dto/*"
+            ],
+            "clients/*": [
+                "./clients/*"
+            ],
+            "apis/*": [
+                "./apis/*"
+            ],
+            "services/*": [
+                "./services/*"
+            ],
+            "utils/*": [
+                "./utils/*"
+            ],
+            "error/*": [
+                "./error/*"
+            ],
+            "authentication/*": [
+                "./authentication/*"
+            ],
+            "middleware/*": [
+                "./middleware/*"
+            ],
+            "model/*": [
+                "./model/*"
+            ]
+        },
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "strict": true,
+        "noImplicitAny": false,
+        "strictNullChecks": true,
+        "strictFunctionTypes": true,
+        "strictBindCallApply": true,
+        "strictPropertyInitialization": true,
+        "noImplicitThis": true,
+        "alwaysStrict": true,
+        "types": [
+            "bun-types"
+        ],
+        "declaration": true,
+        "declarationMap": true
+    },
+    "include": [
+        "./**/*"
+    ],
+}

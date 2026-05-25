@@ -1,0 +1,55 @@
+# ───────────────────────── Secrets & credentials ─────────────────────────
+# Never commit real environment files. Keep *.env.example as the template.
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Service-account keys & other credential material
+*.pem
+*.key
+*.p12
+*.pfx
+**/sommelier-gemini-key.json
+*-key.json
+*_key.json
+service-account*.json
+gcp-*.json
+secrets/
+
+# ───────────────────────── Sensitive data (PII) ──────────────────────────
+# DB row dumps may contain personal data (names, phone numbers) — keep out of git.
+*_rows.sql
+profiles_rows.sql
+
+# ───────────────────────── Data & volumes ────────────────────────────────
+data/
+qdrant_data/
+audios/
+
+# ───────────────────────── Dependencies ──────────────────────────────────
+node_modules/
+.pnp/
+.pnp.*
+
+# ───────────────────────── Build output ──────────────────────────────────
+# Built bundles can inline secrets — never commit.
+dist/
+build/
+.vite/
+*.tsbuildinfo
+
+# ───────────────────────── Logs ──────────────────────────────────────────
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+
+# ───────────────────────── OS / editor ───────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

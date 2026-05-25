@@ -1,0 +1,27 @@
+{
+  "name": "ai-agents-project",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "gui_v2.0",
+    "shared"
+  ],
+  "dependencies": {
+    "@tailwindcss/vite": "^4.1.10",
+    "boxen": "^8.0.1",
+    "chalk": "^5.4.1",
+    "log-update": "^6.1.0",
+    "tailwindcss": "^4.1.10",
+    "drizzle-orm": "^0.44.2"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.16",
+    "bun-types": "^1.2.16"
+  },
+  "trustedDependencies": [
+    "@tailwindcss/oxide",
+    "esbuild",
+    "protobufjs",
+    "supabase"
+  ]
+}

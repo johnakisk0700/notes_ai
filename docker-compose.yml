@@ -1,0 +1,34 @@
+version: "3.8"
+# Port mappings: Changed to avoid conflicts:
+# Qdrant: 6971 (was 6969)
+# MongoDB: 27018 (was 27017)
+# Redis: 6380 (was 6379)
+# PostgreSQL: 5433 (was 5432)
+services:
+  qdrant-ai-assistant:
+    image: qdrant/qdrant:latest
+    restart: always
+    container_name: ai-assistant-qdrant
+    ports:
+      - "127.0.0.1:6971:6333"
+    volumes:
+      - ./qdrant_data:/qdrant/storage
+      - ./qdrant_config.yaml:/qdrant/config/config.yaml
+  redis-ai-assistant:
+    image: redis:latest
+    restart: always
+    container_name: ai-assistant-redis
+    ports:
+      - "127.0.0.1:6380:6379"
+
+  postgres-ai-assistant:
+    image: postgres
+    restart: always
+    container_name: ai-assistant-postgres
+    shm_size: 1024mb
+    ports:
+      - "127.0.0.1:5433:5432"
+    environment:
+      POSTGRES_PASSWORD: example
+    volumes:
+      - ./data/postgres_data:/var/lib/postgresql/data

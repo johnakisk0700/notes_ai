@@ -1,0 +1,44 @@
+/* Dropdown menu */
+.dropdown-menu {
+  background: var(--red-12);
+  color: white;
+  border: 1px solid var(--gray-1);
+  border-radius: 0.7rem;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.6rem;
+  position: relative;
+
+  max-height: 30vh;
+  overflow-y: auto;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+
+  button {
+    align-items: center;
+    background-color: transparent;
+    display: flex;
+    gap: 0.25rem;
+    text-align: left;
+    width: 100%;
+    border-radius: 0.2rem;
+    padding: 0.2rem;
+
+    &:hover,
+    &:hover.is-selected {
+      background-color: var(--gray-3);
+      color: black;
+    }
+
+    &.is-selected {
+      background-color: var(--gray-2);
+      color: black;
+    }
+  }
+}
+
+.dropdown-menu::-webkit-scrollbar {
+  display: none; /* Hide the scrollbar */
+}
