@@ -1,11 +1,13 @@
-import { AuthError, type AuthResponse, type User } from '@supabase/supabase-js';
+import { useUser } from '@clerk/clerk-react';
 import { createContext, useContext } from 'react';
 
+type ClerkUser = ReturnType<typeof useUser>['user'];
+
 interface AuthContextType {
-  user: User;
+  /** Clerk user (null when signed out, undefined while loading). */
+  user: ClerkUser;
+  /** Admin flag derived from our `profile.role`; null while still loading. */
   isAdmin: boolean | null;
-  signIn: (email: string, password: string) => Promise<AuthResponse>;
-  signOut: () => Promise<{ error: AuthError | null }>;
   loadingUser: boolean;
 }
 

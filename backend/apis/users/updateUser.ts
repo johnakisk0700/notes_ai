@@ -1,7 +1,6 @@
 import { PointStruct } from "@qdrant/qdrant-js/grpc";
 import { openai } from "clients/openai_client";
 import { qdrantClient } from "clients/qdrant_client";
-import getSupabaseForUser from "clients/supabase_client";
 
 export const updateUser = async (req, res, next) => {
   const { customers, userId } = req.body;

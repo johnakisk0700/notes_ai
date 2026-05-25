@@ -28,11 +28,11 @@ export class UnauthorizedError extends AppError {
   }
 }
 
-export class SupabaseError extends AppError {
-  constructor(message = "Supabase error") {
+export class DatabaseError extends AppError {
+  constructor(message = "Database error") {
     super({
       message,
-      statusCode: 420,
+      statusCode: 500,
     });
   }
 }

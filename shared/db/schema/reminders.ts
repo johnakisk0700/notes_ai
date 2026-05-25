@@ -1,6 +1,7 @@
 import {
   pgTable,
   uuid,
+  text,
   timestamp,
   pgEnum,
   index,
@@ -25,7 +26,7 @@ export const remindersTable = pgTable(
     noteId: uuid("note_id")
       .notNull()
       .references(() => notesTable.id, { onDelete: "cascade" }), // Foreign key to notes, ensures a reminder is tied to a note
-    userId: uuid("user_id").notNull(), // Assumed to reference a user identity
+    userId: text("user_id").notNull(), // Clerk user ID (text, not uuid)
     remindAt: timestamp("remind_at", { withTimezone: true }).notNull(),
     status: reminderStatusEnum("status").default("pending").notNull(),
     ...timestamps, // Includes createdAt and updatedAt

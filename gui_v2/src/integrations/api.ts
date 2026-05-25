@@ -1,5 +1,4 @@
 import axios from 'axios';
-import { supabase } from './supabase/client';
 
 const BASE_URL =
   import.meta.env.MODE === 'development' ? import.meta.env.VITE_API_DEV_URL : import.meta.env.VITE_API_PROD_URL;
@@ -7,6 +6,17 @@ const BASE_URL =
 const defaultHeaders: Record<string, string> = {
   'Content-Type': 'application/json',
 };
+
+// Clerk exposes a global once <ClerkProvider> has mounted; read the active
+// session token from it so non-React modules (this axios instance) can auth.
+async function getClerkToken(): Promise<string | null> {
+  try {
+    const clerk = (window as unknown as { Clerk?: { session?: { getToken: () => Promise<string | null> } } }).Clerk;
+    return (await clerk?.session?.getToken()) ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export const api = axios.create({
   baseURL: BASE_URL, // Ensure this is defined
@@ -16,18 +26,10 @@ export const api = axios.create({
 
 api.interceptors.request.use(
   async config => {
-    // Get the current session from Supabase.
-    // (Depending on your Supabase client version, this may be synchronous or asynchronous.)
-
-    const {
-      data: { session },
-      error,
-    } = await supabase.auth.getSession();
-
-    if (session && session.access_token) {
-      config.headers.Authorization = `Bearer ${session.access_token}`;
+    const token = await getClerkToken();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
-
     return config;
   },
   error => Promise.reject(error)
@@ -44,15 +46,11 @@ export async function fetchApi(
 ) {
   const { method = 'GET', headers = {}, body, signal } = options || {};
 
-  // Get the current session from Supabase before making the request
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  const token = await getClerkToken();
 
-  // Prepare headers with authentication
   const authHeaders = { ...defaultHeaders, ...headers };
-  if (session && session.access_token) {
-    authHeaders.Authorization = `Bearer ${session.access_token}`;
+  if (token) {
+    authHeaders.Authorization = `Bearer ${token}`;
   }
 
   const res = await fetch(BASE_URL + path, {

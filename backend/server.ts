@@ -13,6 +13,9 @@ import { getReminders } from "apis/reminders/get-reminders";
 import { getOpenAIEphemeralToken } from "apis/transcription/get-openai-ephemeral-token.js";
 import { getTranscription } from "apis/transcription/get-transcription.js";
 import { updateUser } from "apis/users/updateUser";
+import { deleteUser } from "apis/users/delete-user.js";
+import { getWines } from "apis/wines/get-wines.js";
+import { getCustomers } from "apis/customers/get-customers.js";
 import { connectToDatabase } from "clients/mongoose_client";
 import { textToVoice } from "clients/text_to_voice";
 import cors from "cors";
@@ -134,12 +137,17 @@ if (cluster.isPrimary) {
     asyncHandler(getAllUsersNotes)
   );
   app.post("/api/update-user", verifyJWT, asyncHandler(updateUser));
+  app.post("/api/delete-user", verifyJWT, asyncHandler(deleteUser));
   app.post(
     "/api/update-profile-role",
     verifyJWT,
     asyncHandler(updateProfileRole)
   );
   app.post("/api/create-profile", asyncHandler(createProfile));
+
+  // Editor autocomplete data (wines / customers)
+  app.get("/api/get-wines", verifyJWT, asyncHandler(getWines));
+  app.get("/api/get-customers", verifyJWT, asyncHandler(getCustomers));
 
   // always after routes //
   const PORT = process.env.APP_PORT;

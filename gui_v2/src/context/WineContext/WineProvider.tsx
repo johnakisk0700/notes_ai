@@ -1,5 +1,5 @@
 import { createContext, useState, useContext, useEffect } from 'react';
-import { fetchAllWines } from '../../integrations/supabase/wines';
+import { fetchAllWines } from '../../integrations/lists';
 
 const WineContext = createContext<string[]>([]);
 

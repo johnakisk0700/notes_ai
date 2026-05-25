@@ -8,7 +8,6 @@
     "@fireworksai/sdk": "^0.24.7",
     "@google-cloud/speech": "^6.7.1",
     "@qdrant/qdrant-js": "^1.14.1",
-    "@supabase/supabase-js": "^2.50.0",
     "@types/fluent-ffmpeg": "^2.1.27",
     "@types/pg": "^8.15.4",
     "axios": "^1.9.0",
@@ -27,7 +26,6 @@
     "pg": "^8.16.0",
     "pino": "^9.7.0",
     "pino-pretty": "^13.0.0",
-    "supabase": "^2.24.3",
     "uuid": "^11.1.0"
   },
   "scripts": {

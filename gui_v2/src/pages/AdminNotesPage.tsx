@@ -1,7 +1,6 @@
 import { AdminNotesList } from '@/components/Admin/AdminNotesList';
 import { useAuth } from '@/context/AuthContext/AuthContext';
 import { api } from '@/integrations/api';
-import { supabase } from '@/integrations/supabase/client';
 import type { Note } from '@shared/db/schema/notes';
 import type { Profile } from '@shared/db/schema/profile';
 import type { Tefteri } from '@shared/db/schema/tefteri';
@@ -72,9 +71,7 @@ const AdminNotes: React.FC = () => {
 
   const handleDelete = async (noteId: string) => {
     try {
-      const { error } = await supabase.from('notes').delete().eq('id', noteId);
-
-      if (error) throw error;
+      await api.post('/delete-note', { noteId });
       toast.success('Note deleted successfully');
       loadNotes();
     } catch (error) {

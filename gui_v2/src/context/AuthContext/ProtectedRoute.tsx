@@ -1,15 +1,14 @@
+import { useUser } from '@clerk/clerk-react';
 import { Navigate, Outlet } from 'react-router';
-import { useAuth } from './AuthContext';
-import { RedirectToSignIn } from '@clerk/clerk-react';
 
 const ProtectedRoute = () => {
-  const { isAdmin, user, loadingUser } = useAuth();
+  const { isLoaded, isSignedIn } = useUser();
 
-  if (loadingUser || isAdmin === null) {
+  if (!isLoaded) {
     return <div className="flex items-center justify-center h-screen"></div>;
   }
 
-  return user ? <Outlet /> : <RedirectToSignIn />;
+  return isSignedIn ? <Outlet /> : <Navigate to="/auth" replace />;
 };
 
 export default ProtectedRoute;

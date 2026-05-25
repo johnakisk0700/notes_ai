@@ -21,7 +21,6 @@
   "trustedDependencies": [
     "@tailwindcss/oxide",
     "esbuild",
-    "protobufjs",
-    "supabase"
+    "protobufjs"
   ]
 }

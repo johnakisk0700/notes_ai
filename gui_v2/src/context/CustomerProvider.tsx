@@ -1,5 +1,5 @@
 import { createContext, useState, useContext, useEffect } from 'react';
-import { fetchAllCustomers } from '../integrations/supabase/wines';
+import { fetchAllCustomers } from '../integrations/lists';
 
 const CustomerContext = createContext<string[]>([]);
 

@@ -1,4 +1,3 @@
-import getSupabaseForUser from "clients/supabase_client";
 import { drizzlePg } from "clients/drizzle_postgres_client";
 import { notesTable } from "@shared/db/schema/notes";
 import { remindersTable } from "@shared/db/schema/reminders";
@@ -78,7 +77,6 @@ export const updateNote = async (req, res) => {
       }
 
       // 3. Call createAndSaveNoteEmbedding
-      const supabase = getSupabaseForUser(req.token);
       await createAndSaveNoteEmbedding(req.user.id, reminderRecord, noteRecord);
     });
 

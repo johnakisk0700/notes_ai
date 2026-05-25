@@ -1,5 +1,5 @@
 import { createContext, useState, useContext, useEffect } from 'react';
-import { fetchAllUsers, UserProfile } from '../../integrations/supabase/users';
+import { fetchAllUsers, type UserProfile } from '../../integrations/users';
 import { toast } from 'sonner';
 
 const UsersContext = createContext<UserProfile[]>([]);

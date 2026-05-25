@@ -8,6 +8,13 @@
       "when": 1750258746829,
       "tag": "0000_shiny_pestilence",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1779737806540,
+      "tag": "0001_clerk_decouple",
+      "breakpoints": true
     }
   ]
 }

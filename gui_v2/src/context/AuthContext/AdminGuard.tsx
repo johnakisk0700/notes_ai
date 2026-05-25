@@ -2,15 +2,14 @@ import { Navigate, Outlet } from 'react-router';
 import { useAuth } from './AuthContext';
 
 const AdminGuard = () => {
-  const { isAdmin } = useAuth();
+  const { isAdmin, loadingUser } = useAuth();
 
-  // If user is authenticated but not admin, redirect to home
-  if (!isAdmin) {
-    return <Navigate to="/" replace />;
+  // Wait for the role to resolve before deciding, so admins aren't bounced.
+  if (loadingUser || isAdmin === null) {
+    return <div className="flex items-center justify-center h-screen"></div>;
   }
 
-  // User is authenticated and is admin
-  return <Outlet />;
+  return isAdmin ? <Outlet /> : <Navigate to="/" replace />;
 };
 
 export default AdminGuard;

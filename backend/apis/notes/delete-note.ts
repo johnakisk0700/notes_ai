@@ -9,15 +9,21 @@ export async function deleteNote(req, res) {
   validateRequestBody(req.body, ["noteId"]);
   const { noteId } = req.body;
   const userId = req.user.id;
+  const isAdmin = req.user.isAdmin;
 
   try {
     let deletedNoteId;
 
     await drizzlePg.transaction(async (tx) => {
+      // Owners can delete their own notes; admins can delete any note.
+      const whereClause = isAdmin
+        ? eq(notesTable.id, noteId)
+        : and(eq(notesTable.id, noteId), eq(notesTable.userId, userId));
+
       // Delete the note from the database and retrieve its ID
       const noteDeleteResult = await tx
         .delete(notesTable)
-        .where(and(eq(notesTable.id, noteId), eq(notesTable.userId, userId)))
+        .where(whereClause)
         .returning({
           id: notesTable.id,
         });

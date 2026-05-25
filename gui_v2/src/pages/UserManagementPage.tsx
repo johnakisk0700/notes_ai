@@ -5,7 +5,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/context/AuthContext/AuthContext';
 import { api } from '@/integrations/api';
-import { supabase } from '@/integrations/supabase/client';
 import type { Profile } from '@shared/db/schema/profile';
 import type { Tefteri } from '@shared/db/schema/tefteri';
 import { ShieldUser, Trash, UserIcon } from 'lucide-react';
@@ -61,26 +60,7 @@ export const UserManagementPage = () => {
     if (!selectedUser) return;
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session) {
-        throw new Error('No session found');
-      }
-
-      const response = await fetch('https://xyzfansfddzndxctjdfa.supabase.co/functions/v1/delete-user', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ userId: selectedUser.profile.id }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to delete user');
-      }
+      await api.post('delete-user', { userId: selectedUser.profile.id });
 
       setProfiles(prevUsers => prevUsers.filter(user => user.profile.id !== selectedUser.profile.id));
 

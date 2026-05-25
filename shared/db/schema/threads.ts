@@ -17,7 +17,7 @@ export const threadsTable = pgTable(
     id: uuid("id")
       .primaryKey()
       .default(sql`gen_random_uuid()`),
-    userId: uuid("user_id").notNull(), // Consider adding foreign key to users table
+    userId: text("user_id").notNull(), // Clerk user ID (text, not uuid)
     title: text("title").notNull(),
     description: text("description"),
     messageCount: integer("message_count").default(0).notNull(),

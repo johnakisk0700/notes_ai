@@ -9,7 +9,7 @@ export const notesTable = pgTable(
     id: uuid("id")
       .primaryKey()
       .default(sql`gen_random_uuid()`),
-    userId: uuid("user_id").notNull(),
+    userId: text("user_id").notNull(), // Clerk user ID (text, not uuid)
     title: text("title"),
     content: text("content").notNull(),
     ...timestamps,

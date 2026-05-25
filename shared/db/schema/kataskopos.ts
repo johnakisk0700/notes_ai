@@ -1,6 +1,7 @@
 import {
   pgTable,
   uuid,
+  text,
   varchar,
   decimal,
   timestamp,
@@ -11,7 +12,7 @@ export const kataskoposTable = pgTable(
   "kataskopos",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id").notNull(),
+    userId: text("user_id").notNull(), // Clerk user ID (text, not uuid)
     model: varchar("model", { length: 100 }).notNull(),
     inputCost: decimal("input_cost", { precision: 19, scale: 10 })
       .notNull()
