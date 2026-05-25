@@ -17,6 +17,7 @@ import { connectToDatabase } from "clients/mongoose_client";
 import { textToVoice } from "clients/text_to_voice";
 import cors from "cors";
 import express from "express/index";
+import http from "node:http";
 import https from "https";
 import { costMiddleware } from "middleware/costMiddleware.js";
 import { createQueryMiddleware } from "middleware/createQueryMiddleware";
@@ -144,16 +145,16 @@ if (cluster.isPrimary) {
   const PORT = process.env.APP_PORT;
   app.use(errorHandler);
 
-  // --- HTTPS Configuration ---
-  const httpsOptions = handleHTTPSCertificates();
-
-  // Replace http.createServer with https.createServer
-  const server = https.createServer(httpsOptions, app); // Use https.createServer here
+  // --- Server: plain HTTP in dev (no TLS certs in container), HTTPS in prod ---
+  const isDev = process.env.MODE === "dev";
+  const server = isDev
+    ? http.createServer(app)
+    : https.createServer(handleHTTPSCertificates(), app);
 
   server.listen({ port: PORT, reusePort: true }, async () => {
-    if (cluster.worker && cluster.worker.id === 1) {
-    }
-    console.log(`Wine-Assistant Server (HTTPS) is running on port: [${PORT}]`); // Update log message
+    console.log(
+      `Wine-Assistant Server (${isDev ? "HTTP" : "HTTPS"}) is running on port: [${PORT}]`
+    );
   });
 }
 

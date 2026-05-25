@@ -1,10 +1,61 @@
-version: "3.8"
-# Port mappings: Changed to avoid conflicts:
-# Qdrant: 6971 (was 6969)
-# MongoDB: 27018 (was 27017)
-# Redis: 6380 (was 6379)
-# PostgreSQL: 5433 (was 5432)
+# Full stack: data services + backend API + frontend.
+# Quick start:
+#   1. cp backend/.env.example backend/.env   (fill in your API keys)
+#   2. export VITE_CLERK_PUBLISHABLE_KEY=pk_...   (frontend auth, build-time)
+#   3. docker compose up --build
+#
+# Port mappings (host -> container), bound to localhost only:
+#   Frontend:   8081  -> 80
+#   Backend:    5100  -> 5100
+#   Qdrant:     6971  -> 6333
+#   Redis:      6380  -> 6379
+#   Postgres:   5433  -> 5432
+#   MongoDB:    27018 -> 27017
 services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: ai-assistant-backend
+    restart: always
+    # API keys etc. live here. Marked optional so the stack still starts on a
+    # fresh clone where backend/.env doesn't exist yet.
+    env_file:
+      - path: backend/.env
+        required: false
+    # DB connection targets point at the internal service hostnames and
+    # override anything in .env (which targets localhost for host-run dev).
+    environment:
+      MODE: dev
+      NODE_ENV: production
+      APP_PORT: 5100
+      POSTGRES_URI: postgres://postgres:example@postgres-ai-assistant:5432/postgres
+      MONGODB_URI: mongodb://root:example@mongo-ai-assistant:27017/notes-db?authSource=admin
+      REDIS_URL: redis://redis-ai-assistant:6379
+      QDRANT_HOST: qdrant-ai-assistant
+      QDRANT_PORT: 6333
+    ports:
+      - "127.0.0.1:5100:5100"
+    depends_on:
+      - postgres-ai-assistant
+      - redis-ai-assistant
+      - qdrant-ai-assistant
+      - mongo-ai-assistant
+
+  gui:
+    build:
+      context: .
+      dockerfile: gui_v2/Dockerfile
+      args:
+        VITE_API_PROD_URL: ${VITE_API_URL:-http://localhost:5100/api/}
+        VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY:-}
+    container_name: ai-assistant-gui
+    restart: always
+    ports:
+      - "127.0.0.1:8081:80"
+    depends_on:
+      - backend
+
   qdrant-ai-assistant:
     image: qdrant/qdrant:latest
     restart: always
@@ -14,6 +65,7 @@ services:
     volumes:
       - ./qdrant_data:/qdrant/storage
       - ./qdrant_config.yaml:/qdrant/config/config.yaml
+
   redis-ai-assistant:
     image: redis:latest
     restart: always
@@ -22,7 +74,7 @@ services:
       - "127.0.0.1:6380:6379"
 
   postgres-ai-assistant:
-    image: postgres
+    image: postgres:17
     restart: always
     container_name: ai-assistant-postgres
     shm_size: 1024mb
@@ -32,3 +84,15 @@ services:
       POSTGRES_PASSWORD: example
     volumes:
       - ./data/postgres_data:/var/lib/postgresql/data
+
+  mongo-ai-assistant:
+    image: mongo:7
+    restart: always
+    container_name: ai-assistant-mongo
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: example
+    ports:
+      - "127.0.0.1:27018:27017"
+    volumes:
+      - ./data/mongo_data:/data/db

@@ -3,7 +3,7 @@
   "private": true,
   "workspaces": [
     "backend",
-    "gui_v2.0",
+    "gui_v2",
     "shared"
   ],
   "dependencies": {

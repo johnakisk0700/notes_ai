@@ -12,12 +12,6 @@
             "path": "./backend"
         },
         {
-            "path": "./gui_v2.0"
-        },
-        {
-            "path": "./db"
-        },
-        {
             "path": "./shared"
         }
     ]

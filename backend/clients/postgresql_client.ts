@@ -1,12 +1,11 @@
 import { SQL } from "bun";
 import { Pool, QueryResultRow } from "pg";
 
+const POSTGRES_URI =
+  process.env.POSTGRES_URI || "postgres://postgres:example@localhost:5433/postgres";
+
 export const pool = new Pool({
-  database: "postgres",
-  user: "postgres",
-  password: "example",
-  host: "localhost",
-  port: 5433,
+  connectionString: POSTGRES_URI,
   // Adjust these based on your worker count
   max: 10, // Maximum number of clients in the pool per worker
   min: 2, // Minimum number of clients to keep in pool per worker
@@ -41,15 +40,8 @@ export const query = async <T extends QueryResultRow>(
 
 // Bun Postgres Client Configuration
 export const bunPostgres = new SQL({
-  // Required
-  url: process.env.POSTGRES_URI,
-
-  // Optional configuration
-  hostname: "localhost",
-  port: 5433,
-  database: "postgres",
-  username: "postgres",
-  password: "example",
+  // Required — connection string (falls back to local dev Postgres)
+  url: POSTGRES_URI,
 
   // Connection pool settings
   max: 5, // Maximum connections in pool
