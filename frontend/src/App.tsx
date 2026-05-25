@@ -4,6 +4,8 @@ import { StreamChatProvider } from './context/StreamChatContext';
 import Layout from './Layout';
 import AdminNotes from './pages/AdminNotesPage';
 import { LoginPage } from './pages/LoginPage';
+import { SSOCallbackPage } from './pages/SSOCallbackPage';
+import { OnboardingPage } from './pages/OnboardingPage';
 import { MainChatPage } from './pages/MainChatPage';
 import { NotesPage } from './pages/NotesPage';
 import { UserManagementPage } from './pages/UserManagementPage';
@@ -26,6 +28,8 @@ function App() {
   return (
     <Routes>
       <Route path="/auth" element={<LoginPage />} />
+      <Route path="/sso-callback" element={<SSOCallbackPage />} />
+      <Route path="/onboarding" element={<OnboardingPage />} />
 
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout />}>

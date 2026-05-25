@@ -37,6 +37,7 @@ List endpoints (marked 📄) also run `queryMiddleware` → accept `page`, `limi
 | GET 📄 | `/api/get-profiles`        | `getProfiles`       | Profiles + tefteri cost, ordered by spend (admin). |
 | GET    | `/api/get-profile`         | `getProfile`        | `?userId=`. |
 | POST   | `/api/update-profile-role` | `updateProfileRole` | `{ profileId, role }` (admin). |
+| POST   | `/api/update-profile-name` | `updateProfileName` | `{ first_name, last_name }` for the signed-in user (keyed by `req.user.id`). Backs the onboarding step. |
 | POST   | `/api/update-user`         | `updateUser`        | Associates Qdrant customer points with a user. |
 | POST   | `/api/delete-user`         | `deleteUser`        | `{ userId }` (**admin**). Purges the user's reminders/notes/profile (tx) + Qdrant note vectors, then deletes the Clerk identity. |
 | POST   | `/api/create-profile`      | `createProfile`     | `{ id, first_name, last_name, email }`. **No auth** — called right after signup. |

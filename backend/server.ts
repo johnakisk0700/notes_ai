@@ -9,6 +9,7 @@ import { createProfile } from "apis/profiles/create-profile.js";
 import { getProfile } from "apis/profiles/get-profile.js";
 import { getProfiles } from "apis/profiles/get-profiles.js";
 import { updateProfileRole } from "apis/profiles/update-profile-role.js";
+import { updateProfileName } from "apis/profiles/update-profile-name.js";
 import { getReminders } from "apis/reminders/get-reminders";
 import { getOpenAIEphemeralToken } from "apis/transcription/get-openai-ephemeral-token.js";
 import { getTranscription } from "apis/transcription/get-transcription.js";
@@ -130,6 +131,7 @@ if (cluster.isPrimary) {
   app.post("/api/update-user", verifyJWT, asyncHandler(updateUser));
   app.post("/api/delete-user", verifyJWT, asyncHandler(deleteUser));
   app.post("/api/update-profile-role", verifyJWT, asyncHandler(updateProfileRole));
+  app.post("/api/update-profile-name", verifyJWT, asyncHandler(updateProfileName));
   app.post("/api/create-profile", asyncHandler(createProfile));
 
   // Editor autocomplete data (wines / customers)

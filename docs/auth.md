@@ -11,12 +11,31 @@ Postgres, keyed by the Clerk user ID.
 - Token injection: `src/integrations/api.ts` reads the active Clerk session token
   (`window.Clerk.session.getToken()`) and sets `Authorization: Bearer <token>` on
   every axios request. The same is done in the raw-`fetch` helper `fetchApi`.
-- Route guards: `ProtectedRoute` redirects unauthenticated users to sign-in;
+- Route guards: `ProtectedRoute` redirects unauthenticated users to sign-in, and
+  redirects signed-in users with **no name in Clerk** to `/onboarding` (see below);
   `AdminGuard` checks `isAdmin`. Both read from the app `AuthProvider`, which wraps
   Clerk's `useUser` and fetches the user's `role` from `/api/get-profile` to derive
   `isAdmin`.
-- Sign-in/up uses Clerk (`LoginPage`). After a successful sign-up, the app calls
-  `POST /api/create-profile` so a Postgres `profile` row exists.
+- Onboarding (`/onboarding`, `OnboardingPage`): shown only when a signed-in user has
+  no `firstName`/`lastName` in Clerk — i.e. an OAuth provider that supplied none, or a
+  user created directly in the Clerk dashboard. It collects the name, updates Clerk
+  (`user.update`, the identity source of truth) so the guard lets them through, then
+  mirrors it to Postgres via `POST /api/update-profile-name`. Lives outside
+  `ProtectedRoute` so the redirect can't loop. Email/password and most Google users
+  already have a name, so they never see it.
+- Sign-in/up uses Clerk (`LoginPage`), with two paths:
+  - **Email + password** (custom flow via `useSignIn`/`useSignUp`). Sign-up emails a
+    one-time code; the verification step resumes after a refresh (Clerk keeps the
+    in-progress sign-up) but offers a "use a different email" escape so it can't trap
+    the user. After verification the app calls `POST /api/create-profile`
+    (best-effort — `verifyJWT` also provisions it).
+  - **Google OAuth** ("Continue with Google" button) via
+    `signIn.authenticateWithRedirect({ strategy: 'oauth_google', redirectUrl: '/sso-callback' })`.
+    Clerk transfers an unknown Google identity into a sign-up automatically, so one
+    button serves both new and returning users. The round-trip lands on the
+    `/sso-callback` route (`SSOCallbackPage` → Clerk's `AuthenticateWithRedirectCallback`),
+    which finishes the handshake and redirects to `/`. No `create-profile` call on this
+    path — the profile is provisioned lazily on the first API request (see below).
 
 ## Backend
 
@@ -29,12 +48,16 @@ Postgres, keyed by the Clerk user ID.
 
 ## Profile provisioning
 
-Every Clerk user needs a matching `profile` row (for role + tefteri). It is created
-via `POST /api/create-profile` on sign-up. If a profile can be missing on first
-request (e.g. users created directly in Clerk), `verifyJWT` lazily creates one from
-the Clerk user data.
+Every Clerk user needs a matching `profile` row (for role + tefteri). The email/password
+sign-up calls `POST /api/create-profile`. For everyone else — Google OAuth users, users
+created directly in Clerk, or if `create-profile` failed — `verifyJWT` lazily creates the
+row from the Clerk user (`firstName`/`lastName`/primary email) on the first authenticated
+request. So no auth path can end up without a profile.
 
 ## Required config
 
 - Backend `.env`: `CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY`.
 - Frontend `.env`: `VITE_CLERK_PUBLISHABLE_KEY`.
+- Clerk dashboard: enable **Google** under _User & Authentication → Social Connections_
+  (and email/password name fields under _Personal information_). Dev uses Clerk's shared
+  OAuth credentials; production needs your own Google OAuth client configured in Clerk.
