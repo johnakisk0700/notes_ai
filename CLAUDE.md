@@ -8,7 +8,7 @@ stored, and a chat answers questions over them via semantic search. Greek/Englis
 | Workspace  | What it is                                                        |
 | ---------- | ----------------------------------------------------------------- |
 | `backend/` | Express API on Bun. Auth, notes CRUD, AI chat, transcription.     |
-| `gui_v2/`  | React 19 + Vite + Tailwind v4 + shadcn/ui SPA.                    |
+| `gui_v2/`  | React 19 SPA: Vite, Tailwind v4, shadcn/ui. See `docs/frontend.md`. |
 | `shared/`  | Drizzle schema + shared TS types/DTOs, imported as `@shared/*`.   |
 
 `backend/apokrasopoihsh_bin/` and any `*_old`/`_prototype` files are dead code — ignore.
@@ -85,6 +85,9 @@ being removed — do not add new ones. See `docs/auth.md`.
   is the Clerk user ID. List pages use `queryMiddleware` (pagination/sort).
 - Errors: throw `AppError` / let `asyncHandler` forward to `errorHandler`.
 - `console.*` is monkey-patched to the pino `logger` in `server.ts`.
+- **Keep the docs current.** After any code change that touches structure, deps,
+  routes, data stores, auth, or conventions, update `CLAUDE.md` and the relevant
+  `docs/*` file in the same change — treat stale docs as a bug.
 
 ## Deeper docs
 
@@ -92,3 +95,4 @@ being removed — do not add new ones. See `docs/auth.md`.
 - `docs/data-stores.md` — every Postgres table, Qdrant collection, Mongo model.
 - `docs/api-reference.md` — all backend endpoints.
 - `docs/auth.md` — Clerk flow front-to-back + profile provisioning.
+- `docs/frontend.md` — gui_v2 structure, routing, provider tree, shadcn setup, API layer, TipTap.

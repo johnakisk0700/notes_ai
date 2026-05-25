@@ -1,5 +1,5 @@
 import { useStreamChat } from '@/context/StreamChatContext';
-import type { Message } from '@/hooks/useStreamChat_old';
+import type { Message } from '@/context/StreamChatContext';
 import { cn } from '@/lib/utils';
 import { Check, CopyIcon, EditIcon, RefreshCcw, X } from 'lucide-react';
 import { useState } from 'react';

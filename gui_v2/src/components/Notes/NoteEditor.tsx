@@ -109,7 +109,7 @@ const EditorCore = () => {
 
   // util for updating both editor and state
   const updateNoteState = (title: any, content: any, reminder: Reminder | null = null) => {
-    editor?.commands.setContent(content, false);
+    editor?.commands.setContent(content, { emitUpdate: false });
     setNoteTitle(title);
     if (reminder) {
       const date = new Date(reminder.remindAt);

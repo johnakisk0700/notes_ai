@@ -1,5 +1,5 @@
 import { useFadeInOut } from '@/hooks/useFadeInOut';
-import type { Message } from '@/hooks/useStreamChat_old';
+import type { Message } from '@/context/StreamChatContext';
 import { useEffect, useRef } from 'react';
 import { ChatMessage } from './ChatMessage';
 import { CustomMarkdown } from './CustomMarkdown';
