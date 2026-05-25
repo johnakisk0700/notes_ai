@@ -1,5 +1,5 @@
 import { validateRequestBody } from "middleware/common/validation/requiredValidator";
-import { createAndSaveNoteEmbedding } from "service/embeddings";
+import { createAndSaveNoteEmbedding } from "services/embeddings";
 import { drizzlePg } from "clients/drizzle_postgres_client";
 import { notesTable } from "@shared/db/schema/notes";
 import { Reminder, remindersTable } from "@shared/db/schema/reminders";

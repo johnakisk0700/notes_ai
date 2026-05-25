@@ -1,0 +1,27 @@
+# PROD overrides — apply explicitly (this disables the dev override):
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
+#
+# Backend runs the bundled dist/server.js. With BACKEND_MODE=production it serves
+# HTTPS and reads Let's Encrypt certs from the mounted /etc/letsencrypt. If TLS is
+# terminated by an upstream proxy, set BACKEND_MODE=dev to serve plain HTTP.
+# Frontend is a static build served by nginx on host port 8081.
+services:
+  backend:
+    build:
+      target: runtime
+    restart: always
+    environment:
+      MODE: ${BACKEND_MODE:-production}
+      NODE_ENV: production
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+
+  frontend:
+    build:
+      target: runtime
+      args:
+        VITE_API_PROD_URL: ${VITE_API_URL:-http://localhost:5100/api/}
+        VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY:-}
+    restart: always
+    ports:
+      - "127.0.0.1:8081:80"

@@ -53,7 +53,7 @@
         "typescript": "latest",
       },
     },
-    "gui_v2": {
+    "frontend": {
       "name": "notes-assistant-gui",
       "version": "0.0.0",
       "dependencies": {
@@ -1387,7 +1387,7 @@
 
     "node-releases": ["node-releases@2.0.46", "", {}, "sha512-GYVXHE2KnrzAfsAjl4uP++evGFCrAU1jta4ubEjIG7YWt/64Gqv66a30yKwWczVjA6j3bM4nBwH7Pk1JmDHaxQ=="],
 
-    "notes-assistant-gui": ["notes-assistant-gui@workspace:gui_v2"],
+    "notes-assistant-gui": ["notes-assistant-gui@workspace:frontend"],
 
     "object-assign": ["object-assign@4.1.1", "", {}, "sha512-rJgTQnkUnH1sFw8yT6VSU3zD3sWmu6sZhIseY8VX+GRu3P6F7Fu+JNDoXfklElbLJSnc3FUQHVe4cU5hj+BcUg=="],
 

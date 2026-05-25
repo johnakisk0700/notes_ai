@@ -1,6 +1,6 @@
-# gui_v2 — Improvement Plan
+# Frontend (`frontend/`) — Improvement Plan
 
-A backlog of recommended fixes/enhancements for the `gui_v2` frontend, written as a
+A backlog of recommended fixes/enhancements for the `frontend/` workspace, written as a
 pickup plan for a future session. Compiled 2026-05-25, right after the
 all-latest dependency upgrade (Vite 8/Rolldown, React 19.2, TS 6, ESLint 10,
 TipTap 3, shadcn re-synced onto the unified `radix-ui` package — see
@@ -120,7 +120,7 @@ Each item notes: **what / why / where / how / verify**, and whether it's a
 ### 14. Vite 8 vs Node version  **[verified]**
 - Vite 8 wants Node ≥ 20.19 / 22.12; the local/bun runtime reports **Node 22.6.0**
   (dev server warns). It works via bun, but verify the Docker build
-  (`oven/bun:1.2-slim` in `gui_v2/Dockerfile`) and any CI use a recent enough Node.
+  (`oven/bun:1.2-slim` in `frontend/Dockerfile`) and any CI use a recent enough Node.
 
 ### 15. Refactor the NoteEditor dialog close pattern  **[verified]**
 - **Where:** `NoteEditor.tsx` uses `<Dialog open={isOpen}>` with **no

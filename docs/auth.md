@@ -6,7 +6,7 @@ Postgres, keyed by the Clerk user ID.
 
 ## Frontend
 
-- `ClerkProvider` wraps the app in `gui_v2/src/main.tsx` with
+- `ClerkProvider` wraps the app in `frontend/src/main.tsx` with
   `VITE_CLERK_PUBLISHABLE_KEY`.
 - Token injection: `src/integrations/api.ts` reads the active Clerk session token
   (`window.Clerk.session.getToken()`) and sets `Authorization: Bearer <token>` on

@@ -1,4 +1,4 @@
-# Frontend (`gui_v2`)
+# Frontend (`frontend/`)
 
 React 19 SPA: users write/record notes and chat over them. Greek/English UI.
 Single-page app served statically (nginx in prod, Vite dev server locally).
@@ -19,8 +19,8 @@ Single-page app served statically (nginx in prod, Vite dev server locally).
 | i18n           | `i18next` + `react-i18next` (el default, en)                      |
 | Misc           | `sonner` (toasts), `react-day-picker` (calendar), `cmdk`, `vaul`, `fuse.js`, `date-fns` |
 
-Dev: `bun run dev` → http://localhost:5173 (Docker maps to `8081`).
-Build: `bun run build` → `dist/`, served by nginx (`gui_v2/Dockerfile`, `nginx.conf`).
+Dev: `bun run dev` → http://localhost:5173 (Docker dev maps 5173; prod nginx → 8081).
+Build: `bun run build` → `dist/`, served by nginx (`frontend/Dockerfile`, `nginx.conf`).
 Env (Vite-inlined): `VITE_API_DEV_URL`, `VITE_API_PROD_URL`, `VITE_CLERK_PUBLISHABLE_KEY`.
 
 ## Directory map (`src/`)
@@ -103,7 +103,7 @@ ThemeProvider (dark default, localStorage "vite-ui-theme")
 
 ## shadcn/ui
 
-Config in `gui_v2/components.json`: style `new-york`, base color `slate`,
+Config in `frontend/components.json`: style `new-york`, base color `slate`,
 CSS variables, `lucide` icons, aliases `@/components`, `@/lib/utils`, `@/components/ui`.
 
 - **Primitives** live in `src/components/ui/` and import from the unified
@@ -157,9 +157,9 @@ a user `@mention` dropdown.
 
 - **Relative imports use `.js` extensions** on `.ts`/`.tsx` files in some places
   (e.g. `./MentionList.js`) — Bun/Vite resolve them; keep the style consistent.
-- **Path aliases:** `@/*` → `src` and `@shared` → `../shared` (`vite.config.ts`),
-  plus `@shared/*`, `@interfaces/*`, `@db/*`, `@types/*`, `@dto/*` in
-  `tsconfig.app.json`. Shared DTOs/types come from the `shared/` workspace.
+- **Path aliases:** `@/*` → `src` and `@shared` → `../shared` (`vite.config.ts`);
+  `@/*`, `@shared`, `@shared/*` in `tsconfig.app.json`. Shared DTOs/types come from
+  the `shared/` workspace (`import { Note } from "@shared"` or `"@shared/db/schema/notes"`).
 - **Typecheck:** use `bunx tsc --noEmit -p tsconfig.app.json`. Note the `build`
   script is just `vite build` (no `tsc`), so a green build does **not** mean the
   types are clean — there is a backlog of pre-existing unused-symbol errors.

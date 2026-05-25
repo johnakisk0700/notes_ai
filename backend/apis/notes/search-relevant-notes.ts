@@ -10,7 +10,7 @@ import {
   generateNoteSearchToolSystemPrompt,
 } from "../../utils/gptPromptGenerator.js";
 import { ChatCompletionTool } from "openai/resources/index.mjs";
-import { handleAiStream } from "service/ai_malakies/ai_chat";
+import { handleAiStream } from "services/ai/ai_chat";
 import { Message } from "model/mongo-db/Message";
 
 interface SearchRelevantNotesRequest {

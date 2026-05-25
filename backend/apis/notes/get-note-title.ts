@@ -1,4 +1,4 @@
-import { getAiChatResponse } from "service/ai_malakies/ai_chat";
+import { getAiChatResponse } from "services/ai/ai_chat";
 
 export async function getNoteTitle(req, res) {
   const { content } = req.body;

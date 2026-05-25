@@ -3,9 +3,16 @@
   "private": true,
   "workspaces": [
     "backend",
-    "gui_v2",
+    "frontend",
     "shared"
   ],
+  "scripts": {
+    "dev": "docker compose up --build",
+    "dev:down": "docker compose down",
+    "prod": "docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d",
+    "prod:down": "docker compose -f docker-compose.yml -f docker-compose.prod.yml down",
+    "logs": "docker compose logs -f"
+  },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.10",
     "boxen": "^8.0.1",

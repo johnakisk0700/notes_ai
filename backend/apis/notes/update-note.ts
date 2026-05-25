@@ -1,7 +1,7 @@
 import { drizzlePg } from "clients/drizzle_postgres_client";
 import { notesTable } from "@shared/db/schema/notes";
 import { remindersTable } from "@shared/db/schema/reminders";
-import { createAndSaveNoteEmbedding } from "service/embeddings";
+import { createAndSaveNoteEmbedding } from "services/embeddings";
 import { eq } from "drizzle-orm";
 import { AppError } from "middleware/common/AppError";
 

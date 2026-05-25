@@ -14,20 +14,11 @@
         "rootDir": "./",
         "baseUrl": "./",
         "paths": {
+            "@shared": [
+                "./index.ts"
+            ],
             "@shared/*": [
                 "./*"
-            ],
-            "@interfaces/*": [
-                "./interfaces/*"
-            ],
-            "@db/*": [
-                "./db/*"
-            ],
-            "@types/*": [
-                "./types/*"
-            ],
-            "@dto/*": [
-                "./dto/*"
             ]
         }
     },

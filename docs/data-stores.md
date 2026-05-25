@@ -17,13 +17,13 @@ Schema: `shared/db/schema/`. Client: `backend/clients/drizzle_postgres_client.ts
 | `kataskopos` | Per-request AI cost tracking (model, in/out cost).           | uuid |
 | `messages` / `threads` | Drizzle schema exists; chat history currently lives in Mongo (see below). | — |
 
-> Legacy: `backend/model/postgresql/*.sql` + `*.d.ts` are pre-Drizzle and unused.
-> Don't edit them; change `shared/db/schema/` instead.
+> The Postgres source of truth is `shared/db/schema/` only. The pre-Drizzle
+> `backend/model/postgresql/*.sql` files + custom migration runner have been removed.
 
 ## Qdrant (vectors)
 
 Client: `backend/clients/qdrant_client.ts`. Collections created by
-`backend/model/qdrant_migrations.ts` (1536-dim, cosine):
+`backend/scripts/qdrant-init.ts` (1536-dim, cosine):
 
 - `notes` — note embeddings; payload has `user_id`, `content`, `created_at`,
   `concatenated` (the text that was embedded). Searched per-user in chat.

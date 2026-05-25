@@ -5,43 +5,50 @@ stored, and a chat answers questions over them via semantic search. Greek/Englis
 
 ## Monorepo (Bun workspaces)
 
-| Workspace  | What it is                                                        |
-| ---------- | ----------------------------------------------------------------- |
-| `backend/` | Express API on Bun. Auth, notes CRUD, AI chat, transcription.     |
-| `gui_v2/`  | React 19 SPA: Vite, Tailwind v4, shadcn/ui. See `docs/frontend.md`. |
-| `shared/`  | Drizzle schema + shared TS types/DTOs, imported as `@shared/*`.   |
+| Workspace   | What it is                                                        |
+| ----------- | ----------------------------------------------------------------- |
+| `backend/`  | Express API on Bun. Auth, notes CRUD, AI chat, transcription.     |
+| `frontend/` | React 19 SPA: Vite, Tailwind v4, shadcn/ui. See `docs/frontend.md`. |
+| `shared/`   | Drizzle schema + shared TS types/DTOs, imported as `@shared`.     |
 
-`backend/apokrasopoihsh_bin/` and any `*_old`/`_prototype` files are dead code — ignore.
+Any `*_old` / `*_prototype` / `*_experimental` files are dead code — ignore.
 
 ## Commands
 
-Run from the workspace dir (no root scripts exist):
-
 ```bash
+# Whole stack via Docker — from repo root (these wrap docker compose):
+bun run dev          # DEV:  backend hot-reload (bun --watch, HTTP) + Vite dev server
+bun run prod         # PROD: bundled backend (HTTPS) + nginx-served frontend (detached)
+bun run dev:down     # stop the dev stack          (prod:down for prod)
+bun run logs         # tail all service logs
+
 # Backend (from backend/)
 bun --watch run server.ts      # dev, hot reload
-bun run build                  # bundle to dist/
+bun run build                  # bundle to dist/server.js
 
-# Frontend (from gui_v2/)
+# Frontend (from frontend/)
 bun run dev                    # Vite dev server (http://localhost:5173)
 bun run build                  # production build
 bun run lint
 
 # DB migrations (from shared/, needs POSTGRES_URI)
-bunx drizzle-kit generate      # generate migration from schema changes
-bunx drizzle-kit migrate       # apply migrations
+bun run db:generate            # generate migration from schema changes (drizzle-kit)
+bun run db:migrate             # apply migrations
+bun run db:push                # push schema directly (no migration file)
 
-# Whole stack (data services + backend + gui) — from repo root
-docker compose up --build
+# Qdrant collections (from backend/, one-off provisioning)
+bun scripts/qdrant-init.ts     # create the notes/beverages/… collections
 ```
 
-Docker host ports: gui `8081`, backend `5100`, qdrant `6971`, redis `6380`,
-postgres `5433`, mongo `27018`. See `docker-compose.yml` header.
+Docker host ports: frontend dev (Vite) `5173`, frontend prod (nginx) `8081`,
+backend `5100`, qdrant `6971`, redis `6380`, postgres `5433`, mongo `27018`.
+See the `docker-compose.yml` header. Compose files: `docker-compose.yml` (base) +
+`docker-compose.override.yml` (dev, auto-applied) + `docker-compose.prod.yml` (prod).
 
 ## Architecture at a glance
 
 ```
-gui_v2 (axios, Bearer token) ──► backend /api/* ──► Postgres (notes/reminders/profiles)
+frontend (axios, Bearer token) ─► backend /api/* ─► Postgres (notes/reminders/profiles)
                                        │
                                        ├─► OpenAI (embeddings + GPT chat, streamed)
                                        ├─► Qdrant (vector search over note embeddings)
@@ -51,36 +58,44 @@ gui_v2 (axios, Bearer token) ──► backend /api/* ──► Postgres (notes/
 - Server forks a worker per 2 CPUs (`cluster`). Dev = plain HTTP, prod = HTTPS
   with Let's Encrypt certs. Entry: `backend/server.ts` (all routes registered here).
 - Chat flow: `POST /api/search-notes` embeds the query, vector-searches the user's
-  notes in Qdrant, then streams a GPT answer. See `backend/apis/notes/search-relevant-notes.ts`.
+  notes in Qdrant, then streams a GPT answer. See `backend/apis/notes/search-relevant-notes.ts`
+  and `backend/services/ai/ai_chat.ts`.
 
 ## Data stores (who owns what)
 
 - **Postgres** (Drizzle, schema in `shared/db/schema/`) — source of truth for
-  `notes`, `reminders`, `profile`, `tefteri` (cost ledger), `kataskopos`. Migrations in `shared/drizzle/`.
-- **Qdrant** — note embeddings (`notes` collection, 1536-dim) + domain collections (`beverages`, `polites`).
+  `notes`, `reminders`, `profile`, `tefteri` (cost ledger), `kataskopos` (per-request
+  AI cost). Migrations in `shared/drizzle/`.
+- **Qdrant** — note embeddings (`notes` collection, 1536-dim) + domain collections
+  (`beverages`, `polites`). Provisioned by `backend/scripts/qdrant-init.ts`.
 - **MongoDB** — AI chat threads/messages (`backend/model/mongo-db/`).
 - **Redis** — runtime cache.
 
-Note: legacy `backend/model/postgresql/*.sql` and some mongo models predate the
-Drizzle migration and are **not** the source of truth. Use `shared/db/schema/` for Postgres.
+The Postgres source of truth is `shared/db/schema/` only (the old pre-Drizzle
+`backend/model/postgresql/*.sql` and custom migration runner have been removed).
 
 ## Auth — Clerk (only)
 
-- Frontend: `ClerkProvider` in `gui_v2/src/main.tsx`. Requests attach the Clerk
-  session token as `Authorization: Bearer` (see `gui_v2/src/integrations/api.ts`).
+- Frontend: `ClerkProvider` in `frontend/src/main.tsx`. Requests attach the Clerk
+  session token as `Authorization: Bearer` (see `frontend/src/integrations/api.ts`).
 - Backend: `clerkMiddleware()` + `verifyJWT` (`backend/authentication/verifyJWT.ts`)
   resolves the Clerk user and loads `role` (admin/user) from the `profile` table.
 - The `profile` table PK **is** the Clerk user ID (`text`).
 
-There is **no Supabase**. If you see `@supabase/*` imports, they are leftover and
-being removed — do not add new ones. See `docs/auth.md`.
+There is **no Supabase**. If you see `@supabase/*` imports, they are leftover — do
+not add new ones. See `docs/auth.md`.
 
 ## Conventions / gotchas
 
 - **Imports use `.js` extensions** on relative paths (`./foo.js`) even though files
   are `.ts` — Bun resolves them. Keep this style.
-- Path aliases: backend `clients/*`, `apis/*`, `utils/*`, … (baseUrl) and `@shared/*`;
-  frontend `@/*` → `src`, `@shared` → `shared`. See `tsconfig.json` / `vite.config.ts`.
+- **Path aliases** (one shared alias, no duplicates):
+  - everywhere: `@shared` → `shared/index.ts` barrel, `@shared/*` → `shared/*`
+    (e.g. `import { Note } from "@shared"` or `"@shared/db/schema/notes"`).
+  - backend (baseUrl): `clients/*`, `apis/*`, `services/*`, `utils/*`,
+    `middleware/*`, `authentication/*`, `model/*`.
+  - frontend: `@/*` → `src`.
+  - See each workspace's `tsconfig.json` and `frontend/vite.config.ts`.
 - All `/api/*` routes (except `create-profile`) go through `verifyJWT`; `req.user.id`
   is the Clerk user ID. List pages use `queryMiddleware` (pagination/sort).
 - Errors: throw `AppError` / let `asyncHandler` forward to `errorHandler`.
@@ -91,8 +106,10 @@ being removed — do not add new ones. See `docs/auth.md`.
 
 ## Deeper docs
 
-- `docs/architecture.md` — services, request lifecycle, clustering, deployment.
+- `docs/architecture.md` — services, request lifecycle, clustering, Docker dev/prod.
 - `docs/data-stores.md` — every Postgres table, Qdrant collection, Mongo model.
 - `docs/api-reference.md` — all backend endpoints.
 - `docs/auth.md` — Clerk flow front-to-back + profile provisioning.
-- `docs/frontend.md` — gui_v2 structure, routing, provider tree, shadcn setup, API layer, TipTap.
+- `docs/frontend.md` — frontend structure, routing, provider tree, shadcn, API layer, TipTap.
+- `docs/improvement-plan.md` — frontend backlog (correctness/perf/quality).
+- `docs/smoke-tests.md` — manual QA checklist.

@@ -16,21 +16,12 @@
       "@/*": [
         "./src/*"
       ],
+      "@shared": [
+        "../shared/index.ts"
+      ],
       "@shared/*": [
         "../shared/*"
-      ],
-      "@interfaces/*": [
-        "../shared/interfaces/*"
-      ],
-      "@db/*": [
-        "../shared/db/*"
-      ],
-      "@types/*": [
-        "../shared/types/*"
-      ],
-      "@dto/*": [
-        "../shared/dto/*"
-      ],
+      ]
     },
     /* Bundler mode */
     "moduleResolution": "bundler",

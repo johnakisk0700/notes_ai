@@ -1,0 +1,34 @@
+# DEV overrides — auto-applied by `docker compose up` (no -f needed).
+# Backend hot-reloads with `bun --watch`; frontend runs the Vite dev server.
+# Source is bind-mounted; the anonymous node_modules volumes keep the
+# container's (Linux) dependencies instead of the host's.
+services:
+  backend:
+    build:
+      target: dev
+    environment:
+      MODE: dev
+      NODE_ENV: development
+    command: ["bun", "--watch", "run", "server.ts"]
+    volumes:
+      - ./backend:/app/backend
+      - ./shared:/app/shared
+      - /app/node_modules
+      - /app/backend/node_modules
+      - /app/shared/node_modules
+
+  frontend:
+    build:
+      target: dev
+    command: ["bun", "run", "dev", "--host", "0.0.0.0", "--port", "5173"]
+    environment:
+      VITE_API_DEV_URL: ${VITE_API_DEV_URL:-http://localhost:5100/api/}
+      VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY:-}
+    ports:
+      - "127.0.0.1:5173:5173"
+    volumes:
+      - ./frontend:/app/frontend
+      - ./shared:/app/shared
+      - /app/node_modules
+      - /app/frontend/node_modules
+      - /app/shared/node_modules

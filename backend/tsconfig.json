@@ -5,20 +5,11 @@
         "target": "esnext",
         "baseUrl": ".", // Set baseUrl to the current directory (backend/)
         "paths": {
+            "@shared": [
+                "../shared/index.ts"
+            ],
             "@shared/*": [
                 "../shared/*"
-            ],
-            "@interfaces/*": [
-                "../shared/interfaces/*"
-            ],
-            "@db/*": [
-                "../shared/db/*"
-            ],
-            "@types/*": [
-                "../shared/types/*"
-            ],
-            "@dto/*": [
-                "../shared/dto/*"
             ],
             "clients/*": [
                 "./clients/*"
@@ -31,9 +22,6 @@
             ],
             "utils/*": [
                 "./utils/*"
-            ],
-            "error/*": [
-                "./error/*"
             ],
             "authentication/*": [
                 "./authentication/*"

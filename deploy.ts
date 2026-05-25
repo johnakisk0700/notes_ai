@@ -5,7 +5,7 @@ import boxen from "boxen";
 import logUpdate from "log-update";
 
 const PROJECT_ROOT = process.env.PROJECT_ROOT || process.cwd();
-const GUI_PATH = `${PROJECT_ROOT}/gui_v2.0`;
+const GUI_PATH = `${PROJECT_ROOT}/frontend`;
 const BACKEND_PATH = `${PROJECT_ROOT}/backend`;
 const DB_PATH = `${PROJECT_ROOT}/shared`;
 
