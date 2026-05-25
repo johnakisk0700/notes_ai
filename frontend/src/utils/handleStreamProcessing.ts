@@ -5,6 +5,7 @@ export async function handleStreamProcessing(
     onErrorEvent: (errorMessage: string) => void;
     onDoneEvent: () => void;
     onManualEvent?: (manualData: string) => void;
+    onThreadEvent?: (threadId: string) => void;
   }
 ): Promise<void> {
   const decoder = new TextDecoder();
@@ -36,6 +37,10 @@ export async function handleStreamProcessing(
         callbacks.onManualEvent?.('');
         callbacks.onDoneEvent();
         return;
+      } else if (message.startsWith('event: thread\ndata: ')) {
+        // Server created a thread for this turn; carries its id so the client
+        // can route to /thread/:id and refresh the sidebar.
+        callbacks.onThreadEvent?.(message.substring('event: thread\ndata: '.length));
       } else if (message.startsWith('manual: ')) {
         callbacks.onManualEvent?.(message.substring(8));
       }

@@ -16,6 +16,9 @@ import { updateUser } from "apis/users/updateUser";
 import { deleteUser } from "apis/users/delete-user.js";
 import { getWines } from "apis/wines/get-wines.js";
 import { getCustomers } from "apis/customers/get-customers.js";
+import { getThreads } from "apis/threads/get-threads.js";
+import { getThread } from "apis/threads/get-thread.js";
+import { deleteThread } from "apis/threads/delete-thread.js";
 import { connectToDatabase } from "clients/mongoose_client";
 import { textToVoice } from "clients/text_to_voice";
 import cors from "cors";
@@ -58,7 +61,17 @@ if (cluster.isPrimary) {
     console.log(`Worker ${worker.process.pid} exited`);
   });
 } else {
-  // await connectToDatabase();
+  // Chat-thread persistence lives in Mongo. Connect best-effort: if Mongo is
+  // down the API still serves (notes + streamed answers work), persistence
+  // just no-ops until it recovers.
+  try {
+    await connectToDatabase();
+  } catch (err) {
+    console.error(
+      "MongoDB connection failed at startup; chat persistence disabled until it recovers:",
+      err
+    );
+  }
 
   const app = express();
 
@@ -148,6 +161,16 @@ if (cluster.isPrimary) {
   // Editor autocomplete data (wines / customers)
   app.get("/api/get-wines", verifyJWT, asyncHandler(getWines));
   app.get("/api/get-customers", verifyJWT, asyncHandler(getCustomers));
+
+  // AI chat threads (persisted in Mongo)
+  app.get(
+    "/api/get-threads",
+    verifyJWT,
+    queryMiddleware,
+    asyncHandler(getThreads)
+  );
+  app.get("/api/get-thread", verifyJWT, asyncHandler(getThread));
+  app.post("/api/delete-thread", verifyJWT, asyncHandler(deleteThread));
 
   // always after routes //
   const PORT = process.env.APP_PORT;

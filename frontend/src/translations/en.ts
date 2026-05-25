@@ -33,6 +33,10 @@ const enMenu = {
   user_management: 'User Management',
   user_management_description: 'Manage user roles and permissions',
   settings_header: 'Settings',
+  new_chat: 'New Chat',
+  recent_chats: 'Recent Chats',
+  untitled_thread: 'Untitled',
+  delete_thread: 'Delete chat',
 };
 
 const enContent = {

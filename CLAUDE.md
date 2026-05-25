@@ -29,15 +29,18 @@ bun run build                  # bundle to dist/server.js
 # Frontend (from frontend/)
 bun run dev                    # Vite dev server (http://localhost:5173)
 bun run build                  # production build
-bun run lint
+bun run lint                   # ESLint (flat config)
+bun run lint:fix               # ESLint --fix: auto-removes dead imports, fixes `import type`
+bun run format                 # Prettier write (.prettierrc)
 
 # DB migrations (from shared/, needs POSTGRES_URI)
 bun run db:generate            # generate migration from schema changes (drizzle-kit)
 bun run db:migrate             # apply migrations
 bun run db:push                # push schema directly (no migration file)
 
-# Qdrant collections (from backend/, one-off provisioning)
-bun scripts/qdrant-init.ts     # create the notes/beverages/… collections
+# One-off scripts (from backend/)
+bun scripts/qdrant-init.ts            # create the notes/beverages/… Qdrant collections
+bun scripts/seed-wines-customers.ts   # seed Postgres wines/customers (autocomplete) from data/*.json
 ```
 
 Docker host ports: frontend dev (Vite) `5173`, frontend prod (nginx) `8081`,
@@ -50,7 +53,7 @@ See the `docker-compose.yml` header. Compose files: `docker-compose.yml` (base) 
 ```
 frontend (axios, Bearer token) ─► backend /api/* ─► Postgres (notes/reminders/profiles)
                                        │
-                                       ├─► OpenAI (embeddings + GPT chat, streamed)
+                                       ├─► OpenAI (embeddings) + GPT/Claude/Fireworks (streamed chat)
                                        ├─► Qdrant (vector search over note embeddings)
                                        └─► MongoDB (chat threads/messages)
 ```
@@ -58,18 +61,28 @@ frontend (axios, Bearer token) ─► backend /api/* ─► Postgres (notes/remi
 - Server forks a worker per 2 CPUs (`cluster`). Dev = plain HTTP, prod = HTTPS
   with Let's Encrypt certs. Entry: `backend/server.ts` (all routes registered here).
 - Chat flow: `POST /api/search-notes` embeds the query, vector-searches the user's
-  notes in Qdrant, then streams a GPT answer. See `backend/apis/notes/search-relevant-notes.ts`
+  notes in Qdrant, then streams the answer (GPT by default; Claude/Fireworks also
+  wired in `services/ai/ai_models.ts`). The turn is persisted to a Mongo thread
+  (created on the first message; its id is streamed back via an `event: thread`
+  frame so the client can route to `/thread/:id`). `GET /api/get-threads` /
+  `GET /api/get-thread` / `POST /api/delete-thread` back the sidebar + history.
+  See `backend/apis/notes/search-relevant-notes.ts`, `backend/services/chat-threads.ts`,
   and `backend/services/ai/ai_chat.ts`.
 
 ## Data stores (who owns what)
 
 - **Postgres** (Drizzle, schema in `shared/db/schema/`) — source of truth for
   `notes`, `reminders`, `profile`, `tefteri` (cost ledger), `kataskopos` (per-request
-  AI cost). Migrations in `shared/drizzle/`.
-- **Qdrant** — note embeddings (`notes` collection, 1536-dim) + domain collections
-  (`beverages`, `polites`). Provisioned by `backend/scripts/qdrant-init.ts`.
-- **MongoDB** — AI chat threads/messages (`backend/model/mongo-db/`).
-- **Redis** — runtime cache.
+  AI cost), `wines`/`customers` (editor autocomplete lists), and
+  `ecb_conversion_rates` (USD→EUR rate cache). Migrations in `shared/drizzle/`.
+- **Qdrant** — note embeddings (`notes` collection, 1536-dim). Domain collections
+  (`beverages`, `polites`, `customers`, `sales`) are provisioned by
+  `backend/scripts/qdrant-init.ts` but currently **dormant** — only `notes` is
+  queried (the wine/customer RAG path is commented out; autocomplete reads Postgres).
+- **MongoDB** — AI chat threads/messages (`backend/model/mongo-db/`), connected at
+  worker startup and written by the chat flow (see below). Best-effort: if Mongo is
+  down the API still serves, persistence just no-ops.
+- **Redis** — runtime cache (includes the live ECB conversion rate).
 
 The Postgres source of truth is `shared/db/schema/` only (the old pre-Drizzle
 `backend/model/postgresql/*.sql` and custom migration runner have been removed).

@@ -1,4 +1,4 @@
-import { Route, Routes } from 'react-router';
+import { Outlet, Route, Routes } from 'react-router';
 import ProtectedRoute from './context/AuthContext/ProtectedRoute';
 import { StreamChatProvider } from './context/StreamChatContext';
 import Layout from './Layout';
@@ -10,6 +10,18 @@ import { UserManagementPage } from './pages/UserManagementPage';
 import { SettingsPage } from './pages/SettingsPage';
 import AdminGuard from './context/AuthContext/AdminGuard';
 
+// One StreamChatProvider shared by "/" and "/thread/:thread". Because it lives
+// on a layout route (not each page element), navigating between the two — e.g.
+// when the first message of a new chat redirects to /thread/:id — does not
+// remount it, so the in-flight stream and message state survive.
+function ChatLayout() {
+  return (
+    <StreamChatProvider>
+      <Outlet />
+    </StreamChatProvider>
+  );
+}
+
 function App() {
   return (
     <Routes>
@@ -17,30 +29,17 @@ function App() {
 
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout />}>
-          <Route
-            path="/"
-            element={
-              <StreamChatProvider>
-                <MainChatPage />
-              </StreamChatProvider>
-            }
-          />
-
-          <Route
-            path="/thread/:thread"
-            element={
-              <StreamChatProvider>
-                <MainChatPage />
-              </StreamChatProvider>
-            }
-          />
+          <Route element={<ChatLayout />}>
+            <Route path="/" element={<MainChatPage />} />
+            <Route path="/thread/:thread" element={<MainChatPage />} />
+          </Route>
 
           <Route path="/notes" element={<NotesPage />} />
 
           <Route path="/settings" element={<SettingsPage />} />
 
           <Route element={<AdminGuard />}>
-            <Route path="/admin/notes" element={<AdminNotes></AdminNotes>} />
+            <Route path="/admin/notes" element={<AdminNotes />} />
 
             <Route path="/admin/users" element={<UserManagementPage />} />
           </Route>

@@ -50,9 +50,10 @@ components/
   MainTextarea.tsx    chat composer
 
 context/              React context providers (see "State / providers")
-hooks/                useChat, useNoteOperations, useRealtimeTranscriber,
-                      use-mobile, use-media-query, useFadeInOut, …
-integrations/         API layer: api.ts (axios + fetchApi), users.ts, lists.ts
+hooks/                useNoteOperations, useRealtimeTranscriber, use-mobile,
+                      use-media-query, useFadeInOut, … (useChat.ts is empty/unused)
+integrations/         API layer: api.ts (axios + fetchApi), users.ts, lists.ts,
+                      threads.ts (chat-thread CRUD)
 translations/         i18n.ts (init) + el.ts, en.ts
 lib/utils.ts          cn() — clsx + tailwind-merge
 utils/                getNowToLocalISOString, handleStreamProcessing
@@ -64,8 +65,9 @@ assets/flags/         FlagGR, FlagUS
 ```
 /auth                       LoginPage (public)
 ─ ProtectedRoute ─ Layout ─┐
-  /                         MainChatPage   (wrapped in StreamChatProvider)
-  /thread/:thread           MainChatPage   (wrapped in StreamChatProvider)
+  ─ ChatLayout (one StreamChatProvider for both) ─┐
+    /                       MainChatPage
+    /thread/:thread         MainChatPage
   /notes                    NotesPage
   /settings                 SettingsPage
   ─ AdminGuard ─┐
@@ -75,8 +77,11 @@ assets/flags/         FlagGR, FlagUS
 
 - `ProtectedRoute` and `AdminGuard` (`context/AuthContext/`) gate routes via Clerk
   user + `role` loaded from the backend `profile` table.
-- `StreamChatProvider` is mounted per chat route (not globally) so each thread
-  starts with a fresh chat state.
+- `ChatLayout` mounts **one** `StreamChatProvider` for both `/` and `/thread/:thread`,
+  so navigating between them (e.g. when a new chat redirects to `/thread/:id`) doesn't
+  remount the provider and abort the in-flight stream. The provider reads the active
+  thread id from the URL and hydrates that thread's history from the server
+  (`GET /api/get-thread`); `/` starts a fresh chat.
 
 ## State / providers
 
@@ -100,6 +105,9 @@ ThemeProvider (dark default, localStorage "vite-ui-theme")
   via `NoteEditorContext` — it's a global dialog, not a per-page component.
 - `WineProvider`/`CustomerProvider` back domain-specific features; they load data
   unconditionally at app start.
+- `ThreadsProvider` (`context/ThreadsContext`) is **not** in the root tree above —
+  it's mounted in `Layout`, so it only fetches the chat-thread list once
+  authenticated. It backs the sidebar list and is refreshed when a new thread is created.
 
 ## shadcn/ui
 
@@ -160,8 +168,14 @@ a user `@mention` dropdown.
 - **Path aliases:** `@/*` → `src` and `@shared` → `../shared` (`vite.config.ts`);
   `@/*`, `@shared`, `@shared/*` in `tsconfig.app.json`. Shared DTOs/types come from
   the `shared/` workspace (`import { Note } from "@shared"` or `"@shared/db/schema/notes"`).
-- **Typecheck:** use `bunx tsc --noEmit -p tsconfig.app.json`. Note the `build`
-  script is just `vite build` (no `tsc`), so a green build does **not** mean the
-  types are clean — there is a backlog of pre-existing unused-symbol errors.
-- **Lint:** `bun run lint` (ESLint 10 flat config + `eslint-plugin-react-hooks` v7).
+- **Typecheck:** `bunx tsc --noEmit -p tsconfig.app.json --ignoreDeprecations 6.0`
+  (TS 6.0 errors on the `baseUrl` option without the flag). The `build` script is
+  just `vite build` (no `tsc`), so a green build does **not** mean types are clean —
+  there's a backlog of pre-existing unused-symbol errors.
+- **Lint/format:** `bun run lint` (ESLint 10 flat config). `bun run lint:fix`
+  auto-removes dead imports (`eslint-plugin-unused-imports`) and rewrites to
+  `import type` (`@typescript-eslint/consistent-type-imports`); `bun run format`
+  runs Prettier (`.prettierrc`). The react-hooks v7 React-Compiler rules
+  (`set-state-in-effect`, `use-memo`) are set to **warn** — pervasive and not
+  auto-fixable; remaining hard errors are mostly pre-existing `no-explicit-any`.
 - Tailwind v4 has **no `tailwind.config`** — theme tokens live in `index.css`.

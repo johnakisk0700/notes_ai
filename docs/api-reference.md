@@ -38,6 +38,28 @@ List endpoints (marked 📄) also run `queryMiddleware` → accept `page`, `limi
 | GET    | `/api/get-profile`         | `getProfile`        | `?userId=`. |
 | POST   | `/api/update-profile-role` | `updateProfileRole` | `{ profileId, role }` (admin). |
 | POST   | `/api/update-user`         | `updateUser`        | Associates Qdrant customer points with a user. |
+| POST   | `/api/delete-user`         | `deleteUser`        | `{ userId }` (**admin**). Purges the user's reminders/notes/profile (tx) + Qdrant note vectors, then deletes the Clerk identity. |
 | POST   | `/api/create-profile`      | `createProfile`     | `{ id, first_name, last_name, email }`. **No auth** — called right after signup. |
 
 > When adding admin-only endpoints, check `req.user.isAdmin` (set by `verifyJWT`).
+
+## Editor autocomplete (wines / customers)
+
+Backed by the Postgres `wines` / `customers` tables (seeded by
+`scripts/seed-wines-customers.ts`); the frontend caches the results in localStorage.
+
+| Method | Path                 | Handler       | Notes |
+| ------ | -------------------- | ------------- | ----- |
+| GET    | `/api/get-wines`     | `getWines`    | `{ names: string[] }`. |
+| GET    | `/api/get-customers` | `getCustomers`| `{ names: string[] }`. |
+
+## Chat threads
+
+AI chat history, persisted in Mongo (`UserThread`). Written as a side effect of
+`/api/search-notes`; these read/manage them.
+
+| Method | Path                  | Handler        | Notes |
+| ------ | --------------------- | -------------- | ----- |
+| GET 📄 | `/api/get-threads`    | `getThreads`   | Current user's threads (`{ id, title, inserted_at }`), newest first — sidebar list. |
+| GET    | `/api/get-thread`     | `getThread`    | `?threadId=` — one thread with its `messages` (owner only). |
+| POST   | `/api/delete-thread`  | `deleteThread` | `{ threadId }` — owner only. |

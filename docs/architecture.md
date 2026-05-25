@@ -31,9 +31,21 @@ Dev runs plain HTTP; production runs HTTPS reading Let's Encrypt certs from
 1. Embed the user query with OpenAI `text-embedding-ada-002`.
 2. Vector search the `notes` Qdrant collection, filtered to the requesting user
    (and any selected users for admins).
-3. Inject the retrieved notes into a GPT system/user prompt and **stream** the
-   answer back via `handleAiStream` (`services/ai/ai_chat.ts`).
-4. Chat threads/messages persist in MongoDB.
+3. Inject the retrieved notes into a system/user prompt and **stream** the answer
+   back via `handleAiStream` (`services/ai/ai_chat.ts`). Default model is `gpt-4.1`;
+   `ai_models.ts` + `ai_chat.ts` also support Claude (Anthropic) and Fireworks
+   (Llama/Qwen) providers.
+4. The turn is persisted to a Mongo thread (`services/chat-threads.ts`, over the
+   `UserThread`/`Message` models). If the request carries no `threadId`, the server
+   creates a thread, persists the user message, and streams the new id back as an
+   `event: thread` frame so the client can route to `/thread/:id`. The assistant
+   answer is appended in the stream's `onDone`. Persistence is **best-effort** — a
+   Mongo failure is logged and never blocks the streamed answer.
+
+Threads are read back via `GET /api/get-threads` (sidebar list) +
+`GET /api/get-thread?threadId=` (history); `POST /api/delete-thread` removes one.
+The worker opens the Mongo connection at startup (`connectToDatabase`, also
+best-effort).
 
 Notes are embedded on write: `store-note` / `update-note` call
 `createAndSaveNoteEmbedding` (`services/embeddings.ts`) which upserts into Qdrant.

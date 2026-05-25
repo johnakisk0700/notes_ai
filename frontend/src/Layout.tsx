@@ -3,25 +3,18 @@ import { useCallback, useEffect, useState } from 'react';
 import { AppSidebar } from './components/AppSidebar';
 import { Header } from './components/Common/Header';
 import { Outlet } from 'react-router';
+import { ThreadsProvider } from './context/ThreadsContext';
 
 export default function Layout() {
   const [dynamicMainHeight, setDynamicMainHeight] = useState<string>('100dvh');
-
-  // The keyboardHeight state might be kept if other components rely on it.
-  // If it was solely for sizing the main element, this new approach might make it redundant for that specific purpose.
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const viewportChangeHandler = useCallback(
     debounce(() => {
       if (window.visualViewport) {
         setDynamicMainHeight(`${window.visualViewport.height}px`);
-        // You can still calculate and set keyboardHeight if it's used elsewhere
-        const kh = window.innerHeight - window.visualViewport.height;
-        setKeyboardHeight(Math.max(0, kh));
       } else {
         // Fallback if visualViewport is not supported
         setDynamicMainHeight('100dvh');
-        setKeyboardHeight(0);
       }
     }, 30),
     []
@@ -41,7 +34,7 @@ export default function Layout() {
   }, [viewportChangeHandler]);
 
   return (
-    <>
+    <ThreadsProvider>
       <AppSidebar />
       <main
         className="relative overflow-hidden overscroll-y-none  flex flex-col w-full transition-all duration-300 ease-in-out"
@@ -56,6 +49,6 @@ export default function Layout() {
           <Outlet />
         </div>
       </main>
-    </>
+    </ThreadsProvider>
   );
 }

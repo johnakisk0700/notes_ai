@@ -12,6 +12,12 @@ import {
 import { ChatCompletionTool } from "openai/resources/index.mjs";
 import { handleAiStream } from "services/ai/ai_chat";
 import { Message } from "model/mongo-db/Message";
+import {
+  appendMessage,
+  createThread,
+  deriveThreadTitle,
+} from "services/chat-threads";
+import { logger } from "utils/logger";
 
 interface SearchRelevantNotesRequest {
   query: string;
@@ -21,6 +27,9 @@ interface SearchRelevantNotesRequest {
     content: string;
   }[];
   now: Date;
+  // Existing thread to append this turn to. Omitted for the first message of a
+  // new chat, in which case the server creates one and streams back its id.
+  threadId?: string;
 }
 const PAGE_SIZE = 100;
 
@@ -30,10 +39,34 @@ async function searchRelevantNotes(req: Request, res: Response) {
     selectedUsers,
     previousQueries,
     now,
+    threadId,
   }: SearchRelevantNotesRequest = req.body;
-  const userIds = selectedUsers
-    ? [req.user.id, ...selectedUsers]
-    : [req.user.id];
+  const userId = req.user.id;
+  const userIds = selectedUsers ? [userId, ...selectedUsers] : [userId];
+
+  // Resolve (or create) the thread this turn belongs to and persist the user's
+  // message. Best-effort: a Mongo hiccup must never block the streamed answer.
+  let activeThreadId =
+    typeof threadId === "string" && threadId ? threadId : undefined;
+  try {
+    if (!activeThreadId) {
+      const created = await createThread(
+        userId,
+        deriveThreadTitle(initialQuery)
+      );
+      activeThreadId = created.id;
+      // Hand the new id to the client so it can route to /thread/:id.
+      res.write(`event: thread\ndata: ${activeThreadId}\n\n`);
+    }
+    if (activeThreadId) {
+      await appendMessage(activeThreadId, userId, {
+        role: "user",
+        content: initialQuery,
+      });
+    }
+  } catch (err) {
+    logger.error("Thread persistence (user message) failed; continuing:", err);
+  }
 
   // const qdrantQuery: QdrantQueryBody = await generateQdrantQueryUsingTools(
   //   now,
@@ -89,7 +122,23 @@ async function searchRelevantNotes(req: Request, res: Response) {
     { role: "user", content: gpt4oQuery.userQuery },
   ] as Message[];
 
-  await handleAiStream(req, res, { model: "gpt-4.1", messages: finalMessages });
+  await handleAiStream(
+    req,
+    res,
+    { model: "gpt-4.1", messages: finalMessages },
+    {
+      // Persist the assistant's answer once the stream completes (best-effort).
+      onDone: (answer: string) => {
+        if (!activeThreadId || !answer) return;
+        appendMessage(activeThreadId, userId, {
+          role: "assistant",
+          content: answer,
+        }).catch((err) =>
+          logger.error("Thread persistence (assistant message) failed:", err)
+        );
+      },
+    }
+  );
   console.timeEnd("GPT time");
 }
 

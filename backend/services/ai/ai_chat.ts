@@ -245,7 +245,7 @@ export async function handleAiStream(
           res.write(`event: done\ndata: )}\n\n`);
           res.end();
           if (callbacks?.onDone) {
-            callbacks.onDone("");
+            callbacks.onDone(ai_answer);
           }
           return; // Exit after handling 'done'
         case "error":
@@ -272,7 +272,7 @@ export async function handleAiStream(
       res.write(`event: done\ndata: )}\n\n`);
       res.end();
       if (callbacks?.onDone) {
-        callbacks.onDone(``);
+        callbacks.onDone(ai_answer);
       }
     }
   } catch (error) {

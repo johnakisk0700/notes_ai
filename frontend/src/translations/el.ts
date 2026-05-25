@@ -33,6 +33,10 @@ const elMenu = {
   user_management: 'Διαχείριση Χρηστών',
   user_management_description: 'Διαχειριστείτε ρόλους και δικαιώματα χρηστών',
   settings_header: 'Ρυθμίσεις',
+  new_chat: 'Νέα Συνομιλία',
+  recent_chats: 'Πρόσφατες Συνομιλίες',
+  untitled_thread: 'Χωρίς τίτλο',
+  delete_thread: 'Διαγραφή συνομιλίας',
 };
 
 const elContent = {

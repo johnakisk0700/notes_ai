@@ -6,6 +6,7 @@
 
 export * from "./db/schema";
 export * from "./dto/GetNoteDTO";
+export * from "./dto/ThreadDTO";
 export * from "./interfaces/QueryParameters";
 export * from "./interfaces/OpenAI";
 export * from "./interfaces/UserSettings";

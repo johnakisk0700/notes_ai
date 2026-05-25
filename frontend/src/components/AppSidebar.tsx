@@ -1,7 +1,9 @@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   Sidebar,
+  SidebarContent,
   SidebarFooter,
+  SidebarGroup,
   SidebarGroupContent,
   SidebarHeader,
   SidebarMenu,
@@ -11,53 +13,12 @@ import {
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/context/AuthContext/AuthContext';
 import { useNoteEditor } from '@/context/NoteEditorContext';
-import {
-  Bot,
-  BrainCog,
-  ChevronsUpDownIcon,
-  Cog,
-  MessageCircle,
-  Notebook,
-  PlusIcon,
-  UserCogIcon,
-  Users,
-} from 'lucide-react';
-import { NavLink } from 'react-router';
+import { useThreads } from '@/context/ThreadsContext';
+import { Bot, ChevronsUpDownIcon, Cog, MessageCircle, Notebook, PlusIcon, Trash2, Users } from 'lucide-react';
+import { NavLink, useLocation, useNavigate } from 'react-router';
 import { Button } from './ui/button';
-import { useMemo } from 'react';
+import { useMemo, type MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-
-const fakeThreads = [
-  {
-    id: '1',
-    title: 'React Performance Optimization',
-    lastMessage: 'How to optimize React components for better performance?',
-  },
-  { id: '2', title: 'TypeScript Best Practices' },
-  { id: '3', title: 'Database Design Discussion' },
-  { id: '4', title: 'API Security Implementation' },
-  { id: '5', title: 'CSS Grid vs Flexbox' },
-  { id: '6', title: 'State Management Solutions' },
-  { id: '7', title: 'Testing Strategies' },
-  { id: '8', title: 'Docker Containerization' },
-  { id: '9', title: 'GraphQL Implementation' },
-  { id: '10', title: 'PWA Development' },
-  { id: '11', title: 'Accessibility Guidelines' },
-  { id: '12', title: 'Performance Monitoring' },
-  { id: '13', title: 'Code Splitting Techniques' },
-  { id: '14', title: 'Error Boundary Setup' },
-  { id: '15', title: 'Build Optimization' },
-  { id: '16', title: 'Microservices Architecture' },
-  { id: '17', title: 'WebSocket Implementation' },
-  { id: '18', title: 'SEO Best Practices' },
-  { id: '19', title: 'Mobile Responsive Design' },
-  { id: '20', title: 'CI/CD Pipeline Setup' },
-  { id: '21', title: 'Serverless Functions' },
-  { id: '22', title: 'Data Visualization' },
-  { id: '23', title: 'Authentication Patterns' },
-  { id: '24', title: 'Caching Strategies' },
-  { id: '25', title: 'Monitoring & Logging' },
-];
 
 export function AppSidebar() {
   const { t } = useTranslation();
@@ -100,9 +61,30 @@ export function AppSidebar() {
 
   const { isAdmin } = useAuth();
   const { setOpenMobile } = useSidebar();
+  const { threads, removeThread } = useThreads();
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  const handleNavigation = (url?: string) => {
+  const handleNavigation = (_url?: string) => {
     setOpenMobile(false);
+  };
+
+  const handleNewChat = () => {
+    setOpenMobile(false);
+    navigate('/');
+  };
+
+  const handleDeleteThread = async (e: MouseEvent, id: string) => {
+    // The delete control sits over the NavLink — don't let it navigate.
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      await removeThread(id);
+      // If we just deleted the open thread, fall back to a fresh chat.
+      if (location.pathname === `/thread/${id}`) navigate('/');
+    } catch (err) {
+      console.error('Failed to delete thread:', err);
+    }
   };
 
   const { openEditor } = useNoteEditor();
@@ -178,35 +160,51 @@ export function AppSidebar() {
           </SidebarMenu>
         </SidebarGroupContent>
       </SidebarHeader>
-      {/* <SidebarContent>
-        <SidebarGroup className="relative">
-          <Input
-            className="sticky top-2 z-10 backdrop-blur-lg"
-            id="search-threads"
-            placeholder="Search threads"
-          ></Input>
 
-          <SidebarGroupContent className="text-foreground/75 mt-2.5">
-            <SidebarMenu>
-              {fakeThreads.map(thread => (
-                <SidebarMenuItem key={thread.id}>
-                  <SidebarMenuButton asChild>
-                    <NavLink
-                      to={`/thread/${thread.id}`}
-                      className="h-fit grid py-2"
-                      onClick={() => handleNavigation(`/thread/${thread.id}`)}
+      <SidebarContent>
+        <SidebarGroup>
+          <Button
+            variant="secondary"
+            className="w-full justify-between font-bold mb-2"
+            size="lg"
+            onClick={handleNewChat}
+          >
+            {t('new_chat')} <PlusIcon />
+          </Button>
+
+          {threads.length > 0 && (
+            <SidebarGroupContent className="text-foreground/75">
+              <div className="px-1 py-1 text-xs font-medium text-foreground/50">{t('recent_chats')}</div>
+              <SidebarMenu>
+                {threads.map(thread => (
+                  <SidebarMenuItem key={thread.id} className="group/thread relative">
+                    <SidebarMenuButton asChild>
+                      <NavLink
+                        to={`/thread/${thread.id}`}
+                        className={({ isActive }) =>
+                          `h-fit py-2 pr-8 ${isActive ? 'bg-sidebar-accent text-sidebar-accent-foreground' : ''}`
+                        }
+                        onClick={() => handleNavigation(`/thread/${thread.id}`)}
+                      >
+                        <span className="truncate">{thread.title || t('untitled_thread')}</span>
+                      </NavLink>
+                    </SidebarMenuButton>
+                    <button
+                      type="button"
+                      aria-label={t('delete_thread')}
+                      title={t('delete_thread')}
+                      className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-foreground/40 opacity-0 transition-opacity hover:text-destructive group-hover/thread:opacity-100"
+                      onClick={e => handleDeleteThread(e, thread.id)}
                     >
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium truncate">{thread.title}</span>
-                      </div>
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          )}
         </SidebarGroup>
-      </SidebarContent> */}
+      </SidebarContent>
       <SidebarFooter />
     </Sidebar>
   );
