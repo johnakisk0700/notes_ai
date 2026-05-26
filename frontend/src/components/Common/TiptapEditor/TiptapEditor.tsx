@@ -1,10 +1,9 @@
 import suggestionConfiguration from '@/components/Common/TiptapEditor/suggestions';
 import { useUsersContext } from '@/context/UsersContext/UsersProvider';
-import Document from '@tiptap/extension-document';
 import Mention from '@tiptap/extension-mention';
-import Paragraph from '@tiptap/extension-paragraph';
 import { Placeholder } from '@tiptap/extensions';
-import Text from '@tiptap/extension-text';
+import { Markdown } from '@tiptap/markdown';
+import StarterKit from '@tiptap/starter-kit';
 import { useEditor } from '@tiptap/react';
 import Fuse from 'fuse.js';
 import debounce from 'lodash/debounce';
@@ -54,13 +53,19 @@ export const useCustomTiptap = (onUpdate: (text: string) => void) => {
 
   const extensions = useMemo(
     () => [
-      Document,
+      // StarterKit brings Document/Paragraph/Text plus the formatting marks &
+      // nodes the toolbar exposes (bold, italic, strike, headings, lists,
+      // blockquote, code). Underline is dropped — it has no Markdown form and
+      // we persist notes as Markdown.
+      StarterKit.configure({ underline: false }),
+      // Bidirectional Markdown: lets us load note content with
+      // `setContent(md, { contentType: 'markdown' })` and read it back via
+      // `editor.getMarkdown()`. Keeps embeddings/LLM context clean (no HTML).
+      Markdown,
       Mention.configure({
         HTMLAttributes: { class: 'mention' },
         suggestion: suggestionConfig,
       }),
-      Paragraph,
-      Text,
       Placeholder.configure({
         placeholder: 'Dear diary...',
       }),
@@ -70,7 +75,7 @@ export const useCustomTiptap = (onUpdate: (text: string) => void) => {
 
   const editor = useEditor({
     extensions,
-    onUpdate: ({ editor }) => onUpdate(editor.getText()),
+    onUpdate: ({ editor }) => onUpdate(editor.getMarkdown()),
   });
 
   return { editor };

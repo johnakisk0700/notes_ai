@@ -20,13 +20,15 @@ export async function getNoteTitle(req, res) {
   ];
 
   const aiResponse = await getAiChatResponse({
-    model: "gpt-4.1-nano",
+    model: "gpt-5-mini",
     messages,
     systemPrompt,
-    maxTokens: 120,
+    // Headroom for reasoning tokens — a reasoning model can otherwise spend the
+    // whole budget "thinking" and return an empty title.
+    maxTokens: 1000,
   });
   req.addCost({
-    model: "gpt-4.1-nano",
+    model: "gpt-5-mini",
     inputCost: aiResponse.inputCost,
     outputCost: aiResponse.outputCost,
     totalCost: aiResponse.totalCost,

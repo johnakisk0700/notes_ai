@@ -8,7 +8,7 @@ import type { Note } from '@shared/db/schema/notes';
 import type { Reminder } from '@shared/db/schema/reminders';
 import { EditorContent } from '@tiptap/react';
 import { format } from 'date-fns';
-import { Bell, Loader2Icon, RefreshCcw, SaveIcon, Trash2Icon, X } from 'lucide-react';
+import { Bell, Loader2Icon, SaveIcon, Sparkles, Trash2Icon, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react'; // Removed useRef
 import { BarLoader } from 'react-spinners';
 import { toast } from 'sonner';
@@ -20,6 +20,7 @@ import { Label } from '../ui/label';
 import { Separator } from '../ui/separator';
 import { useAuth } from '@/context/AuthContext/AuthContext';
 import { RealtimeAudioRecorder } from '../Common/RealtimeAudioRecorder';
+import { NoteToolbar } from './NoteToolbar';
 
 export const NoteEditor = () => {
   const { isOpen, closeEditor } = useNoteEditor();
@@ -57,6 +58,7 @@ const EditorCore = () => {
   const { isAdmin } = useAuth();
   const [afterProcessing, setAfterProcessing] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [saveError, setSaveError] = useState(false);
 
   // Add refs to track streaming text
   const streamingTextRef = useRef<string>('');
@@ -107,7 +109,9 @@ const EditorCore = () => {
 
   // util for updating both editor and state
   const updateNoteState = (title: any, content: any, reminder: Reminder | null = null) => {
-    editor?.commands.setContent(content, { emitUpdate: false });
+    // Note content is stored as Markdown; parse it back into the editor.
+    // Plain-text legacy notes are valid Markdown, so they load unchanged.
+    editor?.commands.setContent(content, { emitUpdate: false, contentType: 'markdown' });
     setNoteTitle(title);
     if (reminder) {
       const date = new Date(reminder.remindAt);
@@ -202,10 +206,18 @@ const EditorCore = () => {
       return;
     }
 
+    setSaveError(false);
     setAfterProcessing(true);
-    await saveNote(noteTitle, editor?.getText() || '', noteToEdit?.id, selectedDate, selectedTime);
-    closeEditor();
-    fetchNotes();
+    // Persist as Markdown so formatting (bold/italic/lists/headings) survives.
+    const saved = await saveNote(noteTitle, editor?.getMarkdown() || '', noteToEdit?.id, selectedDate, selectedTime);
+    setAfterProcessing(false);
+    if (saved) {
+      closeEditor();
+      fetchNotes();
+    } else {
+      // Keep the editor open so the draft isn't lost; surface the failure inline.
+      setSaveError(true);
+    }
   };
 
   // Initialization
@@ -243,29 +255,29 @@ const EditorCore = () => {
   }, [noteId, isOpen]);
 
   if (!editor) {
-    // Optional: Show a loading state while the editor initializes
-    return <div className="p-4 text-center">Loading editor...</div>;
+    return (
+      <div className="flex h-full items-center justify-center p-6 text-sm text-muted-foreground">Loading editor…</div>
+    );
   }
 
   const isReminderSet = selectedDate && selectedTime;
   return (
-    <div className="grid grid-rows-[auto_auto_1fr] gap-2 p-4.5 pt-3.5 max-h-[100dvh]" tabIndex={0}>
+    <div className="relative grid grid-rows-[auto_auto_auto_1fr] gap-3 p-4 pt-3.5 max-h-[100dvh]" tabIndex={0}>
+      {/* Header — reminder controls on the left, primary actions on the right */}
       <DialogHeader>
         <DialogTitle hidden={true}>Note Editor</DialogTitle>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <Popover open={isReminderOpen} onOpenChange={setIsReminderOpen}>
             <PopoverTrigger asChild>
               {isReminderSet ? (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="dark:bg-sky-900/35 bg-sky-200/50 text-xs transition-none"
-                >
+                <Button variant="secondary" size="sm" className="gap-1.5 bg-sky-200/50 text-xs dark:bg-sky-900/35">
+                  <Bell className="size-3.5" />
                   {format(selectedDate, 'PP')}, {selectedTime}
                 </Button>
               ) : (
-                <Button variant={isReminderSet ? 'secondary' : 'outline'} size="sm">
-                  <Bell />
+                <Button variant="outline" size="sm" className="gap-1.5 text-muted-foreground">
+                  <Bell className="size-3.5" />
+                  Remind me
                 </Button>
               )}
             </PopoverTrigger>
@@ -278,12 +290,8 @@ const EditorCore = () => {
                   <Input
                     type="time"
                     id="time-picker"
-                    defaultValue="10:30:00"
                     value={selectedTime}
-                    onChange={e => {
-                      console.log(e);
-                      setSelectedTime(e.target.value);
-                    }}
+                    onChange={e => setSelectedTime(e.target.value)}
                     className="bg-background appearance-none w-fit ml-auto"
                   />
                 </div>
@@ -309,54 +317,64 @@ const EditorCore = () => {
           </Popover>
           {isReminderSet ? (
             <Button
-              variant="outline"
-              size="sm"
-              className="[>svg]:size-8"
+              variant="ghost"
+              size="icon-sm"
+              title="Clear reminder"
               onClick={() => {
                 setSelectedDate(undefined);
                 setSelectedTime('12:00');
               }}
             >
-              <Trash2Icon className="size-3" />
+              <Trash2Icon className="size-3.5" />
             </Button>
           ) : null}
 
-          <Button className="ml-auto" variant="secondary" onClick={handleSaveNote}>
-            {isSavingNote ? <Loader2Icon className="size-4 animate-spin" /> : <SaveIcon />}
-            {mode === 'create' ? 'Add' : 'Update'}
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              closeEditor();
-            }}
-          >
-            <X />
-          </Button>
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              variant={saveError ? 'destructive' : 'default'}
+              className="gap-2"
+              onClick={handleSaveNote}
+              disabled={isProcessing}
+              title={saveError ? 'Saving failed — your note is still here. Try again.' : undefined}
+            >
+              {isSavingNote ? <Loader2Icon className="size-4 animate-spin" /> : <SaveIcon className="size-4" />}
+              {isSavingNote ? 'Saving…' : saveError ? 'Retry save' : mode === 'create' ? 'Add note' : 'Update'}
+            </Button>
+            <Button variant="ghost" size="icon" title="Close" onClick={() => closeEditor()}>
+              <X />
+            </Button>
+          </div>
         </div>
       </DialogHeader>
 
-      <div className="flex items-center">
+      {/* Title with AI fill */}
+      <div className="flex items-center overflow-hidden rounded-lg bg-background/40">
         <Input
           id="note_title"
           name="note_title"
           type="text"
           value={noteTitle || ''}
           onChange={e => setNoteTitle(e.target.value)}
-          className="dark:bg-background/40 rounded-r-none bg-background/40 size-10.5 w-full"
-          style={{ border: 0 }}
-          placeholder="Title. Leave empty if you want the AI to fill it for you."
+          className="h-11 w-full border-0 bg-transparent text-base font-medium shadow-none focus-visible:ring-0 dark:bg-transparent"
+          placeholder="Title — leave empty to let AI name it"
         />
         <Button
           variant="ghost"
-          className="bg-background/40 rounded-l-none size-10.5"
+          size="icon"
+          className="mr-1 shrink-0 text-foreground/60 hover:text-foreground"
+          title="Generate a title with AI"
+          disabled={isHttpOperationActive}
           onClick={() => handleRefetchTitle(editor.getText().trim())}
         >
-          {isFetchingTitle ? <Loader2Icon className="animate-spin" /> : <RefreshCcw />}
+          {isFetchingTitle ? <Loader2Icon className="animate-spin" /> : <Sparkles />}
         </Button>
       </div>
 
-      <div className="max-w-full max-h-full overflow-hidden relative text-sm text-foreground/90 bg-background/40">
+      {/* Formatting toolbar */}
+      <NoteToolbar editor={editor} disabled={editorUnavailable} />
+
+      {/* Editor surface */}
+      <div className="relative max-h-full max-w-full overflow-hidden rounded-lg bg-background/40 text-sm text-foreground/90">
         <RealtimeAudioRecorder
           onStreamingText={handleStreamingText}
           onFinalText={handleFinalText}

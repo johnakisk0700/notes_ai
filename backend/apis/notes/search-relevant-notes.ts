@@ -100,7 +100,7 @@ async function searchRelevantNotes(req: Request, res: Response) {
   await handleAiStream(
     req,
     res,
-    { model: "gpt-4.1", messages: finalMessages },
+    { model: "gpt-5-mini", messages: finalMessages },
     {
       // Persist the assistant's answer once the stream completes (best-effort).
       onDone: (answer: string) => {

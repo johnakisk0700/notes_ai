@@ -2,6 +2,7 @@ import Decimal from "decimal.js";
 
 // This is a list of AI models supported by the system.
 export type ModelNames =
+  | "gpt-5-mini"
   | "gpt-4.1"
   | "gpt-4.1-mini"
   | "gpt-4.1-nano"
@@ -27,6 +28,12 @@ export interface ModelInfo {
 export type ModelsMap = Record<ModelNames, ModelInfo>;
 
 export const AI_MODELS: ModelsMap = {
+  // GPT-5 mini — reasoning model. $0.25 / $2.00 per 1M tokens.
+  "gpt-5-mini": {
+    provider: "gpt",
+    inputCost: new Decimal(0.00000025),
+    outputCost: new Decimal(0.000002),
+  },
   o3: {
     provider: "gpt",
     inputCost: new Decimal(0),

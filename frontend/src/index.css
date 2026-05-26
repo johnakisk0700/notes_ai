@@ -181,6 +181,124 @@ div:has(> .tiptap) {
   outline: none;
 }
 
+/* Empty-editor placeholder (provided by the Placeholder extension via
+   data-placeholder); needs CSS to actually render. */
+.tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--muted-foreground);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* Rich-text rendering — shared by the editor (.tiptap) and note-card previews
+   (.note-md). Notes are stored as Markdown; Tailwind's preflight strips heading
+   and list styling, so restore it here so formatting is visible. */
+.tiptap h1,
+.note-md h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.25;
+  margin: 0.6em 0 0.3em;
+}
+.tiptap h2,
+.note-md h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 0.6em 0 0.3em;
+}
+.tiptap h3,
+.note-md h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0.5em 0 0.25em;
+}
+.tiptap p,
+.note-md p {
+  margin: 0.35em 0;
+}
+.tiptap strong,
+.note-md strong {
+  font-weight: 700;
+}
+.tiptap em,
+.note-md em {
+  font-style: italic;
+}
+.tiptap ul,
+.note-md ul {
+  list-style: disc;
+  padding-left: 1.5rem;
+  margin: 0.35em 0;
+}
+.tiptap ol,
+.note-md ol {
+  list-style: decimal;
+  padding-left: 1.5rem;
+  margin: 0.35em 0;
+}
+.tiptap li,
+.note-md li {
+  margin: 0.15em 0;
+}
+.tiptap li p,
+.note-md li p {
+  margin: 0;
+}
+.tiptap blockquote,
+.note-md blockquote {
+  border-left: 3px solid var(--border);
+  padding-left: 0.75rem;
+  color: var(--muted-foreground);
+  margin: 0.5em 0;
+}
+.tiptap code,
+.note-md code {
+  background: color-mix(in srgb, var(--color-primary) 13%, transparent);
+  padding: 0.1em 0.35em;
+  border-radius: 0.25rem;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+.tiptap pre,
+.note-md pre {
+  background: color-mix(in srgb, var(--color-primary) 13%, transparent);
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+.tiptap pre code,
+.note-md pre code {
+  background: transparent;
+  padding: 0;
+}
+.tiptap a,
+.note-md a {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.tiptap hr,
+.note-md hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0.75em 0;
+}
+
+/* Note-card previews are compact — scale headings down so they read as a
+   preview rather than dominating the card. */
+.note-md h1 {
+  font-size: 1.05rem;
+}
+.note-md h2 {
+  font-size: 0.95rem;
+}
+.note-md h3 {
+  font-size: 0.9rem;
+}
+
 a.active {
   background-color: color-mix(in srgb, var(--color-primary) 15%, transparent);
 }

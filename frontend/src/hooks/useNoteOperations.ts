@@ -58,6 +58,8 @@ export const useNoteOperations = (onSuccess?: () => void) => {
     return null;
   };
 
+  // Returns true only when the note was persisted, so the caller can decide
+  // whether to close the editor.
   const saveNote = async (
     noteTitle: string,
     content: string,
@@ -65,11 +67,11 @@ export const useNoteOperations = (onSuccess?: () => void) => {
     selectedDate?: Date,
     selectedTime?: string,
     signal?: AbortSignal
-  ) => {
+  ): Promise<boolean> => {
     const trimmedContent = content.trim();
     if (!trimmedContent) {
       toast.error('Please enter some content');
-      return;
+      return false;
     }
 
     setIsSaving(true);
@@ -121,11 +123,13 @@ export const useNoteOperations = (onSuccess?: () => void) => {
       }
 
       onSuccess?.();
+      return true;
     } catch (error) {
       if (error instanceof Error && error.name !== 'AbortError') {
         console.error('Error saving note:', error);
         toast.error('Failed to save note');
       }
+      return false;
     } finally {
       setIsSaving(false);
     }

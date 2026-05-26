@@ -146,12 +146,25 @@ Base URL is `VITE_API_DEV_URL` in dev, `VITE_API_PROD_URL` in prod build.
 ## TipTap editor
 
 The note editor (`components/Common/TiptapEditor/`, consumed by
-`components/Notes/NoteEditor.tsx` via `useCustomTiptap`) is a TipTap 3 editor with
-a user `@mention` dropdown.
+`components/Notes/NoteEditor.tsx` via `useCustomTiptap`) is a TipTap 3 **rich-text**
+editor with a formatting toolbar and a user `@mention` dropdown.
 
-- Extensions: `Document`, `Paragraph`, `Text`, `Mention`, and `Placeholder`
-  (the last now from **`@tiptap/extensions`**, not the removed
-  `@tiptap/extension-placeholder`).
+- Extensions: **`StarterKit`** (`@tiptap/starter-kit` — Document/Paragraph/Text plus
+  bold, italic, strike, code, headings, lists, blockquote), **`Markdown`**
+  (`@tiptap/markdown`), `Mention`, and `Placeholder` (the last from
+  **`@tiptap/extensions`**, not the removed `@tiptap/extension-placeholder`).
+  Underline is disabled in StarterKit (`underline: false`) — it has no Markdown form.
+- **Notes are persisted as Markdown**, not plain text. Load with
+  `setContent(md, { contentType: 'markdown' })` and read back with
+  `editor.getMarkdown()` (both provided by `@tiptap/markdown` via module
+  augmentation). This keeps the embedding/LLM context clean (no HTML tags), so the
+  backend needs no stripping. Legacy plain-text notes are valid Markdown and load
+  unchanged. Note cards (`NoteComponent.tsx`) render content through the shared
+  `CustomMarkdown`; prose styles live in `index.css` (`.tiptap` + `.note-md`).
+- The toolbar (`components/Notes/NoteToolbar.tsx`) reads active state via
+  **`useEditorState`** — required because TipTap 3's `useEditor` no longer re-renders
+  on every transaction, so `editor.isActive(...)` alone wouldn't update the toggles.
+  Toggle buttons `preventDefault` on mousedown to keep the editor selection.
 - TipTap 3 treats `@tiptap/core`, `@tiptap/pm` and `@tiptap/suggestion` as **peer
   dependencies**, so they are declared explicitly in `package.json` (keep them all
   pinned to the same `3.x` to avoid "multiple instances of @tiptap/core").
@@ -159,7 +172,7 @@ a user `@mention` dropdown.
   (an explicit dep — TipTap 3 no longer bundles it). `MentionList.tsx` renders the
   list and handles arrow/enter keys.
 - `setContent`'s second argument is an options object in v3
-  (`setContent(html, { emitUpdate: false })`), not a boolean.
+  (`setContent(md, { emitUpdate: false, contentType: 'markdown' })`), not a boolean.
 
 ## Conventions / gotchas
 

@@ -16,6 +16,11 @@ interface Message {
   content: string;
 }
 
+// Reasoning models (o-series, GPT-5 family) reject a custom `temperature` on the
+// Responses API and instead accept a `reasoning.effort`. Detect them by id so we
+// send the right params. "low" keeps titling/chat fast and cheap.
+const isReasoningModel = (model: string) => /^(o\d|gpt-5)/.test(model);
+
 interface AiChatParams {
   name?: "claude" | "gpt" | "deepseek" | "fireworks-ai";
   model: ModelNames;
@@ -86,6 +91,7 @@ export async function getAiChatResponse({
           instructions: systemPrompt ?? "",
           input: messages,
           max_output_tokens: maxTokens,
+          ...(isReasoningModel(model) ? { reasoning: { effort: "low" as const } } : {}),
         });
 
         const { inputCost, outputCost, totalCost } = await calculateCompletionCost(
@@ -135,9 +141,10 @@ export async function* getAiStreamingChatResponse({
       model: model,
       instructions: systemPrompt ?? "",
       input: cleanMessages,
-      temperature,
       max_output_tokens: maxTokens,
       stream: true,
+      // Reasoning models reject custom temperature; give them a low effort instead.
+      ...(isReasoningModel(model) ? { reasoning: { effort: "low" as const } } : { temperature }),
     });
 
     for await (const ev of stream as AsyncIterable<ParsedResponseStreamEvent>) {

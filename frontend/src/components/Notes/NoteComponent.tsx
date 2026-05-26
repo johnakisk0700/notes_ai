@@ -5,6 +5,7 @@ import { BellIcon, DotIcon, Pencil, Trash2 } from 'lucide-react'; // Replace wit
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Separator } from '../ui/separator';
+import { CustomMarkdown } from '../Chat/CustomMarkdown';
 import type { FullNote } from '@shared/dto/GetNoteDTO';
 
 interface NoteComponentProps {
@@ -33,8 +34,8 @@ export const NoteComponent = ({ note, handleDelete }: NoteComponentProps) => {
         </CardTitle>
       </CardHeader>
 
-      <CardContent className="overflow-y-hidden flex-grow p-2.5 rounded-lg mr-5 text-xs text-foreground/50 border-1 bg-background">
-        {note.content}
+      <CardContent className="note-md overflow-y-hidden flex-grow p-2.5 rounded-lg mr-5 text-xs text-foreground/50 border-1 bg-background">
+        <CustomMarkdown>{note.content}</CustomMarkdown>
       </CardContent>
       {reminder && (
         <Tooltip>

@@ -32,9 +32,10 @@ Dev runs plain HTTP; production runs HTTPS reading Let's Encrypt certs from
 2. Vector search the `notes` Qdrant collection, filtered to the requesting user
    (and any selected users for admins).
 3. Inject the retrieved notes into a system/user prompt and **stream** the answer
-   back via `handleAiStream` (`services/ai/ai_chat.ts`). Default model is `gpt-4.1`;
-   `ai_models.ts` + `ai_chat.ts` also support Claude (Anthropic) and Fireworks
-   (Llama/Qwen) providers.
+   back via `handleAiStream` (`services/ai/ai_chat.ts`). Chat answers and note-title
+   generation use `gpt-5-mini` (a reasoning model — `ai_chat.ts` omits `temperature`
+   and sets `reasoning.effort: "low"` for `o*`/`gpt-5*` ids); `ai_models.ts` +
+   `ai_chat.ts` also support Claude (Anthropic) and Fireworks (Llama/Qwen) providers.
 4. The turn is persisted to a Mongo thread (`services/chat-threads.ts`, over the
    `UserThread`/`Message` models). If the request carries no `threadId`, the server
    creates a thread, persists the user message, and streams the new id back as an
@@ -65,9 +66,15 @@ Two paths:
   - `bun run prod` → adds `docker-compose.prod.yml`: backend runs the bundle (HTTPS,
     certs mounted from `/etc/letsencrypt`), frontend is a static build served by nginx
     (`frontend/Dockerfile`, `frontend/nginx.conf`).
-  - Both Dockerfiles are multi-stage with `dev` and `runtime` targets. The compose
-    `environment` block overrides DB hostnames to the internal service names, so
-    `backend/.env` only needs API keys + auth secrets.
+  - Two one-shot init services run before the API serves, each waited on via
+    `service_completed_successfully`: `migrate` (Dockerfile `migrate` target →
+    `shared/migrate.ts`, applies DB migrations once Postgres is healthy) and
+    `qdrant-init` (Dockerfile `qdrant-init` target → `backend/scripts/qdrant-ensure.ts`,
+    ensures the Qdrant collections exist). Both are idempotent. See `docs/data-stores.md`.
+  - The backend Dockerfile is multi-stage (`dev`, `migrate`, `qdrant-init`, `build`,
+    `runtime`); the frontend Dockerfile has `dev` + `runtime`. The compose `environment` block
+    overrides DB hostnames to the internal service names, so `backend/.env` only needs
+    API keys + auth secrets.
 - **`deploy.ts`** (legacy VM deploy) — rsyncs `frontend` build + `backend` + `shared`
   to a remote host and restarts via `pm2`. Run `bun deploy.ts eu`.
 
