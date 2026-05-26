@@ -5,71 +5,46 @@ import { notesTable } from "@shared/db/schema/notes";
 import { remindersTable } from "@shared/db/schema/reminders";
 import { AppError } from "middleware/common/AppError";
 
-export async function storeNote(req, res, next) {
+// Errors throw and propagate to asyncHandler → errorHandler (the repo's convention).
+export async function storeNote(req, res) {
   validateRequestBody(req.body, ["noteText"]);
   const { noteText, title, remindAt } = req.body;
 
-  try {
-    let noteRecord;
-    let reminderRecord: any = null;
+  let noteRecord;
+  let reminderRecord: any = null;
 
-    await drizzlePg.transaction(async tx => {
-      // Save the note
-      const noteResult = await tx
-        .insert(notesTable)
-        .values({
-          content: noteText,
-          title: title,
-          userId: req.user.id,
-        })
-        .returning({
-          id: notesTable.id,
-          content: notesTable.content,
-          userId: notesTable.userId,
-          title: notesTable.title,
-          createdAt: notesTable.created_at,
-        });
+  await drizzlePg.transaction(async tx => {
+    const [note] = await tx
+      .insert(notesTable)
+      .values({ content: noteText, title, userId: req.user.id })
+      .returning();
+    if (!note) throw new Error("Note could not be saved.");
+    noteRecord = note;
 
-      if (!noteResult || noteResult.length === 0) {
-        throw new Error("Note could not be saved.");
+    if (remindAt) {
+      const remindDate = new Date(remindAt);
+      if (isNaN(remindDate.getTime())) {
+        throw new AppError({ message: "Something went wrong parsing the reminder date." });
       }
-      noteRecord = noteResult[0];
+      const [reminder] = await tx
+        .insert(remindersTable)
+        .values({ noteId: note.id, userId: req.user.id, remindAt: remindDate })
+        .returning({ id: remindersTable.id, remindAt: remindersTable.remindAt });
+      if (!reminder) throw new Error("Reminder could not be saved.");
+      reminderRecord = reminder;
+    }
 
-      if (remindAt) {
-        const remindDate = new Date(remindAt);
-        if (!remindDate)
-          throw new AppError({
-            message: "Something went wrong parsing the reminder date.",
-          });
-        const reminderResult = await tx
-          .insert(remindersTable)
-          .values({
-            noteId: noteRecord.id,
-            userId: req.user.id,
-            remindAt: remindDate,
-          })
-          .returning({
-            id: remindersTable.id,
-            remindAt: remindersTable.remindAt,
-          });
+    // Embed as part of the save (sync-or-fail): if embedding throws, the whole transaction
+    // rolls back — no half-saved note, no duplicate on retry — so Postgres and Qdrant stay
+    // in lockstep. The client keeps its localStorage draft, so nothing is lost on failure.
+    await createAndSaveNoteEmbedding(note);
+  });
 
-        if (!reminderResult || reminderResult.length === 0) {
-          throw new Error("Reminder could not be saved.");
-        }
-        reminderRecord = reminderResult[0];
-      }
-
-      await createAndSaveNoteEmbedding(req.user.id, reminderRecord, noteRecord);
-    });
-
-    res.status(200).json({
-      message: "Note saved successfully.",
-      id: noteRecord.id,
-      content: noteRecord.content,
-      created_at: noteRecord.createdAt,
-      remind_at: reminderRecord ? reminderRecord.remindAt : "",
-    });
-  } catch (error) {
-    next(error);
-  }
+  res.status(200).json({
+    message: "Note saved successfully.",
+    id: noteRecord.id,
+    content: noteRecord.content,
+    created_at: noteRecord.created_at,
+    remind_at: reminderRecord ? reminderRecord.remindAt : "",
+  });
 }

@@ -1,5 +1,6 @@
+import Decimal from "decimal.js";
 import { usdToEur } from "utils/ecbConversionRates";
-import { AI_MODELS } from "./ai_models.js";
+import { AI_MODELS, type ModelNames } from "./ai_models.js";
 
 // input/output in x$/1 million tokens
 export const calculateCompletionCost = async (inputTokens: number, outputTokens: number, modelName: string) => {
@@ -23,3 +24,17 @@ export const calculateCompletionCost = async (inputTokens: number, outputTokens:
     totalCost,
   };
 };
+
+// Total completion cost in EUR, computed synchronously from a pre-fetched rate
+// (`getEurPerUsd`) — for callers that can't await, like the AI SDK message-metadata
+// callback. Same pricing as calculateCompletionCost; prices are per-token.
+export function completionCostEur(
+  inputTokens: number,
+  outputTokens: number,
+  modelName: ModelNames,
+  eurPerUsd: Decimal
+): Decimal {
+  const { inputCost, outputCost } = AI_MODELS[modelName];
+  const usd = inputCost.times(inputTokens).plus(outputCost.times(outputTokens));
+  return usd.times(eurPerUsd).toDecimalPlaces(10, Decimal.ROUND_HALF_UP);
+}

@@ -70,7 +70,7 @@ See the `docker-compose.yml` header. Compose files: `docker-compose.yml` (base) 
 ```
 frontend (axios, Bearer token) ─► backend /api/* ─► Postgres (notes/reminders/profiles)
                                        │
-                                       ├─► OpenAI (embeddings) + OpenRouter Qwen3.6-Plus/GLM-5.1 (agentic streamed chat via AI SDK)
+                                       ├─► OpenRouter (gemini-embedding-001 embeddings + Qwen3.6-Plus/GLM-5.1 agentic chat) + Jina (rerank)
                                        ├─► Qdrant (vector search over note embeddings)
                                        └─► MongoDB (chat threads/messages)
 ```
@@ -79,20 +79,36 @@ frontend (axios, Bearer token) ─► backend /api/* ─► Postgres (notes/remi
   with Let's Encrypt certs. Entry: `backend/server.ts` (all routes registered here).
 - Chat flow (agentic RAG on the Vercel AI SDK): `POST /api/search-notes` runs a streaming
   multi-step tool loop (`streamText` + `stopWhen`) where the model calls note-retrieval
-  tools (`search_notes`, `list_recent_notes` — `services/ai/notes-tools.ts`), reads the
-  results, and answers grounded in them. Default model **Qwen3.6-Plus via OpenRouter** when
-  `OPENROUTER_API_KEY` is set, else **gpt-5-mini** on `OPENAI_API_KEY` (`clients/llm_providers.ts`).
-  Streamed as an AI SDK UI message stream (text + `tool-*` parts); the client consumes it
-  with `useChat` and renders tool calls (`context/StreamChatContext.tsx`, `components/Chat/`).
+  tools (`search_notes`, `filter_by_date`, `list_recent_notes` — `services/ai/notes-tools.ts`), reads the
+  results, and answers grounded in them. The loop is capped at `MAX_STEPS` (runaway guard —
+  the SDK default is a single step; the last step drops tools via `prepareStep` to force an
+  answer), and `result.consumeStream()` keeps the turn persisting even if the client
+  disconnects. The system prompt carries only persona + answer policy — the SDK injects each
+  tool's name/description/schema, so the prompt does **not** re-describe them. Default model
+  **Qwen3.6-Plus via OpenRouter** when `OPENROUTER_API_KEY` is set, else **gpt-5-mini** on
+  `OPENAI_API_KEY` (`clients/llm_providers.ts`). Streamed as an AI SDK UI message stream
+  (text + `tool-*` + `reasoning` parts); the client consumes it with `useChat`
+  (`experimental_throttle` coalesces token re-renders; `CustomMarkdown` is memoized so only
+  the streaming message re-parses) and renders tool calls + reasoning (`ToolCallCard`/`ReasoningCard`),
+  plus a `ThinkingIndicator` while no answer text is streaming yet (`context/StreamChatContext.tsx`,
+  `components/Chat/`).
   A new thread's id comes back as a transient `data-thread` part so the client routes to
-  `/thread/:id`. The turn is persisted to a Mongo thread (assistant text only for now —
-  tool-call parts not yet persisted). `GET /api/get-threads` / `GET /api/get-thread` /
+  `/thread/:id`. The assistant turn is persisted to a Mongo thread with its **full UIMessage
+  `parts`** (text + tool calls) plus `metadata` (`{ model, costEur, totalTokens }`, set via
+  `messageMetadata` → shown as a muted per-answer badge), assembled via `createUIMessageStream`'s
+  `onFinish` (`responseMessage`), so reopening a thread re-renders the tool cards + badge. `GET /api/get-threads` / `GET /api/get-thread` /
   `POST /api/delete-thread` back the sidebar + history. See
   `backend/apis/notes/search-relevant-notes.ts`, `backend/services/ai/agentic-rag.ts`, and
   `backend/services/chat-threads.ts`. (Legacy `services/ai/ai_chat.ts` still powers note
-  titling via `get-note-title`.) Retrieval: a dense `ada-002` candidate pool is reranked by
-  **Jina v3** and gated to the top few (`services/ai/rerank.ts`; set `JINA_API_KEY` to enable,
-  else vector order). Embedding/hybrid upgrades remain planned in `docs/rag-execution-plan.md`.
+  titling via `get-note-title`.) Retrieval: a dense **`gemini-embedding-001`** candidate pool (3072-dim, via OpenRouter —
+  `clients/embedding_client.ts`, shared by indexing + query) is reranked by **Jina
+  `v2-base-multilingual`** and gated to the top few (`services/ai/rerank.ts`; set `JINA_API_KEY`
+  to enable, else vector order). **Postgres is the read-time source of truth** — the tools return
+  note text from Postgres and `search_notes` only ranks candidate ids in Qdrant, so a Qdrant↔Postgres
+  desync can't surface a deleted/stale note. Create/update embed **inside the save transaction**
+  (sync-or-fail — a failed embed rolls back the save, so the stores stay in lockstep; the client's
+  localStorage draft means nothing is lost); `scripts/reembed-notes.ts`
+  reconciles). Hybrid BM25 + chunking remain planned in `docs/rag-execution-plan.md`.
 
 ## Data stores (who owns what)
 
@@ -100,8 +116,8 @@ frontend (axios, Bearer token) ─► backend /api/* ─► Postgres (notes/remi
   `notes`, `reminders`, `profile`, `tefteri` (cost ledger), `kataskopos` (per-request
   AI cost), `wines`/`customers` (editor autocomplete lists), and
   `ecb_conversion_rates` (USD→EUR rate cache). Migrations in `shared/drizzle/`.
-- **Qdrant** — note embeddings (`notes` collection, 1536-dim). Domain collections
-  (`beverages`, `polites`, `customers`, `sales`) are provisioned by
+- **Qdrant** — note embeddings (`notes` collection, **3072-dim**, `gemini-embedding-001`). Domain collections
+  (`beverages`, `polites`, `customers`, `sales` — all 1536-dim ada-002) are provisioned by
   `backend/scripts/qdrant-init.ts` but currently **dormant** — only `notes` is
   queried (the wine/customer RAG path is commented out; autocomplete reads Postgres).
 - **MongoDB** — AI chat threads/messages (`backend/model/mongo-db/`), connected at
@@ -122,6 +138,27 @@ The Postgres source of truth is `shared/db/schema/` only (the old pre-Drizzle
 
 There is **no Supabase**. If you see `@supabase/*` imports, they are leftover — do
 not add new ones. See `docs/auth.md`.
+
+**Dev auth bypass (off by default):** set `DEV_AUTH_BYPASS=true` in the **root `.env`**
+to open the app without signing in — the backend authenticates every request as a fixed
+local admin (`dev-user`) and the frontend skips the Clerk gate. Single switch, wired to
+both containers via `docker-compose.override.yml`; double-guarded (`MODE=dev` /
+`import.meta.env.DEV`) so it can never reach prod. Enabling/disabling needs the app
+containers recreated: `docker compose up -d --no-deps --force-recreate backend frontend`.
+**If you turn it on, turn it back OFF when you're done** (the backend logs a loud warning
+at startup while it's on). Details in `docs/auth.md` → "Dev auth bypass".
+
+## Code quality — check before writing
+
+Before writing or editing any code, pause and ask:
+
+1. **Is it readable?** Names should be self-explanatory. If a reader needs a comment to understand what something does, rename it or split it up instead.
+2. **Is it simple?** Prefer the straightforward solution. If a function is doing two things, split it. If a variable needs a comment to explain its shape, type it properly.
+3. **Are abstractions at the right level?** Extract shared logic into a well-named helper when it genuinely reduces duplication or clarifies intent — not just to DRY things up mechanically. Premature abstraction is worse than repetition.
+4. **Is the data flow obvious?** Avoid implicit state mutation, side effects hidden inside getters, or functions that do surprising things. Each unit should do exactly what its name says.
+5. **Does it fit the surrounding code?** Match the style, patterns, and naming conventions of the file you're editing. Inconsistency is its own kind of mess.
+
+Sloppy code (unclear names, overlong functions, logic that needs a mental map to follow) is a bug. Refactor it, don't ship it.
 
 ## Conventions / gotchas
 

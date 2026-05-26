@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import Markdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
@@ -40,7 +41,10 @@ const components: Components = {
   },
 };
 
-export const CustomMarkdown = ({ children }: { children?: string }) => {
+// memo'd on `children`: the markdown→HTML pipeline (raw + sanitize + highlight) is the
+// heaviest per-render cost in the chat. During streaming only the growing last message's
+// text changes, so every other message skips re-parsing entirely.
+export const CustomMarkdown = memo(({ children }: { children?: string }) => {
   return (
     <Markdown
       remarkPlugins={[remarkGfm, remarkBreaks]}
@@ -57,4 +61,5 @@ export const CustomMarkdown = ({ children }: { children?: string }) => {
       {children}
     </Markdown>
   );
-};
+});
+CustomMarkdown.displayName = 'CustomMarkdown';

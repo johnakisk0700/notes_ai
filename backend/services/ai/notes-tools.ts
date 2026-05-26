@@ -2,20 +2,19 @@
 // per-request and hard-scoped to the caller's user id(s) — the model never supplies a
 // user id, preserving tenancy.
 //
-// search_notes retrieves a candidate pool by dense embedding, then RERANKS it and returns
-// only the relevance-gated top few, so the model isn't handed loosely-related notes.
-// (Embedding/hybrid upgrades remain tracked in docs/rag-execution-plan.md.)
+// Postgres is the source of truth: every tool returns note title/content straight from PG.
+// search_notes uses Qdrant ONLY to rank candidate ids by meaning, then reads the live rows
+// from PG (dropping ids that no longer exist there) — so a Qdrant/PG desync can never
+// surface a deleted note or stale text. It then reranks and returns the relevance-gated few.
 import { tool } from "ai";
 import { z } from "zod";
-import { openai } from "clients/openai_client";
+import { embedText } from "clients/embedding_client";
 import { qdrantClient } from "clients/qdrant_client";
 import { drizzlePg } from "clients/drizzle_postgres_client";
 import { notesTable } from "@shared/db/schema/notes";
-import { desc, inArray } from "drizzle-orm";
+import { and, desc, gte, inArray, lte } from "drizzle-orm";
+import { cleanNoteText } from "utils/noteText";
 import { rerank } from "./rerank.js";
-
-// Keep write (embeddings.ts) and query embedding models identical — one constant.
-const EMBEDDING_MODEL = "text-embedding-ada-002";
 
 // Retrieval tuning (env-overridable). CANDIDATE_K is the pool fed to the reranker;
 // FINAL_K is how many survive to the model; RERANK_MIN_SCORE drops weak matches.
@@ -36,12 +35,42 @@ interface NoteHit {
   snippet: string;
 }
 
+// A Postgres note row as the tools select it — the one shape every tool maps from.
+interface NoteRow {
+  id: string;
+  title: string | null;
+  content: string | null;
+  created_at: Date | string | null;
+}
+
+const NOTE_COLUMNS = {
+  id: notesTable.id,
+  title: notesTable.title,
+  content: notesTable.content,
+  created_at: notesTable.created_at,
+};
+
 function clip(text: string, max: number): string {
   return text.length > max ? text.slice(0, max) + "…" : text;
 }
 
-function payloadText(payload: Record<string, unknown> | null | undefined): string {
-  return (((payload?.concatenated as string) ?? (payload?.content as string)) ?? "").trim();
+function isoOrEmpty(date: Date | string | null): string {
+  return date ? new Date(date as unknown as string).toISOString() : "";
+}
+
+// A PG row → the hit handed back to the model: mention markup stripped, snippet clipped.
+function toNoteHit(row: NoteRow): NoteHit {
+  return {
+    noteId: String(row.id),
+    title: row.title ?? "",
+    date: isoOrEmpty(row.created_at),
+    snippet: clip(cleanNoteText(row.content ?? ""), SNIPPET_CHARS),
+  };
+}
+
+// The longer text the reranker scores against: title + content, mentions stripped.
+function rerankText(row: NoteRow): string {
+  return clip(cleanNoteText([row.title, row.content].filter(Boolean).join("\n")), RERANK_CHARS);
 }
 
 export function buildNoteTools({ userIds }: { userIds: string[] }) {
@@ -60,34 +89,67 @@ export function buildNoteTools({ userIds }: { userIds: string[] }) {
         top_k: z.number().int().min(1).max(20).optional().describe("Max notes to return (default 6)."),
       }),
       execute: async ({ query, top_k }): Promise<{ count: number; notes: NoteHit[] }> => {
-        const embedding = await openai.embeddings.create({ model: EMBEDDING_MODEL, input: query });
+        const vector = await embedText(query);
 
-        // 1) Retrieve a bounded candidate pool by vector similarity.
+        // 1) Rank a bounded candidate pool by vector similarity — Qdrant just gives ordered ids.
         const result = await qdrantClient.query("notes", {
-          query: embedding.data[0].embedding,
-          with_payload: true,
+          query: vector,
+          with_payload: false,
           with_vector: false,
           limit: CANDIDATE_K,
           filter: { must: [{ key: "user_id", match: { any: userIds } }] },
           ...(MIN_COSINE != null ? { score_threshold: MIN_COSINE } : {}),
         });
+        const ids = result.points.map(p => String(p.id));
+        if (ids.length === 0) return { count: 0, notes: [] };
 
-        const candidates = result.points.map(p => {
-          const full = payloadText(p.payload as Record<string, unknown>);
-          return {
-            noteId: String(p.id),
-            title: (p.payload?.title as string) ?? "",
-            date: p.payload?.created_at ? new Date(p.payload.created_at as string).toISOString() : "",
-            snippet: clip(full, SNIPPET_CHARS),
-            text: clip(full, RERANK_CHARS), // Rerankable.text
-          };
-        });
+        // 2) Postgres is the source of truth: pull live rows for those ids (scoped to the
+        //    user), dropping any id missing from PG. A deleted note whose vector lingers is
+        //    silently filtered out, and the text we rerank/show is always current.
+        const rows: NoteRow[] = await drizzlePg
+          .select(NOTE_COLUMNS)
+          .from(notesTable)
+          .where(and(inArray(notesTable.id, ids), inArray(notesTable.userId, userIds)));
+        const byId = new Map(rows.map(r => [String(r.id), r]));
+        const candidates = ids
+          .map(id => byId.get(id))
+          .filter((r): r is NoteRow => r != null)
+          .map(row => ({ ...toNoteHit(row), text: rerankText(row) }));
 
-        // 2) Rerank → keep only the relevance-gated top few (the strict step).
+        // 3) Rerank → keep only the relevance-gated top few (the strict step). The ranked
+        //    items are candidates (a NoteHit plus the reranker-only `text`); drop `text`.
         const ranked = await rerank(query, candidates, { topN: top_k ?? FINAL_K, minScore: RERANK_MIN_SCORE });
+        return {
+          count: ranked.length,
+          notes: ranked.map(({ noteId, title, date, snippet }) => ({ noteId, title, date, snippet })),
+        };
+      },
+    }),
 
-        const notes: NoteHit[] = ranked.map(({ noteId, title, date, snippet }) => ({ noteId, title, date, snippet }));
-        return { count: notes.length, notes };
+    filter_by_date: tool({
+      description:
+        "List the user's notes created within a date range (newest first), BY CREATION DATE — " +
+        "not by meaning. Use for time-scoped questions like 'what did I write last week / in May / " +
+        "between two dates'. For a topic within a period, also call search_notes.",
+      inputSchema: z.object({
+        from: z
+          .string()
+          .optional()
+          .describe("Start of range, ISO 8601 (e.g. 2026-05-01 or 2026-05-01T00:00:00Z), inclusive. Omit for no lower bound."),
+        to: z.string().optional().describe("End of range, ISO 8601, inclusive. Omit for no upper bound."),
+        limit: z.number().int().min(1).max(50).optional().describe("Max notes (default 20)."),
+      }),
+      execute: async ({ from, to, limit }): Promise<{ count: number; notes: NoteHit[] }> => {
+        const conds = [inArray(notesTable.userId, userIds)];
+        if (from) conds.push(gte(notesTable.created_at, new Date(from)));
+        if (to) conds.push(lte(notesTable.created_at, new Date(to)));
+        const rows: NoteRow[] = await drizzlePg
+          .select(NOTE_COLUMNS)
+          .from(notesTable)
+          .where(and(...conds))
+          .orderBy(desc(notesTable.created_at))
+          .limit(limit ?? 20);
+        return { count: rows.length, notes: rows.map(toNoteHit) };
       },
     }),
 
@@ -99,24 +161,13 @@ export function buildNoteTools({ userIds }: { userIds: string[] }) {
         limit: z.number().int().min(1).max(30).optional().describe("How many notes (default 10)."),
       }),
       execute: async ({ limit }): Promise<{ count: number; notes: NoteHit[] }> => {
-        const rows = await drizzlePg
-          .select({
-            id: notesTable.id,
-            title: notesTable.title,
-            content: notesTable.content,
-            created_at: notesTable.created_at,
-          })
+        const rows: NoteRow[] = await drizzlePg
+          .select(NOTE_COLUMNS)
           .from(notesTable)
           .where(inArray(notesTable.userId, userIds))
           .orderBy(desc(notesTable.created_at))
           .limit(limit ?? 10);
-        const notes: NoteHit[] = rows.map(r => ({
-          noteId: String(r.id),
-          title: r.title ?? "",
-          date: r.created_at ? new Date(r.created_at as unknown as string).toISOString() : "",
-          snippet: clip((r.content ?? "").trim(), SNIPPET_CHARS),
-        }));
-        return { count: notes.length, notes };
+        return { count: rows.length, notes: rows.map(toNoteHit) };
       },
     }),
   };

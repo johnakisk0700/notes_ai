@@ -76,6 +76,23 @@ const elContent = {
   select_language: 'Γλώσσα',
   ask_anything: 'Ρώτα οτιδήποτε...',
   select_lang: 'Επιλογή γλώσσας',
+  // Collapsible label for the model's reasoning disclosure (see ReasoningCard).
+  chat_reasoning: 'Σκέψεις',
+  // Stable label for screen readers (the visible text rotates through chat_thinking_verbs).
+  chat_thinking: 'Η Λέξι σκέφτεται…',
+  // Playful "working" phrases shown one at a time, rotating randomly. See ThinkingIndicator.
+  chat_thinking_verbs: [
+    'Η Λέξι ξεφυλλίζει τα τεφτέρια',
+    'Η Λέξι ψάχνει στα συρτάρια',
+    'Η Λέξι σκαλίζει τις σημειώσεις',
+    'Η Λέξι τρίβει το πιγούνι της',
+    'Η Λέξι ξύνει το κεφάλι της',
+    'Η Λέξι μουρμουρίζει σκεφτική',
+    'Η Λέξι ζυγίζει τα λόγια της',
+    'Η Λέξι ψαχουλεύει εδώ κι εκεί',
+    'Η Λέξι ρουφάει μια γουλιά καφέ',
+    'Η Λέξι συλλογιέται βαθιά',
+  ],
 };
 
 export const elTranslation = { ...elErrors, ...elSuccesses, ...elMenu, ...elContent };

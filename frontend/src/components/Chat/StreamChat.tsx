@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { ChatMessage } from './ChatMessage';
+import { ThinkingIndicator } from './ThinkingIndicator';
 import { useStreamChat } from '@/context/StreamChatContext';
 
 interface StreamChatProps {
@@ -10,7 +11,6 @@ interface StreamChatProps {
 export const StreamChat = ({ aiMessageHeight, onAIContainerReady }: StreamChatProps) => {
   const { messages, isStreaming } = useStreamChat();
 
-  const aiContainerRef = useRef<HTMLDivElement>(null);
   const hasCalledReadyRef = useRef<boolean>(false);
 
   // Reset the flag when streaming stops.
@@ -28,22 +28,29 @@ export const StreamChat = ({ aiMessageHeight, onAIContainerReady }: StreamChatPr
   }, [isStreaming, aiMessageHeight, onAIContainerReady]);
 
   const last = messages[messages.length - 1];
-  // While streaming, the assistant reply IS the last message and grows in place.
-  // Before its first token arrives, show a placeholder that reserves the height.
+  const lastPart = last?.role === 'assistant' ? last.parts[last.parts.length - 1] : undefined;
+  // Lexi is "thinking" while the turn streams but no answer text is flowing yet —
+  // before her first token, and in the gaps between tool calls and the reply.
+  const thinking = isStreaming && lastPart?.type !== 'text';
+  // No assistant message yet: reserve the answer's height and show the indicator there.
   const awaitingAssistant = isStreaming && (!last || last.role === 'user');
 
   return (
     <div className="flex flex-col gap-3 p-1.5 pt-3">
-      {messages.map((message, i) => (
-        <ChatMessage
-          message={message}
-          key={message.id}
-          style={{ minHeight: i === messages.length - 1 && message.role !== 'user' ? aiMessageHeight : '' }}
-        />
-      ))}
+      {messages.map((message, i) => {
+        const isLast = i === messages.length - 1;
+        return (
+          <ChatMessage
+            message={message}
+            key={message.id}
+            style={{ minHeight: isLast && message.role !== 'user' ? aiMessageHeight : '' }}
+            thinking={isLast && message.role === 'assistant' && thinking}
+          />
+        );
+      })}
       {awaitingAssistant ? (
-        <div ref={aiContainerRef} style={{ minHeight: aiMessageHeight }} className="chat-md max-w-none">
-          <span className="inline-block animate-pulse font-mono text-xs text-muted-foreground">…</span>
+        <div style={{ minHeight: aiMessageHeight }} className="max-w-none">
+          <ThinkingIndicator />
         </div>
       ) : null}
     </div>

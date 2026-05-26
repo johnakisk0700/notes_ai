@@ -1,8 +1,12 @@
 import { useUser } from '@clerk/clerk-react';
 import { Navigate, Outlet } from 'react-router';
+import { DEV_AUTH_BYPASS } from '@/integrations/devAuth';
 
 const ProtectedRoute = () => {
   const { isLoaded, isSignedIn, user } = useUser();
+
+  // Dev-only: skip the Clerk gate (and the onboarding name check) entirely.
+  if (DEV_AUTH_BYPASS) return <Outlet />;
 
   if (!isLoaded) {
     return <div className="flex items-center justify-center h-screen"></div>;

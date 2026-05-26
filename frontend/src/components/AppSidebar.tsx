@@ -14,7 +14,7 @@ import {
 import { useAuth } from '@/context/AuthContext/AuthContext';
 import { useNoteEditor } from '@/context/NoteEditorContext';
 import { useThreads } from '@/context/ThreadsContext';
-import { Bot, ChevronsUpDownIcon, Cog, MessageCircle, Notebook, PlusIcon, Trash2, Users } from 'lucide-react';
+import { Bot, ChevronsUpDownIcon, MessageCircle, Notebook, PlusIcon, SlidersHorizontal, Trash2, Users } from 'lucide-react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
 import { Button } from './ui/button';
 import { useMemo, type MouseEvent } from 'react';
@@ -93,11 +93,13 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarHeader>
         <SidebarGroupContent>
-          <div className="flex justify-between items-center mb-2 px-1">
+          {/* Title row sized so its center matches the main header's open/close
+              toggle — settings ⚙ and the toggle line up across the sidebar/page seam. */}
+          <div className="flex h-10 items-center justify-between mb-2 px-1">
             <div className="font-serif text-xl tracking-tight">Mneme</div>
-            <Button variant="ghost" asChild>
-              <NavLink to={'/settings'} className="h-fit grid py-2.5 text-sm" onClick={() => handleNavigation()}>
-                <Cog />
+            <Button variant="ghost" size="icon" className="size-7 text-muted-foreground" asChild>
+              <NavLink to={'/settings'} aria-label="Settings" onClick={() => handleNavigation()}>
+                <SlidersHorizontal />
               </NavLink>
             </Button>
           </div>

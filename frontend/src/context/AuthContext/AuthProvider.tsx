@@ -2,6 +2,7 @@ import { api } from '@/integrations/api';
 import { useUser } from '@clerk/clerk-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { AuthContext } from './AuthContext';
+import { DEV_AUTH_BYPASS, DEV_USER } from '@/integrations/devAuth';
 
 // Bridges Clerk (identity) with our backend `profile` (role). Exposes the same
 // shape the app already consumes via useAuth(): { user, isAdmin, loadingUser }.
@@ -11,6 +12,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loadingUser, setLoadingUser] = useState(true);
 
   useEffect(() => {
+    // Dev bypass: no Clerk session to read a role from — just grant admin.
+    if (DEV_AUTH_BYPASS) {
+      setIsAdmin(true);
+      setLoadingUser(false);
+      return;
+    }
+
     if (!isLoaded) return;
 
     if (!isSignedIn || !user) {
@@ -43,5 +51,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [isLoaded, isSignedIn, user]);
 
-  return <AuthContext.Provider value={{ user, isAdmin, loadingUser }}>{children}</AuthContext.Provider>;
+  const value = DEV_AUTH_BYPASS
+    ? { user: DEV_USER, isAdmin: true, loadingUser: false }
+    : { user, isAdmin, loadingUser };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

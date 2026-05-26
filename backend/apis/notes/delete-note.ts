@@ -4,6 +4,7 @@ import { validateRequestBody } from "middleware/common/validation/requiredValida
 import { notesTable } from "@shared/db/schema/notes";
 import { remindersTable } from "@shared/db/schema/reminders";
 import { eq, and } from "drizzle-orm";
+import { logger } from "utils/logger";
 
 export async function deleteNote(req, res) {
   validateRequestBody(req.body, ["noteId"]);
@@ -11,38 +12,27 @@ export async function deleteNote(req, res) {
   const userId = req.user.id;
   const isAdmin = req.user.isAdmin;
 
+  // Owners can delete their own notes; admins can delete any note.
+  const whereClause = isAdmin
+    ? eq(notesTable.id, noteId)
+    : and(eq(notesTable.id, noteId), eq(notesTable.userId, userId));
+
+  await drizzlePg.transaction(async tx => {
+    const [deleted] = await tx.delete(notesTable).where(whereClause).returning({ id: notesTable.id });
+    if (!deleted) throw new Error("Note not found or access denied.");
+    // Remove the note's reminder too (the note FK also cascades, but be explicit).
+    await tx.delete(remindersTable).where(eq(remindersTable.noteId, deleted.id));
+  });
+
+  // Qdrant cleanup runs after the PG commit and is best-effort: a Qdrant hiccup must not
+  // 500 an already-successful delete. An orphaned vector is harmless — search_notes
+  // validates every hit against Postgres, and reembed-notes prunes orphans on reindex.
   try {
-    let deletedNoteId;
-
-    await drizzlePg.transaction(async tx => {
-      // Owners can delete their own notes; admins can delete any note.
-      const whereClause = isAdmin
-        ? eq(notesTable.id, noteId)
-        : and(eq(notesTable.id, noteId), eq(notesTable.userId, userId));
-
-      // Delete the note from the database and retrieve its ID
-      const noteDeleteResult = await tx.delete(notesTable).where(whereClause).returning({
-        id: notesTable.id,
-      });
-
-      // Check if the note was actually found and deleted
-      if (!noteDeleteResult || noteDeleteResult.length === 0) {
-        throw new Error("Note not found or access denied.");
-      }
-
-      deletedNoteId = noteDeleteResult[0].id;
-
-      // Delete associated reminders
-      // This will attempt to delete reminders and will not error if no reminders exist for the note.
-      await tx.delete(remindersTable).where(eq(remindersTable.noteId, deletedNoteId));
-    });
-
-    // Delete the note from Qdrant (outside transaction since it's external service)
     await qdrantClient.delete("notes", { points: [noteId] });
-
-    console.log(`Note successfully deleted! (message id: [${deletedNoteId}] user id: [${userId}])`);
-    res.send("Success.");
-  } catch (error) {
-    throw error;
+  } catch (err) {
+    logger.error(`Qdrant delete failed for note ${noteId} (removed from Postgres; vector orphaned until reindex):`, err);
   }
+
+  logger.info(`Note deleted (id: ${noteId}, user: ${userId})`);
+  res.send("Success.");
 }

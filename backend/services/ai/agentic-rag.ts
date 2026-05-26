@@ -16,10 +16,15 @@ import { resolveChatModel } from "clients/llm_providers";
 import { DEFAULT_REASONING_EFFORT, type ChatModelId, type ReasoningEffort } from "@shared/ai/chatModels";
 import { appendMessage } from "services/chat-threads";
 import { logger } from "utils/logger";
-import { calculateCompletionCost } from "./ai_utils.js";
+import { getEurPerUsd } from "utils/ecbConversionRates";
+import { calculateCompletionCost, completionCostEur } from "./ai_utils.js";
 import { AI_MODELS } from "./ai_models.js";
 import { buildNoteTools } from "./notes-tools.js";
 
+// Ceiling on LLM round-trips per turn — a runaway guard, not a target. The SDK default
+// is a single step (no agentic continuation), so a cap > 1 is required for the loop to
+// read tool results and answer; a normal turn uses 2–3 (search → [search] → answer) and
+// rarely reaches 5. On the final step we drop tools (prepareStep) to force an answer.
 const MAX_STEPS = 5;
 
 interface UsageLike {
@@ -27,17 +32,23 @@ interface UsageLike {
   outputTokens?: number;
 }
 
+/** Plain-text projection of an assistant turn (ignores tool-call parts). */
+function textFromParts(parts: UIMessage["parts"]): string {
+  return parts
+    .filter((p): p is Extract<UIMessage["parts"][number], { type: "text" }> => p.type === "text")
+    .map(p => p.text)
+    .join("");
+}
+
+// The tools' names, descriptions and parameter schemas are sent to the model by the
+// SDK (from notes-tools.ts), so the prompt does NOT re-describe them — it carries only
+// persona + the answer policy that isn't expressible in a tool schema.
 function lexiSystemPrompt(now: string): string {
   return [
     "Είσαι η Λέξι, μια έμπειρη γραμματέας που βοηθάει τον χρήστη να βρίσκει πληροφορίες μέσα στις σημειώσεις του.",
     `Σήμερα είναι: ${now}.`,
     "",
-    "ΕΡΓΑΛΕΙΑ:",
-    "- Για ΟΠΟΙΑΔΗΠΟΤΕ ερώτηση που αφορά το περιεχόμενο των σημειώσεων, ΠΡΕΠΕΙ πρώτα να καλέσεις το εργαλείο `search_notes`.",
-    "- Μπορείς να ψάξεις πολλές φορές με διαφορετικές διατυπώσεις για να βρεις ό,τι χρειάζεσαι ή να συγκρίνεις θέματα.",
-    "- Διατύπωσε καθαρά το `query` (μην αντιγράφεις αυτούσια την ερώτηση).",
-    "",
-    "ΑΠΑΝΤΗΣΗ:",
+    "- Για ερωτήσεις πάνω στις σημειώσεις, ψάξε με τα εργαλεία πριν απαντήσεις· μη βασίζεσαι στη μνήμη σου. Μπορείς να ψάξεις και ξανά αν χρειαστεί.",
     "- Βασίσου ΜΟΝΟ στις σημειώσεις που επιστρέφουν τα εργαλεία. Αν δεν υπάρχει σχετική πληροφορία, πες το ευγενικά — μην επινοείς.",
     "- Ανάφερε τους τίτλους των σχετικών σημειώσεων όταν απαντάς.",
     "- Απάντησε στη γλώσσα του χρήστη (κυρίως Ελληνικά), με σύντομο και καθαρό markdown και μέτρια emoji.",
@@ -74,6 +85,7 @@ export function streamNotesChat(opts: {
   const tools = buildNoteTools({ userIds });
 
   const stream = createUIMessageStream({
+    originalMessages: messages,
     execute: async ({ writer }) => {
       // Hand a freshly-created thread id to the client so it can route to /thread/:id.
       if (newThreadId) {
@@ -87,13 +99,24 @@ export function streamNotesChat(opts: {
         messages: modelMessages,
         tools,
         stopWhen: stepCountIs(MAX_STEPS),
+        // On the final allowed step, drop tools so the model must produce an answer
+        // instead of ending the turn on another tool call. ({} = no override.)
+        prepareStep: ({ stepNumber }) => (stepNumber >= MAX_STEPS - 1 ? { toolChoice: "none" } : {}),
         providerOptions: reasoningProviderOptions(modelId, effort ?? DEFAULT_REASONING_EFFORT),
+        // Per-step observability: log each tool result and how many notes it returned.
+        onStepFinish: step => {
+          for (const r of step.toolResults ?? []) {
+            const count = (r.output as { count?: number } | undefined)?.count;
+            logger.info(`RAG · ${r.toolName}${typeof count === "number" ? ` → ${count} notes` : ""}`);
+          }
+        },
+        // Usage lives here, so cost is computed here. Persistence happens in the
+        // UI-stream onFinish below, where the assembled assistant message is available.
         onFinish: async event => {
           const u: UsageLike =
             (event as unknown as { totalUsage?: UsageLike }).totalUsage ??
             (event as unknown as { usage?: UsageLike }).usage ??
             {};
-          const text = (event as unknown as { text?: string }).text ?? "";
           try {
             // totalCost is derived as inputCost + outputCost by addCost.
             const { inputCost, outputCost } = await calculateCompletionCost(
@@ -105,17 +128,47 @@ export function streamNotesChat(opts: {
           } catch (err) {
             logger.error("Chat cost calculation failed:", err);
           }
-          // Persist the assistant's final answer (tool-call steps aren't persisted yet —
-          // see docs/rag-enhancement-plan.md §4.5). Best-effort.
-          if (threadId && text) {
-            appendMessage(threadId, userId, { role: "assistant", content: text }).catch(err =>
-              logger.error("Thread persistence (assistant message) failed:", err)
-            );
-          }
         },
       });
 
-      writer.merge(result.toUIMessageStream());
+      // Keep draining the model stream even if the client disconnects, so onFinish
+      // (cost + persistence) still runs to completion.
+      result.consumeStream();
+
+      // Pre-fetch the rate once so cost can be derived synchronously in the (sync)
+      // message-metadata callback below.
+      const eurPerUsd = await getEurPerUsd();
+      writer.merge(
+        result.toUIMessageStream({
+          // Forward the model's reasoning parts to the UI (when the provider returns them).
+          sendReasoning: true,
+          // Tag the finished message with model + cost. This both streams live and rides
+          // on responseMessage.metadata, so it's persisted with the turn (below).
+          messageMetadata: ({ part }) => {
+            if (part.type !== "finish") return undefined;
+            const usage = part.totalUsage;
+            const inputTokens = usage?.inputTokens ?? 0;
+            const outputTokens = usage?.outputTokens ?? 0;
+            return {
+              model: modelId,
+              totalTokens: usage?.totalTokens ?? inputTokens + outputTokens,
+              costEur: completionCostEur(inputTokens, outputTokens, modelId, eurPerUsd).toNumber(),
+            };
+          },
+        })
+      );
+    },
+    // Persist the whole assistant turn — text + tool-call parts — so the thread
+    // re-renders tool steps after a reload. Best-effort (never fails the answer).
+    onFinish: ({ responseMessage }) => {
+      if (!threadId || !responseMessage) return;
+      appendMessage(threadId, userId, {
+        role: "assistant",
+        content: textFromParts(responseMessage.parts),
+        parts: responseMessage.parts,
+        // model + cost, attached via messageMetadata above — persisted so the badge survives reload.
+        metadata: responseMessage.metadata,
+      }).catch(err => logger.error("Thread persistence (assistant message) failed:", err));
     },
     onError: err => {
       logger.error("Agentic chat stream error:", err);

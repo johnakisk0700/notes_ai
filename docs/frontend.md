@@ -128,8 +128,9 @@ CSS variables, `lucide` icons, aliases `@/components`, `@/lib/utils`, `@/compone
   Two ambient skeuomorphic touches: **`.nb-paper`** (faint ruled lines + a left
   margin line; `background-attachment: local` so the ruling scrolls with the
   page) on the chat/notes scroll surfaces, and **`SpiralBinding`** — a graphite
-  wire coil pinned to the sidebar/content seam that tracks the sidebar (full when
-  expanded, faded to `--nb-coil-fade` when collapsed; hidden on mobile). Fonts are
+  wire coil, a fixed overlay centered on the sidebar/page seam (small muted tilted
+  rings straddling it), that tracks the sidebar (visible when expanded, faded out
+  when collapsed; hidden on mobile). Fonts are
   loaded via a Google Fonts `<link>` in `index.html` (all with Greek coverage):
   **Inter** (sans / UI), **Literata** (serif — Lexi's chat answers), **JetBrains
   Mono** (mono — code, charts, the `❯` prompt glyphs).

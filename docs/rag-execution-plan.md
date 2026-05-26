@@ -16,8 +16,12 @@ enhancement plan.
 > with gpt-5-mini fallback. §3.7 markdown was already covered by the existing `CustomMarkdown`
 > (charts/mermaid/sanitize) so Streamdown was **not** added. **Reranker (§3.1) also shipped**
 > (Jina v3 — `services/ai/rerank.ts`; `search_notes` now fetches a 30-candidate pool → reranks
-> → returns the relevance-gated top 6). **Still pending:** Qwen3-Embedding (§3.2), hybrid BM25
-> (§3.3), chunking (§3.4) — retrieval embeddings are still dense `ada-002`.
+> → returns the relevance-gated top 6). **Embedding (§3.2) also shipped** — note RAG now embeds
+> with `google/gemini-embedding-001` (3072-dim, via OpenRouter), and the reranker was corrected to
+> `jina-reranker-v2-base-multilingual` (v3 emitted sub-gate scores on Greek). A `filter_by_date` tool
+> landed, and reads are now **Postgres-authoritative** (Qdrant ranks ids; Postgres returns the rows,
+> dropping any missing there) so a vector-store desync can't surface a deleted/stale note. **Still pending:**
+> hybrid BM25 (§3.3), chunking (§3.4).
 
 > **Headline:** the biggest "clean, no extra code" lever is to **adopt the Vercel AI SDK
 > stack** (AI SDK core + AI Elements + Streamdown). It *deletes* most of our hand-rolled
@@ -143,7 +147,15 @@ Sources: [AI SDK 5](https://vercel.com/blog/ai-sdk-5) ·
   schema change, no new infra**. New `services/ai/rerank.ts`, called inside `search_notes`.
 - **ROI: ⭐⭐⭐⭐⭐ · Effort: XS.** This is the single best move; ship it before anything else.
 
-### 3.2 Embedding model — **Winner: Qwen3-Embedding (DeepInfra)**, not OpenAI  **[corrects the first draft]**
+### 3.2 Embedding model — **✅ Shipped: `google/gemini-embedding-001` (OpenRouter)**  **[done]**
+- **Shipped (deviation from the pick below):** `google/gemini-embedding-001` (3072-dim) via
+  **OpenRouter**, not Qwen3 — OpenRouter (where we hold credit) doesn't host Qwen3-Embedding
+  (returns 404), and Gemini is the best embedding reachable through our existing keys
+  (MTEB-multilingual **68.4** vs OpenAI text-embedding-3-large 59.0; Qwen3-Embedding-8B's 70.6
+  would need a new DeepInfra key). Shared `EMBEDDING_MODEL` / `EMBEDDING_DIM` in
+  `clients/embedding_client.ts` drive both the write (`services/embeddings.ts`) and query
+  (`services/ai/notes-tools.ts`) paths so they can't drift; re-embed via `scripts/reembed-notes.ts`.
+  The original research (Qwen3 winner) is kept below for context.
 - **The "is it updated?" answer: yes, and the right pick changed.** 2026 benchmarks:
   **Qwen3-Embedding-8B is #1 MTEB multilingual (70.6), beating OpenAI (64.6) and Google
   (68.3)**, and **"OpenAI text-embedding-3-large lags on European languages"** — i.e. on
@@ -244,7 +256,7 @@ Two parallel tracks. **Reranker first** (best ROI, trivial); the rest splits int
 | # | Step | ROI | Effort | Track | Re-embed? |
 |---|------|-----|--------|-------|-----------|
 | 1 | **Reranker** (Qwen3-Reranker-0.6B / Jina v3) on existing dense search | ⭐⭐⭐⭐⭐ | XS | A | no |
-| 2 | **Embedding → Qwen3-Embedding** (+ shared `EMBEDDING_MODEL`, re-embed script) | ⭐⭐⭐⭐⭐ | S | A | **yes** |
+| 2 | **Embedding → `gemini-embedding-001`** (+ shared `EMBEDDING_MODEL`, re-embed script) ✅ | ⭐⭐⭐⭐⭐ | S | A | **done** |
 | 3 | **Streamdown** swap (`CustomMarkdown` → `<Streamdown>`) | ⭐⭐⭐ | XS | B | no |
 | 4 | **AI SDK spike**: `streamText` + OpenRouter, confirm Express streaming helper, port one endpoint | ⭐⭐⭐⭐ | M | B | no |
 | 5 | **Agentic tool loop** + tools + grounding/citations (`stopWhen`) | ⭐⭐⭐⭐ | M | B | no |
@@ -288,7 +300,7 @@ gates 5/6) while #2 (re-embed) lands on Track A. **Batch #2 + #7 + #8 into one r
 1. **Adopt the AI SDK stack?** — _strongly recommended_ (net code deletion + the tool UI you
    want). The only real fork left; everything in Track B assumes "yes." ← **your call.**
 2. Chat provider: **OpenRouter** now (one key, both models). ✅ resolved.
-3. Embedding: **Qwen3-Embedding-0.6B @1024 via DeepInfra**; bump to 4B if eval demands. ✅ resolved (eval-tunable).
+3. Embedding: **`gemini-embedding-001` @3072 via OpenRouter** — Qwen3 isn't on OpenRouter; Gemini is the best reachable through existing keys (see §3.2). ✅ shipped.
 4. Reranker: **Qwen3-Reranker-0.6B (DeepInfra)**, fall back to **Jina v3** if latency hurts. ✅ resolved (eval-tunable).
 5. Hybrid: **server-side BM25 + RRF** (needs Qdrant ≥1.15.2). ✅ resolved.
 6. Embedding size 0.6B vs 4B/8B, and rerank vendor — **defer to the eval harness (#9)**; they're swaps, not rewrites.

@@ -109,6 +109,9 @@ export const StreamChatProvider = ({ children }: { children: ReactNode }) => {
 
   const { messages, sendMessage, status, stop, setMessages } = useChat({
     transport,
+    // Coalesce the token-by-token state updates so the tree re-renders at ~20 fps
+    // instead of on every chunk — the single biggest win against streaming jank.
+    experimental_throttle: 50,
     onData: dataPart => {
       // First message of a new chat: the server streams back the created thread id.
       if (dataPart.type === 'data-thread') {
@@ -150,7 +153,11 @@ export const StreamChatProvider = ({ children }: { children: ReactNode }) => {
           detail.messages.map(m => ({
             id: m.id,
             role: m.role === 'user' ? 'user' : 'assistant',
-            parts: [{ type: 'text', text: m.content }],
+            // Assistant turns carry their full parts (tool calls + text) so the cards
+            // re-render; plain user text falls back to a single text part.
+            parts: (m.parts?.length ? m.parts : [{ type: 'text', text: m.content }]) as AppUIMessage['parts'],
+            // Model + cost badge; absent for user turns.
+            metadata: m.metadata,
           })) as AppUIMessage[]
         );
       } catch {

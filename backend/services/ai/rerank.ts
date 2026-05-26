@@ -1,14 +1,18 @@
 // Cross-encoder reranking of candidate notes by relevance to the query — the
 // highest-ROI retrieval-quality lever (see docs/rag-execution-plan.md §3.1).
 //
-// Provider: Jina reranker v3 (managed, multilingual, fast). If JINA_API_KEY is unset,
-// rerank() is a safe no-op (returns the first `topN` candidates unchanged) so chat keeps
-// working without the extra env. To swap to Qwen3-Reranker (DeepInfra) later, only this
-// fetch body/URL changes — callers are unaffected.
+// Provider: Jina reranker v2 base multilingual. We first shipped jina-reranker-v3, but on
+// the Greek corpus it emits logit-like scores where even the correct match lands at only
+// ~0.08–0.19 (irrelevant docs go negative), so the 0.2 relevance gate dropped the right
+// note entirely. v2-base-multilingual is calibrated ~0–1 — the right note scores ~0.36–0.49
+// and noise ~0.08–0.14 — so the gate works as intended. If JINA_API_KEY is unset, rerank()
+// is a safe no-op (returns the first `topN` candidates unchanged) so chat keeps working
+// without the extra env. To swap to Qwen3-Reranker (DeepInfra) later, only this fetch
+// body/URL changes — callers are unaffected.
 import { logger } from "utils/logger";
 
 const JINA_RERANK_URL = "https://api.jina.ai/v1/rerank";
-const JINA_MODEL = "jina-reranker-v3";
+const JINA_MODEL = "jina-reranker-v2-base-multilingual";
 
 export interface Rerankable {
   /** The text the reranker scores against the query. */

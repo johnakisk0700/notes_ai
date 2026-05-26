@@ -1,40 +1,46 @@
 import { useLocation } from 'react-router';
+import { useTranslation } from 'react-i18next';
 import { SidebarTrigger } from '../ui/sidebar';
 import { NoteSearch } from '../Notes/NoteSearch';
-import { cn } from '@/lib/utils';
 
+/**
+ * Top bar — SEE-THROUGH. It has no fill or rule, so the notebook paper (and the
+ * messages scrolling under it) stay visible; it only floats the controls. Because
+ * it overlays the conversation on chat, the bar itself is pointer-events-none and
+ * only the interactive bits opt back in, so scrolling the top of the page works.
+ *  - chat: the sidebar toggle + "Ρωτήστε τη Lexi…" title + today's date, in a row
+ *    the active message scrolls up to line up with.
+ *  - /notes: the toggle + search box (the page title is a PageRule below the list).
+ * The toggle lines up vertically with the settings button in the sidebar header.
+ */
 export const Header = () => {
   const { pathname } = useLocation();
-  const css = pathname === '/notes' ? 'grid-cols-[auto_1fr]' : 'grid-cols-[auto] w-fit';
+  const { t, i18n } = useTranslation();
+
+  const isChat = pathname === '/' || pathname.startsWith('/thread');
+  const isNotes = pathname === '/notes';
+
+  const today = new Date().toLocaleDateString(i18n.language === 'en' ? 'en-US' : 'el-GR', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  });
+
   return (
-    <div
-      className={cn(
-        'z-50 h-14 relative p-2.5 rounded-lg grid xl:grid-cols-[auto_minmax(0,1fr)_auto] gap-2 max-w-full items-center',
-        css
-      )}
-    >
-      {/* Left Column: Sidebar Trigger */}
-      <div>
-        <SidebarTrigger />
-      </div>
+    <header className="pointer-events-none relative z-50 flex h-14 shrink-0 items-center gap-3 px-2.5">
+      {/* ml-1.5 centers the toggle in the notebook's left ruled margin (~2.25rem). */}
+      <SidebarTrigger className="pointer-events-auto ml-1.5 shrink-0" />
 
-      {pathname === '/notes' ? (
-        <>
-          {/* Center Column: Search Bar */}
-          {/* min-w-0 ensures the search bar can shrink below its intrinsic content size if needed */}
-          <div className="flex justify-center min-w-0">
-            <div className="w-full max-w-5xl ">
-              <NoteSearch className="h-9" />
-            </div>
-          </div>
-
-          {/* Right Column: Spacer - only visible and active on medium screens and up */}
-          {/* On small screens, this div is hidden and does not participate in the grid layout due to the parent's grid-cols-[auto_1fr] */}
-          <div className="hidden xl:block" style={{ visibility: 'hidden' }}>
-            <SidebarTrigger />
-          </div>
-        </>
+      {isChat ? (
+        <div className="flex min-w-0 flex-1 items-baseline justify-between gap-3">
+          <span className="truncate font-mono text-xs text-muted-foreground">{t('chat_tips')}</span>
+          <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground/70">{today}</span>
+        </div>
+      ) : isNotes ? (
+        <div className="pointer-events-auto mx-auto w-full max-w-5xl">
+          <NoteSearch className="h-9" />
+        </div>
       ) : null}
-    </div>
+    </header>
   );
 };

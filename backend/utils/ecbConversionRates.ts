@@ -89,6 +89,17 @@ export async function initializeECBRates() {
 }
 
 /**
+ * EUR per 1 USD, derived from the cached ECB USD→EUR rate (stored as USD-per-EUR).
+ * Lets a caller convert costs synchronously after a single await — e.g. the chat
+ * cost-metadata callback, which can't be async. Falls back to ~0.92 if uncached.
+ */
+export async function getEurPerUsd(): Promise<Decimal> {
+  const usdPerEur = await redis.get("conversion_rate");
+  if (usdPerEur) return new Decimal(1).div(new Decimal(usdPerEur));
+  return new Decimal(0.92);
+}
+
+/**
  * Converts a USD value to EUR with high precision.
  * @param usdValue The amount in USD.
  * @param usdToEurRate The USD to EUR exchange rate (e.g. 0.92).

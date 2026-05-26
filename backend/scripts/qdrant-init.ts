@@ -2,17 +2,27 @@ import { qdrantClient } from "clients/qdrant_client";
 import fs from "fs";
 import { qdrantBatchUpsert } from "utils/qdrantUpsert";
 
-export async function init_collections() {
-  const collections = ["notes", "beverages", "customers", "sales", "polites"];
+// Per-collection vector dims. `notes` uses google/gemini-embedding-001 (3072-dim); the
+// legacy domain collections were seeded from precomputed ada-002 embeddings, so they stay
+// 1536. (Recreating an existing collection at a new dim is the reindex script's job, not
+// this create-on-404 path's.)
+const COLLECTION_DIMS: Record<string, number> = {
+  notes: 3072,
+  beverages: 1536,
+  customers: 1536,
+  sales: 1536,
+  polites: 1536,
+};
 
-  for (const col of collections) {
+export async function init_collections() {
+  for (const [col, size] of Object.entries(COLLECTION_DIMS)) {
     try {
       await qdrantClient.getCollection(col);
     } catch (e: any) {
       if (e.status === 404) {
         try {
           await qdrantClient.createCollection(col, {
-            vectors: { size: 1536, distance: "Cosine" },
+            vectors: { size, distance: "Cosine" },
           });
         } catch (e: any) {
           if (e.statusText !== "Conflict") {

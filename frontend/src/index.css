@@ -352,6 +352,29 @@ div:has(> .tiptap) {
   line-height: 1.6;
   color: var(--foreground);
 }
+/* Lexi "thinking": a gentle breathe on the label while she works. Animating `opacity`
+   only (no `background-position`) keeps it on the compositor/GPU — zero per-frame paint,
+   so it stays smooth even while the main thread is busy streaming the answer. */
+@keyframes nb-thinking-breathe {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.nb-thinking {
+  color: var(--muted-foreground);
+  animation: nb-thinking-breathe 1.6s ease-in-out infinite;
+  will-change: opacity;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nb-thinking {
+    animation: none;
+    opacity: 1;
+  }
+}
 .chat-md > :first-child {
   margin-top: 0;
 }
@@ -536,31 +559,25 @@ div:has(> .tiptap) {
   height: auto;
 }
 
-/* ── Spiral binding (the coil bound under the page's left edge) ───────────────
+/* ── Spiral binding (the coil on the sidebar/page seam) ──────────────────────
    A hand-drawn graphite wire coil, not chrome — it belongs to the ink-on-paper
-   world. The page (.nb-page) is an opaque sheet that sits ON TOP of the coil:
-   the wire tucks under the page's lifted left edge, only its gutter half shows.
-   Geometry is in SpiralBinding.tsx; colors live here so it follows the theme. */
+   world. Small, muted, tilted rings that straddle the seam; geometry + layout
+   live in SpiralBinding.tsx, colors here so the coil follows the theme. */
 .nb-page {
   background-color: var(--background);
-  /* the page's left edge — the "spine" the coil loops tuck under */
-  border-left: 1px solid color-mix(in srgb, var(--foreground) 9%, transparent);
+  /* the page's lifted left edge — a soft shadow only, no hard line, so the gutter
+     stays clear next to the spiral binding */
   box-shadow: -4px 0 8px -4px rgb(0 0 0 / 0.16);
 }
 .dark .nb-page {
-  border-left-color: color-mix(in srgb, var(--foreground) 11%, transparent);
   box-shadow: -4px 0 10px -4px rgb(0 0 0 / 0.42);
 }
 .nb-coil-wire {
   fill: none;
-  stroke: color-mix(in srgb, var(--foreground) 45%, transparent);
+  /* opaque muted graphite — ink mixed toward the background (not transparent),
+     so the wire is a solid soft grey instead of going see-through */
+  stroke: color-mix(in srgb, var(--foreground) 20%, var(--background));
   stroke-width: 1.6;
-  stroke-linecap: round;
-}
-.nb-coil-shadow {
-  fill: none;
-  stroke: color-mix(in srgb, var(--foreground) 14%, transparent);
-  stroke-width: 3;
   stroke-linecap: round;
 }
 .nb-coil-hole {

@@ -61,3 +61,28 @@ request. So no auth path can end up without a profile.
 - Clerk dashboard: enable **Google** under _User & Authentication → Social Connections_
   (and email/password name fields under _Personal information_). Dev uses Clerk's shared
   OAuth credentials; production needs your own Google OAuth client configured in Clerk.
+
+## Dev auth bypass
+
+A dev-only escape hatch to open the app **without signing in** — handy when iterating
+on UI you'd otherwise have to log in to reach. **Off by default.**
+
+- **Switch:** `DEV_AUTH_BYPASS` in the **root `.env`** (single source). Compose passes it
+  to the backend as `DEV_AUTH_BYPASS` and to the frontend as `VITE_DEV_AUTH_BYPASS`
+  (`docker-compose.override.yml`), so one value drives both.
+- **Backend** (`verifyJWT`): when `MODE=dev` **and** `DEV_AUTH_BYPASS=true`, Clerk is
+  skipped and every request authenticates as a fixed local user (id `dev-user`, role
+  `admin`, profile provisioned on first request). The `MODE=dev` guard means it can
+  **never** engage in prod, even if the var leaks into a prod env.
+- **Frontend** (`src/integrations/devAuth.ts`): when `import.meta.env.DEV` **and**
+  `VITE_DEV_AUTH_BYPASS=true`, `ProtectedRoute` skips the Clerk gate + onboarding check
+  and `AuthProvider` serves a synthetic admin `DEV_USER`. The `import.meta.env.DEV` guard
+  compiles it out of any prod build.
+- Clerk keys must still be present (the `ClerkProvider` stays mounted; the bypass only
+  skips the gate + token, it doesn't remove Clerk).
+- **Enable:** set `DEV_AUTH_BYPASS=true` in the root `.env`, then recreate the two app
+  containers so they re-read env:
+  `docker compose up -d --no-deps --force-recreate backend frontend`.
+- **Turn it OFF when done:** set it back to empty/`false` and recreate again. The backend
+  logs a loud `⚠️ DEV_AUTH_BYPASS is ON` warning at startup so an accidentally-left-on
+  bypass is obvious in the logs.

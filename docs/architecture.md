@@ -28,7 +28,7 @@ Dev runs plain HTTP; production runs HTTPS reading Let's Encrypt certs from
 
 `POST /api/search-notes` (`apis/notes/search-relevant-notes.ts`):
 
-1. Embed the user query with OpenAI `text-embedding-ada-002`.
+1. Embed the user query with `google/gemini-embedding-001` (via OpenRouter — `clients/embedding_client.ts`).
 2. Vector search the `notes` Qdrant collection, filtered to the requesting user
    (and any selected users for admins).
 3. Inject the retrieved notes into a system/user prompt and **stream** the answer

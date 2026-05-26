@@ -76,6 +76,23 @@ const enContent = {
   select_language: 'Language',
   ask_anything: 'Ask anything...',
   select_lang: 'Select Language',
+  // Collapsible label for the model's reasoning disclosure (see ReasoningCard).
+  chat_reasoning: 'Thoughts',
+  // Stable label for screen readers (the visible text rotates through chat_thinking_verbs).
+  chat_thinking: 'Lexi is thinking…',
+  // Playful "working" phrases shown one at a time, rotating randomly. See ThinkingIndicator.
+  chat_thinking_verbs: [
+    'Lexi is leafing through the notebooks',
+    'Lexi is rummaging through the drawers',
+    'Lexi is digging through your notes',
+    'Lexi is rubbing her chin',
+    'Lexi is scratching her head',
+    'Lexi is muttering to herself',
+    'Lexi is weighing her words',
+    'Lexi is poking around here and there',
+    'Lexi is sipping her coffee',
+    'Lexi is lost in thought',
+  ],
 };
 
 export const enTranslation = { ...enErrors, ...enSuccesses, ...enMenu, ...enContent };

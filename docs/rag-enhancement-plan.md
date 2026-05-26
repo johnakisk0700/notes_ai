@@ -319,7 +319,12 @@ Define OpenAI-style function tools (evolve the dead `tools` array at
   `selectedUsers`). The model never supplies `user_id`. This preserves today's tenancy
   guarantee (`search-relevant-notes.ts:28`).
 
-#### 2.2 The loop  **[proposed]**
+#### 2.2 The loop  **[done 2026-05-26 — via the AI SDK]**
+> Built on `streamText` + `stopWhen: stepCountIs(MAX_STEPS)` (the Vercel AI SDK loop, not a
+> raw Chat Completions loop). The final step drops tools via `prepareStep` (`toolChoice:'none'`)
+> to force an answer; `result.consumeStream()` keeps the turn persisting even if the client
+> disconnects. See `services/ai/agentic-rag.ts`. (The dedupe / context-budget guardrails below
+> remain open.)
 - **What:** `backend/services/ai/agentic_rag.ts` — a streaming Chat Completions loop:
   1. Seed messages: system prompt (persona "Λέξι" + grounding/citation/Greek rules + today's
      date), conversation history, the user turn. Pass `tools` + `tool_choice: "auto"`.
@@ -363,7 +368,10 @@ Define OpenAI-style function tools (evolve the dead `tools` array at
   guess without numbers.
 - **Verify:** a table comparing configs; decisions (1.1/1.3/2.3 model routing) are made from it.
 
-#### 3.2 Per-turn observability  **[proposed]**
+#### 3.2 Per-turn observability  **[partially done 2026-05-26]**
+> `onStepFinish` now logs each tool result + note count per step (pino), and cost still flows
+> to `kataskopos` (`services/ai/agentic-rag.ts`). Structured per-turn metrics (rounds,
+> latency, scores in a table/dashboard) remain open.
 - **What:** extend the existing cost tracking (`req.addCost` → `kataskopos` table) with
   `rounds`, `toolCalls`, retrieval latency, and model used. Log each tool call + top result
   scores (pino).
@@ -389,7 +397,12 @@ the `manual:` frame and a fade (`StreamChat.tsx:52-58`). Markdown support is bar
   `frontend/src/context/StreamChatContext.tsx` (`sendQuery` callbacks at `:139-183`).
 - **Verify:** during a turn, tool calls and tokens update independently and in order.
 
-#### 4.2 Tool-call & reasoning components  **[proposed]**
+#### 4.2 Tool-call & reasoning components  **[done 2026-05-26]**
+> Live: `components/Chat/ToolCallCard.tsx` (collapsible tool call: label + query + running/done
+> + note count) and `components/Chat/ReasoningCard.tsx` (the `ThinkingBlock` — collapsed
+> reasoning, fed by the server's `sendReasoning`). Both render inline in `ChatMessage` from the
+> AI SDK message `parts`, and persist across reloads (§4.5). Separately, a `ThinkingIndicator`
+> shows rotating "working" phrases while no answer text is streaming yet.
 - **What:** `ToolCallCard` (collapsible: tool name + a friendly label e.g. "🔎 Searching:
   '…'", a spinner while running, then a compact result summary — "7 notes" with the top
   titles/dates); `ThinkingBlock` (collapsible reasoning, collapsed by default);
@@ -410,13 +423,15 @@ the `manual:` frame and a fade (`StreamChat.tsx:52-58`). Markdown support is bar
   (NoteEditor) or scroll to it. A small remark/rehype plugin or a post-render pass.
 - **Verify:** clicking a citation opens the cited note.
 
-#### 4.5 Persist steps so reloaded threads still show tool calls  **[proposed]**
-- **What:** extend the Mongo embedded `Message` schema (`backend/model/mongo-db/Message.ts`)
-  with an optional `steps`/`toolCalls` array; persist alongside `content` in
-  `chat-threads.appendMessage`; hydrate them in `getThread` and on the client
-  (`StreamChatContext` hydrate effect `:64-100`).
-- **Why:** today only `{ role, content, timestamp }` is stored — reopening a thread would
-  lose the tool-call history.
+#### 4.5 Persist steps so reloaded threads still show tool calls  **[done 2026-05-26]**
+- **What (as built):** the Mongo `Message` schema (`backend/model/mongo-db/Message.ts`) gained
+  an optional `parts` (Mixed array) holding the full AI SDK UIMessage parts — rather than a
+  separate `steps`/`toolCalls` shape. Persisted in `chat-threads.appendMessage` from the
+  `responseMessage` that `createUIMessageStream`'s `onFinish` assembles (`agentic-rag.ts`),
+  returned by `getThread`, and hydrated on the client (`StreamChatContext` hydrate effect),
+  which falls back to a single text part from `content` for legacy/user messages.
+- **Why:** previously only `{ role, content, timestamp }` was stored — reopening a thread
+  lost the tool-call history.
 - **Verify:** reload `/thread/:id` → the tool cards from that turn are still there.
 
 > Note: `docs/improvement-plan.md` item #1 (sidebar showed fake threads) overlaps the chat
@@ -432,7 +447,8 @@ the `manual:` frame and a fade (`StreamChat.tsx:52-58`). Markdown support is bar
   `reembed-notes.ts`. **Re-embed required** (combine 1.1 + 1.4). Bump to `notes_v2` if dims change.
 - **`AI_MODELS`** (`ai_models.ts`) → extend `provider` union (`openrouter`/`deepinfra`/`zai`),
   add Qwen3.6 + GLM-5.1 with real costs (§2.4).
-- **Mongo `Message`** → optional `steps[]` (tool calls/results/thinking).
+- **Mongo `Message`** → optional `parts` (Mixed) holding the full UIMessage parts (text +
+  tool calls). **[done — §4.5]**
 - **Env** → add `OPENROUTER_API_KEY` (and later `DEEPINFRA_API_KEY` / `ZAI_API_KEY`).
   Update `.env`/compose + `docs/architecture.md`/`docs/data-stores.md`/this plan.
 - **Embedding model constant** shared by write + query paths so they never drift.

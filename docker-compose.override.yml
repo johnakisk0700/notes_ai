@@ -33,6 +33,8 @@ services:
       MODE: dev
       NODE_ENV: development
       WATCH_POLLING: ${WATCH_POLLING:-true}
+      # Dev-only login bypass — single switch in the root .env. See docs/auth.md.
+      DEV_AUTH_BYPASS: ${DEV_AUTH_BYPASS:-}
     # Polling → nodemon (bun --watch has no polling mode); native → bun --watch.
     command:
       - sh
@@ -53,6 +55,8 @@ services:
       VITE_API_DEV_URL: ${VITE_API_DEV_URL:-http://localhost:5100/api/}
       VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY:-}
       WATCH_POLLING: ${WATCH_POLLING:-true}
+      # Same dev-only login-bypass switch as the backend (root .env DEV_AUTH_BYPASS).
+      VITE_DEV_AUTH_BYPASS: ${DEV_AUTH_BYPASS:-}
     ports:
       - "127.0.0.1:5173:5173"
     volumes:

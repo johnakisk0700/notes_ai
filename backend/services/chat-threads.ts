@@ -27,7 +27,10 @@ export async function createThread(userId: string, title: string): Promise<{ id:
 export async function appendMessage(
   threadId: string,
   userId: string,
-  message: { role: ThreadMessageRole; content: string }
+  // `parts` carries the full AI SDK UIMessage parts (tool calls + text) for assistant
+  // turns; user turns pass `content` only. `metadata` holds the model + cost for the
+  // answer badge. All stored so the thread round-trips.
+  message: { role: ThreadMessageRole; content?: string; parts?: unknown[]; metadata?: unknown }
 ): Promise<void> {
   if (!mongoose.isValidObjectId(threadId)) return;
   await UserThread.updateOne(
@@ -65,7 +68,12 @@ export async function getThread(threadId: string, userId: string): Promise<Threa
     messages: (doc.messages ?? []).map((m: any) => ({
       id: String(m._id),
       role: m.role,
-      content: m.content,
+      content: m.content ?? "",
+      // Present for assistant turns (tool steps + text); absent for plain user text,
+      // where the client falls back to rendering `content`.
+      parts: Array.isArray(m.parts) && m.parts.length ? m.parts : undefined,
+      // Model + cost for the answer badge (assistant turns only).
+      metadata: m.metadata ?? undefined,
       timestamp: toIso(m.timestamp),
     })),
   };
