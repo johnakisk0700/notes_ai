@@ -1,11 +1,11 @@
 {
   "mcpServers": {
     "shadcn": {
-      "command": "npx",
-      "args": ["-y", "shadcn@latest", "mcp"]
+      "command": "bunx",
+      "args": ["shadcn@latest", "mcp", "--cwd", "frontend"]
     },
     "context7": {
-      "command": "npx",
+      "command": "bunx",
       "args": ["-y", "@upstash/context7-mcp"]
     }
   }
