@@ -1,65 +1,129 @@
-import { fetchApi } from '@/integrations/api';
+import { useChat } from '@ai-sdk/react';
+import { DefaultChatTransport, type UIMessage } from 'ai';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useLocation, useNavigate } from 'react-router';
+import { BASE_URL, getClerkToken } from '@/integrations/api';
 import { fetchThread } from '@/integrations/threads';
 import { getNowToLocalISOString } from '@/utils/getNowToLocalISOString';
-import { handleStreamProcessing } from '@/utils/handleStreamProcessing';
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useTranslation } from 'react-i18next';
-import { useLocation, useNavigate } from 'react-router';
 import { useThreads } from './ThreadsContext';
+import {
+  DEFAULT_CHAT_MODEL,
+  DEFAULT_REASONING_EFFORT,
+  isChatModelId,
+  isReasoningEffort,
+  type ChatModelId,
+  type ReasoningEffort,
+} from '@shared/ai/chatModels';
 
-export interface Message {
-  id: string;
-  content: string;
-  isUser: boolean;
-  timestamp: Date;
-}
+// The chat now rides the AI SDK UI message stream: messages carry typed `parts`
+// (text + `tool-<name>` tool calls), so the UI can show the agent's tool use.
+export type AppUIMessage = UIMessage;
 
 interface StreamChatContextType {
-  sendQuery: (query: string, setQuery?: any, selectedUsers?: string[]) => Promise<void>;
-  retryMessage: (messageId: string) => Promise<void>;
-  editMessage: (newMessage: Message) => Promise<void>;
+  sendQuery: (query: string, setQuery?: (value: string) => void, selectedUsers?: string[]) => Promise<void>;
+  retryMessage: (messageId: string) => void;
+  editMessage: (messageId: string, newText: string) => void;
   stopTextStream: () => void;
-  messages: Message[];
-  setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
+  messages: AppUIMessage[];
   isStreaming: boolean;
-  streamText: string;
-  statusUpdate: string;
+  model: ChatModelId;
+  setModel: (model: ChatModelId) => void;
+  effort: ReasoningEffort;
+  setEffort: (effort: ReasoningEffort) => void;
 }
 
 const StreamChatContext = createContext<StreamChatContextType | undefined>(undefined);
 
-interface StreamChatProviderProps {
-  children: ReactNode;
+/** Concatenated text of a message's text parts (ignores tool/reasoning parts). */
+function textOf(message: AppUIMessage): string {
+  return message.parts
+    .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+    .map(p => p.text)
+    .join('');
 }
 
-export const StreamChatProvider = ({ children }: StreamChatProviderProps) => {
-  const { t } = useTranslation();
+export const StreamChatProvider = ({ children }: { children: ReactNode }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { refresh: refreshThreads } = useThreads();
 
-  // Active thread id from the URL (/thread/:id). Derived from pathname rather
-  // than useParams so it works from this provider, which sits above the param
-  // route (see ChatLayout in App.tsx).
+  // Active thread id from the URL (/thread/:id). Derived from pathname rather than
+  // useParams so it works from this provider, which sits above the param route.
   const routeThreadId = useMemo(() => {
     const m = location.pathname.match(/^\/thread\/([^/]+)/);
     return m ? decodeURIComponent(m[1]) : undefined;
   }, [location.pathname]);
 
-  // Status update for manually setting the status of the processing from backend
-  const [statusUpdate, setStatusUpdate] = useState('');
-
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [streamText, setStreamText] = useState('');
-  const [messages, setMessages] = useState<Message[] | []>([]);
-  const [threadId, setThreadId] = useState<string | undefined>(undefined);
-
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const streamTextRef = useRef(''); // Add ref to track accumulated text
-  // Which thread's messages are currently in state. A ref (not state) so the
-  // hydrate effect can compare synchronously and skip refetching a thread we
-  // just created locally mid-stream.
+  // Values the transport reads at send time, and a guard so the hydrate effect
+  // doesn't refetch a thread we just created locally mid-stream.
+  const threadIdRef = useRef<string | undefined>(undefined);
+  const selectedUsersRef = useRef<string[]>([]);
   const loadedThreadRef = useRef<string | undefined>(undefined);
+
+  // Selected chat model, persisted to localStorage. A ref mirrors it so the memoized
+  // transport body always sends the current choice without re-creating the transport.
+  const [model, setModelState] = useState<ChatModelId>(() => {
+    const saved = localStorage.getItem('chat_model');
+    return isChatModelId(saved) ? saved : DEFAULT_CHAT_MODEL;
+  });
+  const modelRef = useRef(model);
+  const setModel = (next: ChatModelId) => {
+    modelRef.current = next;
+    setModelState(next);
+    localStorage.setItem('chat_model', next);
+  };
+
+  // Reasoning effort, same persisted-state + ref pattern as the model.
+  const [effort, setEffortState] = useState<ReasoningEffort>(() => {
+    const saved = localStorage.getItem('chat_effort');
+    return isReasoningEffort(saved) ? saved : DEFAULT_REASONING_EFFORT;
+  });
+  const effortRef = useRef(effort);
+  const setEffort = (next: ReasoningEffort) => {
+    effortRef.current = next;
+    setEffortState(next);
+    localStorage.setItem('chat_effort', next);
+  };
+
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: `${BASE_URL}search-notes`,
+        // Custom fetch injects the (async) Clerk bearer token + credentials per request.
+        fetch: (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+          const token = await getClerkToken();
+          const headers = new Headers(init?.headers);
+          if (token) headers.set('Authorization', `Bearer ${token}`);
+          return fetch(input, { ...init, headers, credentials: 'include' });
+        }) as typeof globalThis.fetch,
+        body: () => ({
+          threadId: threadIdRef.current,
+          selectedUsers: selectedUsersRef.current,
+          model: modelRef.current,
+          effort: effortRef.current,
+          now: getNowToLocalISOString(),
+        }),
+      }),
+    []
+  );
+
+  const { messages, sendMessage, status, stop, setMessages } = useChat({
+    transport,
+    onData: dataPart => {
+      // First message of a new chat: the server streams back the created thread id.
+      if (dataPart.type === 'data-thread') {
+        const id = (dataPart.data as { id?: string } | undefined)?.id;
+        if (id) {
+          threadIdRef.current = id;
+          loadedThreadRef.current = id; // adopt it so the hydrate effect won't refetch
+          navigate(`/thread/${id}`, { replace: true });
+          refreshThreads();
+        }
+      }
+    },
+  });
+
+  const isStreaming = status === 'streaming' || status === 'submitted';
 
   // Hydrate (or reset) the conversation when the active /thread/:id changes.
   useEffect(() => {
@@ -67,7 +131,7 @@ export const StreamChatProvider = ({ children }: StreamChatProviderProps) => {
       // Root "/" = new chat: clear unless already empty.
       if (loadedThreadRef.current !== undefined) {
         loadedThreadRef.current = undefined;
-        setThreadId(undefined);
+        threadIdRef.current = undefined;
         setMessages([]);
       }
       return;
@@ -77,7 +141,7 @@ export const StreamChatProvider = ({ children }: StreamChatProviderProps) => {
 
     let cancelled = false;
     loadedThreadRef.current = routeThreadId;
-    setThreadId(routeThreadId);
+    threadIdRef.current = routeThreadId;
     (async () => {
       try {
         const detail = await fetchThread(routeThreadId);
@@ -85,10 +149,9 @@ export const StreamChatProvider = ({ children }: StreamChatProviderProps) => {
         setMessages(
           detail.messages.map(m => ({
             id: m.id,
-            content: m.content,
-            isUser: m.role === 'user',
-            timestamp: new Date(m.timestamp),
-          }))
+            role: m.role === 'user' ? 'user' : 'assistant',
+            parts: [{ type: 'text', text: m.content }],
+          })) as AppUIMessage[]
         );
       } catch {
         if (!cancelled) setMessages([]);
@@ -97,146 +160,37 @@ export const StreamChatProvider = ({ children }: StreamChatProviderProps) => {
     return () => {
       cancelled = true;
     };
-  }, [routeThreadId]);
+  }, [routeThreadId, setMessages]);
 
-  const sendQuery = async (query: string, setQuery?: any, selectedUsers?: string[]) => {
-    if (!query.trim()) return;
-
-    if (setQuery) setQuery('');
-    const userMessage = {
-      id: Date.now().toString(),
-      content: query.trim(),
-      isUser: true,
-      timestamp: new Date(),
-    };
-    setMessages(prev => [...prev, userMessage]); // Add user message to chat
-
-    try {
-      setIsStreaming(true); // Streaming starts now
-      streamTextRef.current = ''; // Reset the ref
-      abortControllerRef.current = new AbortController(); // Create a new AbortController for this request
-      const response = await fetchApi('search-notes', {
-        method: 'POST',
-        body: {
-          query: query.trim(), // Use the trimmed query
-          previousQueries: messages.map(msg => ({
-            role: msg.isUser ? 'user' : 'assistant',
-            content: msg.content,
-          })),
-          selectedUsers,
-          now: getNowToLocalISOString(),
-          threadId, // undefined for a new chat; server creates one and streams its id back
-        },
-        signal: abortControllerRef.current!.signal,
-      });
-
-      if (!response.body) {
-        throw new Error('Response body is null');
-      }
-
-      const reader = response.body.getReader();
-
-      await handleStreamProcessing(reader, {
-        onThreadEvent: newThreadId => {
-          // First message of a new chat: adopt the server's id and route to it.
-          // ChatLayout keeps this provider mounted, so the in-flight stream
-          // survives the navigation; refresh the sidebar to show the new thread.
-          loadedThreadRef.current = newThreadId;
-          setThreadId(newThreadId);
-          navigate(`/thread/${newThreadId}`, { replace: true });
-          refreshThreads();
-        },
-        onData: data => {
-          setStatusUpdate('');
-          streamTextRef.current += data; // Update ref
-          setStreamText(streamTextRef.current); // Update state
-        },
-        onManualEvent: (manualData: string) => {
-          setStatusUpdate(manualData);
-        },
-        onErrorEvent: errorMessage => {
-          setIsStreaming(false);
-          setMessages(prev => [
-            ...prev,
-            {
-              id: Date.now().toString(),
-              content: `${streamTextRef.current}\nStream error: ${errorMessage}`,
-              isUser: false,
-              timestamp: new Date(),
-            },
-          ]);
-          setStreamText('');
-          streamTextRef.current = '';
-        },
-        onDoneEvent: () => {
-          const newMsg: Message = {
-            id: Date.now().toString(),
-            content: streamTextRef.current.trim(),
-            isUser: false,
-            timestamp: new Date(),
-          };
-          setMessages(prev => [...prev, { ...newMsg, isTemp: false, timestamp: new Date() }]);
-          setIsStreaming(false);
-          setStreamText('');
-          streamTextRef.current = '';
-        },
-      });
-    } catch (error) {
-      const userMessage =
-        error instanceof Error && error.name === 'AbortError'
-          ? streamTextRef.current + '\n\n' + t('aborted')
-          : streamTextRef.current + '\n\n' + t('generic_error');
-
-      setMessages(prev => [
-        ...prev,
-        {
-          id: Date.now().toString(),
-          content: userMessage,
-          isUser: false,
-          timestamp: new Date(),
-        },
-      ]);
-      setStreamText('');
-      streamTextRef.current = '';
-    } finally {
-      setIsStreaming(false);
-    }
+  const sendQuery = async (query: string, setQuery?: (value: string) => void, selectedUsers?: string[]) => {
+    if (!query.trim() || isStreaming) return;
+    selectedUsersRef.current = selectedUsers ?? [];
+    setQuery?.('');
+    await sendMessage({ text: query.trim() });
   };
 
   const stopTextStream = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
+    stop();
   };
 
-  const retryMessage = async (messageId: string) => {
-    const retryMsgIdx = messages.findIndex(msg => msg.id === messageId);
-    const previousUserMsg = messages[retryMsgIdx - 1];
-    const newMessages = messages.slice(0, retryMsgIdx - 1);
-    setMessages(newMessages);
-    await sendQuery(previousUserMsg.content);
+  // Re-run the user turn that produced `messageId` (the assistant reply just above it).
+  const retryMessage = (messageId: string) => {
+    const idx = messages.findIndex(m => m.id === messageId);
+    if (idx < 1) return;
+    const prevUser = messages[idx - 1];
+    if (prevUser.role !== 'user') return;
+    const text = textOf(prevUser);
+    setMessages(messages.slice(0, idx - 1));
+    void sendMessage({ text });
   };
 
-  const editMessage = async (newMessage: Message) => {
-    const editMsgIdx = messages.findIndex(msg => msg.id === newMessage.id);
-
-    let newMessages: Message[] = [];
-    if (editMsgIdx !== 0) {
-      newMessages = messages.slice(0, editMsgIdx - 1);
-    }
-    setMessages(newMessages);
-    await sendQuery(newMessage.content);
+  // Replace a user message with edited text and re-run from there.
+  const editMessage = (messageId: string, newText: string) => {
+    const idx = messages.findIndex(m => m.id === messageId);
+    if (idx < 0) return;
+    setMessages(messages.slice(0, idx));
+    void sendMessage({ text: newText });
   };
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        abortControllerRef.current = null; // Clean up ref on unmount
-      }
-    };
-  }, []);
 
   const value: StreamChatContextType = {
     sendQuery,
@@ -244,10 +198,11 @@ export const StreamChatProvider = ({ children }: StreamChatProviderProps) => {
     editMessage,
     stopTextStream,
     messages,
-    setMessages,
     isStreaming,
-    streamText,
-    statusUpdate,
+    model,
+    setModel,
+    effort,
+    setEffort,
   };
 
   return <StreamChatContext.Provider value={value}>{children}</StreamChatContext.Provider>;

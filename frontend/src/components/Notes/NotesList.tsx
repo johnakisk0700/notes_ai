@@ -4,6 +4,7 @@ import React from 'react';
 import { toast } from 'sonner';
 import { NoteComponent } from './NoteComponent';
 import { useTranslation } from 'react-i18next';
+import { PageRule } from '../Common/PageRule';
 
 const NotesList: React.FC = () => {
   const { t } = useTranslation();
@@ -21,7 +22,8 @@ const NotesList: React.FC = () => {
     }
   };
   return (
-    <div className="flex flex-col gap-3 pb-24 shrink-0 w-full max-w-5xl mx-auto  ">
+    <div className="flex flex-col gap-3 pb-24 shrink-0 w-full max-w-5xl mx-auto px-1">
+      <PageRule label={t('personal_notes')} />
       {filteredNotes?.map(note => (
         <NoteComponent key={note.id} note={note} handleDelete={handleDelete} />
       ))}

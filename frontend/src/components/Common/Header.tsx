@@ -9,7 +9,7 @@ export const Header = () => {
   return (
     <div
       className={cn(
-        'z-50 h-14 relative p-2.5 rounded-2xl grid xl:grid-cols-[auto_minmax(0,1fr)_auto] gap-2 max-w-full items-center',
+        'z-50 h-14 relative p-2.5 rounded-lg grid xl:grid-cols-[auto_minmax(0,1fr)_auto] gap-2 max-w-full items-center',
         css
       )}
     >

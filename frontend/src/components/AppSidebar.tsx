@@ -29,13 +29,13 @@ export function AppSidebar() {
         {
           title: t('personal_notes'),
           description: t('personal_notes_description'),
-          icon: <Notebook className="h-6 w-6" />,
+          icon: <Notebook className="size-5" />,
           url: '/notes',
         },
         {
           title: t('ai_assistant'),
           description: t('ai_assistant_description'),
-          icon: <Bot className="h-6 w-6" />,
+          icon: <Bot className="size-5" />,
           url: '/',
         },
       ],
@@ -43,14 +43,14 @@ export function AppSidebar() {
         {
           title: t('admin_notes'),
           description: t('admin_notes_description'),
-          icon: <MessageCircle className="h-6 w-6" />,
+          icon: <MessageCircle className="size-5" />,
           url: '/admin/notes',
           adminOnly: true,
         },
         {
           title: t('user_management'),
           description: t('user_management_description'),
-          icon: <Users className="h-6 w-6" />,
+          icon: <Users className="size-5" />,
           url: '/admin/users',
           adminOnly: true,
         },
@@ -94,9 +94,9 @@ export function AppSidebar() {
       <SidebarHeader>
         <SidebarGroupContent>
           <div className="flex justify-between items-center mb-2 px-1">
-            <div className="font-bold text-lg">MySert AI</div>
+            <div className="font-serif text-xl tracking-tight">Mneme</div>
             <Button variant="ghost" asChild>
-              <NavLink to={'/settings'} className="h-fit grid py-3 text-base" onClick={() => handleNavigation()}>
+              <NavLink to={'/settings'} className="h-fit grid py-2.5 text-sm" onClick={() => handleNavigation()}>
                 <Cog />
               </NavLink>
             </Button>
@@ -109,7 +109,7 @@ export function AppSidebar() {
           {isAdmin && (
             <Collapsible className="mb-2">
               <CollapsibleTrigger asChild>
-                <Button className="w-full justify-between font-black bg-destructive/25" size="lg" variant="secondary">
+                <Button className="w-full justify-between font-semibold bg-destructive/20" size="lg" variant="secondary">
                   {t('administration')} <ChevronsUpDownIcon />
                 </Button>
               </CollapsibleTrigger>
@@ -120,7 +120,7 @@ export function AppSidebar() {
                       <SidebarMenuButton asChild>
                         <NavLink
                           to={item.url}
-                          className="h-fit grid py-3 text-base"
+                          className="h-fit grid py-2.5 text-sm"
                           onClick={() => handleNavigation(item.url)}
                         >
                           <div className="flex items-center gap-2">
@@ -144,7 +144,7 @@ export function AppSidebar() {
                 <SidebarMenuButton asChild>
                   <NavLink
                     to={item.url}
-                    className="h-fit grid py-3 text-base transition-all"
+                    className="h-fit grid py-2.5 text-sm transition-all"
                     onClick={() => handleNavigation(item.url)}
                   >
                     <div className="flex items-center gap-2">

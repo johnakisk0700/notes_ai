@@ -1,7 +1,5 @@
-import { useFadeInOut } from '@/hooks/useFadeInOut';
 import { useEffect, useRef } from 'react';
 import { ChatMessage } from './ChatMessage';
-import { CustomMarkdown } from './CustomMarkdown';
 import { useStreamChat } from '@/context/StreamChatContext';
 
 interface StreamChatProps {
@@ -10,51 +8,42 @@ interface StreamChatProps {
 }
 
 export const StreamChat = ({ aiMessageHeight, onAIContainerReady }: StreamChatProps) => {
-  const { streamText, messages, isStreaming, statusUpdate } = useStreamChat();
+  const { messages, isStreaming } = useStreamChat();
 
-  const statusFade = useFadeInOut(statusUpdate, 300);
   const aiContainerRef = useRef<HTMLDivElement>(null);
   const hasCalledReadyRef = useRef<boolean>(false);
 
-  // Reset the flag when streaming stops
+  // Reset the flag when streaming stops.
   useEffect(() => {
-    if (!isStreaming) {
-      hasCalledReadyRef.current = false;
-    }
+    if (!isStreaming) hasCalledReadyRef.current = false;
   }, [isStreaming]);
 
-  // Notify parent when AI container gets its height - only once per streaming session
+  // Notify the parent once per streaming session so it can reserve space + scroll
+  // the user's question to the top while Lexi works.
   useEffect(() => {
-    if (
-      isStreaming &&
-      aiContainerRef.current &&
-      aiMessageHeight !== 'auto' &&
-      onAIContainerReady &&
-      !hasCalledReadyRef.current
-    ) {
+    if (isStreaming && aiMessageHeight !== 'auto' && onAIContainerReady && !hasCalledReadyRef.current) {
       hasCalledReadyRef.current = true;
-      // Use requestAnimationFrame to ensure the height is applied
-      requestAnimationFrame(() => {
-        onAIContainerReady();
-      });
+      requestAnimationFrame(() => onAIContainerReady());
     }
   }, [isStreaming, aiMessageHeight, onAIContainerReady]);
 
+  const last = messages[messages.length - 1];
+  // While streaming, the assistant reply IS the last message and grows in place.
+  // Before its first token arrives, show a placeholder that reserves the height.
+  const awaitingAssistant = isStreaming && (!last || last.role === 'user');
+
   return (
-    <div className="flex flex-col p-1.5 pt-3 gap-2">
+    <div className="flex flex-col gap-3 p-1.5 pt-3">
       {messages.map((message, i) => (
         <ChatMessage
           message={message}
           key={message.id}
-          style={{ minHeight: i === messages.length - 1 && !message.isUser ? aiMessageHeight : '' }}
+          style={{ minHeight: i === messages.length - 1 && message.role !== 'user' ? aiMessageHeight : '' }}
         />
       ))}
-      {isStreaming && (streamText || statusUpdate) ? (
-        <div ref={aiContainerRef} className="" style={{ minHeight: aiMessageHeight }}>
-          {statusUpdate ? <div style={statusFade.style}>{statusFade.displayValue}</div> : null}
-          <div className="prose prose-sm max-w-none">
-            <CustomMarkdown>{streamText}</CustomMarkdown>
-          </div>
+      {awaitingAssistant ? (
+        <div ref={aiContainerRef} style={{ minHeight: aiMessageHeight }} className="chat-md max-w-none">
+          <span className="inline-block animate-pulse font-mono text-xs text-muted-foreground">…</span>
         </div>
       ) : null}
     </div>

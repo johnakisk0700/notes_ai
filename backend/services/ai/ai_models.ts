@@ -17,10 +17,13 @@ export type ModelNames =
   | "claude-3-7-sonnet-latest"
   | "claude-3-5-haiku-latest"
   | "accounts/fireworks/models/llama4-maverick-instruct-basic"
-  | "accounts/fireworks/models/qwen3-235b-a22b";
+  | "accounts/fireworks/models/qwen3-235b-a22b"
+  // Agentic chat (AI SDK) models, reached OpenAI-compatibly via OpenRouter.
+  | "qwen/qwen3.6-plus"
+  | "z-ai/glm-5.1";
 
 export interface ModelInfo {
-  provider: "gpt" | "claude" | "fireworks-ai" | "deepseek" | "azure-openai";
+  provider: "gpt" | "claude" | "fireworks-ai" | "deepseek" | "azure-openai" | "openrouter";
   inputCost: Decimal;
   outputCost: Decimal;
 }
@@ -110,5 +113,18 @@ export const AI_MODELS: ModelsMap = {
     provider: "fireworks-ai",
     inputCost: new Decimal(0),
     outputCost: new Decimal(0),
+  },
+
+  // Qwen3.6-Plus via OpenRouter — $0.325 / $1.95 per 1M tokens.
+  "qwen/qwen3.6-plus": {
+    provider: "openrouter",
+    inputCost: new Decimal(0.000000325),
+    outputCost: new Decimal(0.00000195),
+  },
+  // GLM-5.1 via OpenRouter — $0.98 / $3.08 per 1M tokens.
+  "z-ai/glm-5.1": {
+    provider: "openrouter",
+    inputCost: new Decimal(0.00000098),
+    outputCost: new Decimal(0.00000308),
   },
 };

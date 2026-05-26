@@ -1,13 +1,13 @@
 import { useStreamChat } from '@/context/StreamChatContext';
-import type { Message } from '@/context/StreamChatContext';
-import { cn } from '@/lib/utils';
+import type { AppUIMessage } from '@/context/StreamChatContext';
 import { Check, CopyIcon, EditIcon, RefreshCcw, X } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../ui/button';
 import { CustomMarkdown } from './CustomMarkdown';
+import { ToolCallCard } from './ToolCallCard';
 
 interface ChatMessageProps {
-  message: Message;
+  message: AppUIMessage;
   style?: React.CSSProperties;
 }
 
@@ -16,71 +16,82 @@ interface MessageActionsProps {
   messageId: string;
 }
 
+/** Concatenated text of a message's text parts. */
+function textOf(message: AppUIMessage): string {
+  return message.parts
+    .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+    .map(p => p.text)
+    .join('');
+}
+
 export const ChatMessage = ({ message, style }: ChatMessageProps) => {
-  const { isUser, id, content } = message;
-  if (isUser) return <UserMessage message={message} style={style} />;
-  return <AIMessage content={content} messageId={id} style={style} />;
+  if (message.role === 'user') return <UserMessage message={message} />;
+  return <AIMessage message={message} style={style} />;
 };
 
-const UserMessage = ({ message, style }: { message: Message; style?: React.CSSProperties }) => {
-  const { isUser, id, content } = message;
+const UserMessage = ({ message }: { message: AppUIMessage }) => {
+  const content = textOf(message);
 
   const [editMode, setEditMode] = useState(false);
   const [newContent, setNewContent] = useState(content);
   const { editMessage } = useStreamChat();
-  const outerCss = 'flex items-center self-end w-fit max-w-[90%] gap-2';
+
   if (editMode)
     return (
-      <div className={cn(outerCss, 'w-full flex-col')}>
+      <div className="flex w-full flex-col items-end gap-2 self-end">
         <textarea
-          className="bg-primary/10 p-2.5 rounded-lg focus-visible:border-0 outline-none resize-none w-full h-full"
+          className="w-full resize-none rounded-md border border-border bg-card/60 p-2.5 text-sm outline-none focus-visible:border-primary/60"
           value={newContent}
           onChange={e => setNewContent(e.target.value)}
         />
-        <div className="w-fit flex gap-2 self-end">
+        <div className="flex gap-1 self-end">
           <Button
             variant="ghost"
-            className="block"
+            size="icon-xs"
             onClick={() => {
-              editMessage({
-                ...message,
-                content: newContent,
-                timestamp: new Date(),
-              });
+              editMessage(message.id, newContent);
               setEditMode(false);
             }}
           >
             <Check />
           </Button>
-          <Button variant="ghost" className="block" onClick={() => setEditMode(false)}>
+          <Button variant="ghost" size="icon-xs" onClick={() => setEditMode(false)}>
             <X />
           </Button>
         </div>
       </div>
     );
+
+  // The question: no bubble — just the one approved skeuomorphic touch, an ink
+  // margin rule down its left edge, set in the UI sans (vs. Lexi's serif reply).
   return (
-    <div className={outerCss} id={message.id}>
+    <div className="group flex w-fit max-w-[85%] items-start gap-1 self-end" id={message.id}>
       <UserMessageActions setEditMode={setEditMode} />
-      <div className="bg-primary/10 p-2.5 rounded-lg">{content}</div>
+      <div className="whitespace-pre-wrap border-l-2 border-primary py-0.5 pl-2.5 text-sm text-foreground/90">
+        {content}
+      </div>
     </div>
   );
 };
 
-const AIMessage = ({
-  content,
-  messageId,
-  style,
-}: {
-  content: string;
-  messageId: string;
-  style?: React.CSSProperties;
-}) => {
+const AIMessage = ({ message, style }: { message: AppUIMessage; style?: React.CSSProperties }) => {
   return (
-    <div style={style} id={messageId}>
-      <div className="prose prose-sm max-w-none">
-        <CustomMarkdown>{content}</CustomMarkdown>
-      </div>
-      <AiMessageActions content={content} messageId={messageId} />
+    <div style={style} id={message.id}>
+      {message.parts.map((part, i) => {
+        if (part.type === 'text') {
+          return (
+            <div key={i} className="chat-md max-w-none">
+              <CustomMarkdown>{part.text}</CustomMarkdown>
+            </div>
+          );
+        }
+        // Tool calls (tool-search_notes, tool-list_recent_notes, …) → collapsible card.
+        if (part.type.startsWith('tool-')) {
+          return <ToolCallCard key={i} part={part} />;
+        }
+        return null;
+      })}
+      <AiMessageActions content={textOf(message)} messageId={message.id} />
     </div>
   );
 };
@@ -96,21 +107,21 @@ const AiMessageActions = ({ content, messageId }: MessageActionsProps) => {
   };
 
   return (
-    <div className="flex gap-1 mt-2 text-foreground/50">
-      <Button variant="ghost" size="sm" onClick={handleCopy}>
-        {copied ? <Check /> : <CopyIcon />}
+    <div className="mt-1.5 flex gap-0.5 text-muted-foreground">
+      <Button variant="ghost" size="icon-xs" onClick={handleCopy}>
+        {copied ? <Check className="text-primary" /> : <CopyIcon />}
       </Button>
-      <Button variant="ghost" size="sm" onClick={() => retryMessage(messageId)}>
+      <Button variant="ghost" size="icon-xs" onClick={() => retryMessage(messageId)}>
         <RefreshCcw />
       </Button>
     </div>
   );
 };
 
-const UserMessageActions = ({ setEditMode }) => {
+const UserMessageActions = ({ setEditMode }: { setEditMode: (v: boolean) => void }) => {
   return (
-    <div className="text-foreground/50">
-      <Button variant="ghost" size="sm" onClick={() => setEditMode(true)}>
+    <div className="text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
+      <Button variant="ghost" size="icon-xs" onClick={() => setEditMode(true)}>
         <EditIcon />
       </Button>
     </div>

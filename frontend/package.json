@@ -14,6 +14,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@ai-sdk/react": "^3.0.193",
     "@clerk/clerk-react": "^5.61.3",
     "@tailwindcss/vite": "^4.3.0",
     "@tiptap/core": "^3",
@@ -27,6 +28,7 @@
     "@tiptap/react": "^3",
     "@tiptap/starter-kit": "^3",
     "@tiptap/suggestion": "^3",
+    "ai": "^6.0.191",
     "axios": "^1.16.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -36,6 +38,7 @@
     "i18next": "^26.2.0",
     "lodash": "^4.18.1",
     "lucide-react": "^1.16.0",
+    "mermaid": "^11.15.0",
     "next-themes": "^0.4.6",
     "radix-ui": "^1.4.3",
     "react": "^19.2.6",
@@ -46,6 +49,9 @@
     "react-markdown": "^10.1.0",
     "react-router": "^7.15.1",
     "react-spinners": "^0.17.0",
+    "rehype-highlight": "^7.0.2",
+    "rehype-raw": "^7.0.0",
+    "rehype-sanitize": "^6.0.0",
     "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.1",
     "sonner": "^2.0.7",

@@ -270,7 +270,7 @@ const EditorCore = () => {
           <Popover open={isReminderOpen} onOpenChange={setIsReminderOpen}>
             <PopoverTrigger asChild>
               {isReminderSet ? (
-                <Button variant="secondary" size="sm" className="gap-1.5 bg-sky-200/50 text-xs dark:bg-sky-900/35">
+                <Button variant="secondary" size="sm" className="gap-1.5 bg-highlight/30 text-xs dark:bg-highlight/25">
                   <Bell className="size-3.5" />
                   {format(selectedDate, 'PP')}, {selectedTime}
                 </Button>
@@ -307,7 +307,7 @@ const EditorCore = () => {
                   <>
                     <Separator />
                     <div className="flex justify-between">
-                      <div className="text-accent">Set for: </div>
+                      <div className="text-muted-foreground">Set for: </div>
                       {format(selectedDate, 'PPP')}, {selectedTime}
                     </div>
                   </>

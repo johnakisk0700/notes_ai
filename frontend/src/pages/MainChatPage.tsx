@@ -5,13 +5,18 @@ import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 export const MainChatPage: React.FC = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const today = new Date().toLocaleDateString(i18n.language === 'en' ? 'en-US' : 'el-GR', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  });
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [userMessageHeight, setUserMessageHeight] = useState<number>(0);
   const [initialViewportHeight, setInitialViewportHeight] = useState<number>(0);
 
-  const { statusUpdate, messages, streamText, isStreaming, sendQuery, stopTextStream } = useStreamChat();
+  const { messages, isStreaming, sendQuery, stopTextStream } = useStreamChat();
 
   // Capture initial viewport height on mount
   useLayoutEffect(() => {
@@ -23,7 +28,7 @@ export const MainChatPage: React.FC = () => {
     if (messages.length === 0) return;
 
     const lastMessage = messages[messages.length - 1];
-    if (!lastMessage.isUser) return;
+    if (lastMessage.role !== 'user') return;
 
     const userMessageElement = document.getElementById(lastMessage.id);
     if (userMessageElement) {
@@ -37,7 +42,7 @@ export const MainChatPage: React.FC = () => {
     if (messages.length === 0) return;
 
     const lastMessage = messages[messages.length - 1];
-    if (!lastMessage.isUser) return;
+    if (lastMessage.role !== 'user') return;
 
     const userMessageElement = document.getElementById(lastMessage.id);
     if (userMessageElement && scrollContainerRef.current) {
@@ -69,10 +74,13 @@ export const MainChatPage: React.FC = () => {
     <>
       <div
         ref={scrollContainerRef}
-        className="absolute bottom-0 left-0 overflow-y-scroll max-h-full scrollbar-thin top-0 w-full pb-32 pl-[8px] text-sm"
+        className="nb-paper absolute bottom-0 left-0 overflow-y-scroll max-h-full scrollbar-thin top-0 w-full pb-32 pl-[8px] text-sm"
       >
         <div className="min-h-[calc(100dvh-10rem)] mx-auto max-w-4xl w-full top-0 relative ">
-          <div className="mt-6 mb-4 text-xs text-stone-500 mx-auto w-fit">{t('chat_tips')}</div>
+          <header className="mx-auto mb-3 mt-4 flex w-full max-w-3xl items-baseline justify-between gap-3 border-b border-border/70 pb-2">
+            <span className="truncate font-mono text-xs text-muted-foreground">{t('chat_tips')}</span>
+            <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground/70">{today}</span>
+          </header>
           <StreamChat aiMessageHeight={calculateAIMessageHeight} onAIContainerReady={handleAIContainerReady} />
         </div>
       </div>

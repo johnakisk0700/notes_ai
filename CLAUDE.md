@@ -70,21 +70,29 @@ See the `docker-compose.yml` header. Compose files: `docker-compose.yml` (base) 
 ```
 frontend (axios, Bearer token) ─► backend /api/* ─► Postgres (notes/reminders/profiles)
                                        │
-                                       ├─► OpenAI (embeddings) + GPT/Claude/Fireworks (streamed chat)
+                                       ├─► OpenAI (embeddings) + OpenRouter Qwen3.6-Plus/GLM-5.1 (agentic streamed chat via AI SDK)
                                        ├─► Qdrant (vector search over note embeddings)
                                        └─► MongoDB (chat threads/messages)
 ```
 
 - Server forks a worker per 2 CPUs (`cluster`). Dev = plain HTTP, prod = HTTPS
   with Let's Encrypt certs. Entry: `backend/server.ts` (all routes registered here).
-- Chat flow: `POST /api/search-notes` embeds the query, vector-searches the user's
-  notes in Qdrant, then streams the answer (GPT by default; Claude/Fireworks also
-  wired in `services/ai/ai_models.ts`). The turn is persisted to a Mongo thread
-  (created on the first message; its id is streamed back via an `event: thread`
-  frame so the client can route to `/thread/:id`). `GET /api/get-threads` /
-  `GET /api/get-thread` / `POST /api/delete-thread` back the sidebar + history.
-  See `backend/apis/notes/search-relevant-notes.ts`, `backend/services/chat-threads.ts`,
-  and `backend/services/ai/ai_chat.ts`.
+- Chat flow (agentic RAG on the Vercel AI SDK): `POST /api/search-notes` runs a streaming
+  multi-step tool loop (`streamText` + `stopWhen`) where the model calls note-retrieval
+  tools (`search_notes`, `list_recent_notes` — `services/ai/notes-tools.ts`), reads the
+  results, and answers grounded in them. Default model **Qwen3.6-Plus via OpenRouter** when
+  `OPENROUTER_API_KEY` is set, else **gpt-5-mini** on `OPENAI_API_KEY` (`clients/llm_providers.ts`).
+  Streamed as an AI SDK UI message stream (text + `tool-*` parts); the client consumes it
+  with `useChat` and renders tool calls (`context/StreamChatContext.tsx`, `components/Chat/`).
+  A new thread's id comes back as a transient `data-thread` part so the client routes to
+  `/thread/:id`. The turn is persisted to a Mongo thread (assistant text only for now —
+  tool-call parts not yet persisted). `GET /api/get-threads` / `GET /api/get-thread` /
+  `POST /api/delete-thread` back the sidebar + history. See
+  `backend/apis/notes/search-relevant-notes.ts`, `backend/services/ai/agentic-rag.ts`, and
+  `backend/services/chat-threads.ts`. (Legacy `services/ai/ai_chat.ts` still powers note
+  titling via `get-note-title`.) Retrieval: a dense `ada-002` candidate pool is reranked by
+  **Jina v3** and gated to the top few (`services/ai/rerank.ts`; set `JINA_API_KEY` to enable,
+  else vector order). Embedding/hybrid upgrades remain planned in `docs/rag-execution-plan.md`.
 
 ## Data stores (who owns what)
 
@@ -142,4 +150,6 @@ not add new ones. See `docs/auth.md`.
 - `docs/auth.md` — Clerk flow front-to-back + profile provisioning.
 - `docs/frontend.md` — frontend structure, routing, provider tree, shadcn, API layer, TipTap.
 - `docs/improvement-plan.md` — frontend backlog (correctness/perf/quality).
+- `docs/rag-enhancement-plan.md` — backend RAG → agentic tool-calling upgrade backlog (Qwen3.6/GLM-5.1, hybrid+reranker, chat UI).
+- `docs/rag-execution-plan.md` — sourced, ROI-ranked execution decisions for the above (Qwen3.6-Plus, Qwen3-Embedding, reranker, Vercel AI SDK stack).
 - `docs/smoke-tests.md` — manual QA checklist.

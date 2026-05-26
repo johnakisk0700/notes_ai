@@ -2,6 +2,7 @@ import { debounce } from 'lodash';
 import { useCallback, useEffect, useState } from 'react';
 import { AppSidebar } from './components/AppSidebar';
 import { Header } from './components/Common/Header';
+import { SpiralBinding } from './components/Common/SpiralBinding';
 import { Outlet } from 'react-router';
 import { ThreadsProvider } from './context/ThreadsContext';
 
@@ -45,8 +46,15 @@ export default function Layout() {
       >
         <Header />
 
-        <div className="px-2.5 h-full w-full">
-          <Outlet />
+        {/* Page region: the coil sits in the gutter, its loops centered on the page
+            sheet's left edge. The sheet (.nb-page) is opaque and inset by left-5
+            (= the coil's cut line E), so it covers the right half of each loop —
+            the loops read as skewed half-circles tucking under the page edge. */}
+        <div className="relative flex-1 min-h-0 w-full">
+          <SpiralBinding />
+          <div className="nb-page absolute top-0 right-0 bottom-0 left-5 z-[1] overflow-hidden">
+            <Outlet />
+          </div>
         </div>
       </main>
     </ThreadsProvider>

@@ -42,7 +42,7 @@ components/
   ui/                 shadcn primitives (~25: button, dialog, sidebar, command,
                       drawer, calendar, popover, sheet, tabs, tooltip, sonner, …)
   icons/              hand-rolled SVG components (OpenAI, Deepseek, Claude, chevrons…)
-  Common/             Header, AudioRecorder, RealtimeAudioRecorder, TiptapEditor/
+  Common/             Header, PageRule, SpiralBinding, AudioRecorder, RealtimeAudioRecorder, TiptapEditor/
   Chat/               ChatMessage, StreamChat, CustomMarkdown
   Notes/              NoteComponent, NotesList, NoteEditor, NoteSearch
   Admin/              AdminNotesList, UserSelector
@@ -119,8 +119,20 @@ CSS variables, `lucide` icons, aliases `@/components`, `@/lib/utils`, `@/compone
   not the legacy individual `@radix-ui/react-*` packages.
 - **Theming** is in `src/index.css`: oklch CSS variables for light (`:root`) and
   dark (`.dark`) plus a Tailwind v4 `@theme inline` block mapping them to
-  `--color-*` / `--radius-*` / `--shadow-*` tokens. The palette is grayscale
-  (a tweakcn-style theme); fonts: Montserrat (sans), Fira Code (mono).
+  `--color-*` / `--radius-*` / `--shadow-*` tokens. It's a **notebook** theme:
+  dark is the hero ("midnight notebook" — warm blue-charcoal paper), light is warm
+  ecru paper, and the primary accent (`--primary`) is fountain-pen ink. There is
+  exactly **one** deliberate second tone, `--highlight` (amber), used as a
+  highlighter swipe (`<mark>` in chat) and the reminder flag — nothing else
+  introduces colour (the `--chart-*` ramp is ink + graphite tints, no rainbow).
+  Two ambient skeuomorphic touches: **`.nb-paper`** (faint ruled lines + a left
+  margin line; `background-attachment: local` so the ruling scrolls with the
+  page) on the chat/notes scroll surfaces, and **`SpiralBinding`** — a graphite
+  wire coil pinned to the sidebar/content seam that tracks the sidebar (full when
+  expanded, faded to `--nb-coil-fade` when collapsed; hidden on mobile). Fonts are
+  loaded via a Google Fonts `<link>` in `index.html` (all with Greek coverage):
+  **Inter** (sans / UI), **Literata** (serif — Lexi's chat answers), **JetBrains
+  Mono** (mono — code, charts, the `❯` prompt glyphs).
 - **`cn()`** (`src/lib/utils.ts`) merges class names (clsx + tailwind-merge).
 - **Local customizations to watch:** `dialog.tsx` adds a non-stock `onPressClose`
   prop (fires on overlay click and the X button) used by the global `NoteEditor`,
@@ -129,6 +141,23 @@ CSS variables, `lucide` icons, aliases `@/components`, `@/lib/utils`, `@/compone
 
 To update components: `bunx shadcn@latest add <name> --overwrite`. `--overwrite`
 replaces the file, so diff afterwards (`git diff`) and restore any local tweaks.
+
+## Chat rendering
+
+Lexi's answers stream as Markdown and render through `components/Chat/CustomMarkdown.tsx`
+(`react-markdown` + `remark-gfm` + `remark-breaks`). Prose is styled by the hand-rolled
+`.chat-md` class in `index.css` (serif body, sans headings, ledger-style GFM tables,
+task lists, plus notebook expressives: `<mark>` highlighter, `<kbd>` keycaps, and
+constrained "pasted clipping" `<img>`) — there is **no `@tailwindcss/typography`**;
+the old `prose prose-sm` classes were a no-op and have been removed. `CustomMarkdown`
+extends the rehype-sanitize default (GitHub) schema to additionally allow
+`mark`/`kbd`/`sub`/`sup` so Lexi can emit those tags as raw HTML. A fenced code block tagged `chart` (i.e. ` ```chart `)
+carrying a small JSON spec is routed to `components/Chat/NotebookChart.tsx`, a
+zero-dependency SVG bar / line / sparkline renderer (invalid or mid-stream JSON falls back
+to a plain code block, so a half-typed chart never throws). The Greek system prompt
+(`backend/utils/gptPromptGenerator.ts`) tells Lexi when to use tables/charts and documents
+the exact `chart` schema. The streaming status line is a calm fading mono whisper
+(`useFadeInOut` + `statusUpdate`), **not** an animated dot loader.
 
 ## API integration (`integrations/api.ts`)
 

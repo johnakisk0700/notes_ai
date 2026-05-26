@@ -1,10 +1,8 @@
-import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useNoteEditor } from '@/context/NoteEditorContext';
-import { BellIcon, DotIcon, Pencil, Trash2 } from 'lucide-react'; // Replace with your actual icon library imports
+import { BellIcon, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '../ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { Separator } from '../ui/separator';
+import { Card } from '../ui/card';
 import { CustomMarkdown } from '../Chat/CustomMarkdown';
 import type { FullNote } from '@shared/dto/GetNoteDTO';
 
@@ -17,51 +15,47 @@ export const NoteComponent = ({ note, handleDelete }: NoteComponentProps) => {
   const { openEditor } = useNoteEditor();
   const { reminder } = note;
   return (
-    <Card className="p-3.5 relative pr-[3rem] max-h-[12rem] gap-1.5 shrink-0 rounded-md w-full">
-      <CardHeader className="pl-0 text-sm">
-        <CardTitle className="mb-2.5">
-          <div className="flex items-center">
-            <DotIcon className="size-7" />
-            <div>
-              {note.title}
-              <span className="text-[0.6rem] font-light text-foreground/75 mt-1.5 flex absolute">
-                {formatDisplayDate(note.created_at)}
-              </span>
-            </div>
+    <Card className="group relative w-full max-h-[12rem] shrink-0 gap-1.5 overflow-hidden rounded-md p-3.5">
+      {/* Heading — title, dated stamp, and a reminder flag; actions reveal on hover */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            <h3 className="truncate text-sm font-medium text-foreground">{note.title}</h3>
+            {reminder && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex shrink-0 items-center rounded-[3px] bg-highlight/35 px-1 py-0.5 text-foreground/80">
+                    <BellIcon className="size-3" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>{formatDisplayDate(reminder.remindAt.toString())}</TooltipContent>
+              </Tooltip>
+            )}
           </div>
+          <span className="mt-0.5 block font-mono text-[0.6rem] tracking-tight text-muted-foreground">
+            {formatDisplayDate(note.created_at)}
+          </span>
+        </div>
 
-          {/* <p className="text-[0.55rem] font-light text-foreground/75">{formatDisplayDate(note.updated_at)}</p> */}
-        </CardTitle>
-      </CardHeader>
+        <div className="flex shrink-0 gap-0.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
+          <Button onClick={() => openEditor(note)} variant="ghost" size="icon-xs" title="Edit">
+            <Pencil className="text-primary/60" />
+          </Button>
+          <Button
+            onClick={() => handleDelete(note.id)}
+            variant="ghost"
+            size="icon-xs"
+            title="Delete"
+            className="hover:text-destructive"
+          >
+            <Trash2 />
+          </Button>
+        </div>
+      </div>
 
-      <CardContent className="note-md overflow-y-hidden flex-grow p-2.5 rounded-lg mr-5 text-xs text-foreground/50 border-1 bg-background">
+      {/* Preview — flush text behind an ink margin rule, no box-in-a-box */}
+      <div className="note-md overflow-hidden border-l-2 border-border pl-2.5 text-xs text-foreground/55">
         <CustomMarkdown>{note.content}</CustomMarkdown>
-      </CardContent>
-      {reminder && (
-        <Tooltip>
-          <TooltipTrigger className="absolute top-0 right-[3.5rem]">
-            <Badge
-              className=" rounded-t-none bg-sky-500 dark:bg-sky-950 dark:text-foreground items-center size-5 w-fit"
-              variant="default"
-            >
-              <BellIcon className="translate-y-[1px] mr-1" />
-            </Badge>
-          </TooltipTrigger>
-          <TooltipContent className="">{formatDisplayDate(reminder.remindAt.toString())}</TooltipContent>
-        </Tooltip>
-      )}
-      <div className="flex flex-col absolute right-0 top-0 w-[3rem] h-full border-l-1">
-        <Button onClick={() => openEditor(note)} variant="ghost" className="flex-grow rounded-t-none rounded-bl-none">
-          <Pencil size={16} className="text-primary/50" />
-        </Button>
-        <Separator />
-        <Button
-          variant="ghost"
-          className="flex-grow dark:hover:bg-destructive/20 hover:bg-destructive/50 rounded-t-none rounded-bl-none"
-          onClick={() => handleDelete(note.id)}
-        >
-          <Trash2 size={16} className="text-primary/50" />
-        </Button>
       </div>
     </Card>
   );

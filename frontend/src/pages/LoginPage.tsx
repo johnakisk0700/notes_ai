@@ -193,10 +193,10 @@ export const LoginPage = () => {
   };
 
   return (
-    <div className="flex min-h-dvh w-full flex-col items-center justify-center bg-gradient-to-b from-background to-muted/40 p-4">
+    <div className="flex min-h-dvh w-full flex-col items-center justify-center bg-background p-4">
       <div className="w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center gap-1.5 text-center">
-          <h1 className="text-3xl font-extrabold tracking-tight text-balance">MySert AI Labs</h1>
+          <h1 className="font-serif text-3xl font-medium tracking-tight text-balance">Mneme Labs</h1>
           <p className="text-sm text-muted-foreground">{t('auth_subtitle')}</p>
         </div>
 

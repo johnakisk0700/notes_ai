@@ -18,7 +18,7 @@ List endpoints (marked 📄) also run `queryMiddleware` → accept `page`, `limi
 | POST   | `/api/update-note`       | `updateNote`         | `{ noteId, content, title, remindAt? }`; upserts/clears reminder, re-embeds. |
 | POST   | `/api/delete-note`       | `deleteNote`         | `{ noteId }`; deletes note+reminder (tx) and Qdrant point. Owner only. |
 | POST   | `/api/get-note-title`    | `getNoteTitle`       | `{ content }` → GPT-generated title. |
-| POST   | `/api/search-notes`      | `searchRelevantNotes`| `{ query, selectedUsers?, previousQueries?, now }` → **streamed** GPT answer. |
+| POST   | `/api/search-notes`      | `searchRelevantNotes`| `{ messages, threadId?, selectedUsers?, now? }` (AI SDK UI message stream) → **streamed** agentic answer (text + `tool-*` parts). Model: Qwen3.6-Plus via OpenRouter, else gpt-5-mini. |
 | GET 📄 | `/api/get-all-users-notes` | `getAllUsersNotes` | All users' notes (admin). |
 | GET 📄 | `/api/get-reminders`     | `getReminders`       | Current user's reminders. |
 

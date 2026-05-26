@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const BASE_URL =
+export const BASE_URL =
   import.meta.env.MODE === 'development' ? import.meta.env.VITE_API_DEV_URL : import.meta.env.VITE_API_PROD_URL;
 
 const defaultHeaders: Record<string, string> = {
@@ -9,7 +9,7 @@ const defaultHeaders: Record<string, string> = {
 
 // Clerk exposes a global once <ClerkProvider> has mounted; read the active
 // session token from it so non-React modules (this axios instance) can auth.
-async function getClerkToken(): Promise<string | null> {
+export async function getClerkToken(): Promise<string | null> {
   try {
     const clerk = (window as unknown as { Clerk?: { session?: { getToken: () => Promise<string | null> } } }).Clerk;
     return (await clerk?.session?.getToken()) ?? null;

@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FlagGR } from '@/assets/flags/FlagGR';
 import { FlagUK } from '@/assets/flags/FlagUS';
+import { PageRule } from '@/components/Common/PageRule';
 
 const langs = [
   {
@@ -22,13 +23,13 @@ const langs = [
 ];
 
 export const SettingsPage = () => {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
 
   return (
-    <div className="h-[100dvh] w-full overflow-y-scroll hide-scrollbar max-w-5xl mx-auto">
-      <h1 className="font-bold text-2xl">{t('settings_header')}</h1>
+    <div className="h-full w-full overflow-y-scroll hide-scrollbar max-w-5xl mx-auto px-1">
+      <PageRule label={t('settings_header')} />
       <div className="flex justify-between items-center">
-        <p>{t('select_lang')}</p>
+        <p className="text-sm">{t('select_lang')}</p>
         <LanguageSelector />
       </div>
     </div>
