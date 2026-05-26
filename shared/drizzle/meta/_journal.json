@@ -15,6 +15,13 @@
       "when": 1779737806540,
       "tag": "0001_clerk_decouple",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1779753551925,
+      "tag": "0002_dusty_maestro",
+      "breakpoints": true
     }
   ]
 }

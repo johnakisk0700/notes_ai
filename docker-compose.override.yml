@@ -9,6 +9,23 @@
 # WATCH_POLLING=false (in .env) if you run from the WSL2/Linux filesystem, where
 # native events work and polling just wastes CPU.
 services:
+  # Bind-mount the shared workspace so newly generated migrations (shared/drizzle)
+  # apply on the next `up` without rebuilding the migrate image. Anonymous volumes
+  # keep the image's (Linux) node_modules — that's where drizzle-kit lives.
+  migrate:
+    volumes:
+      - ./shared:/app/shared
+      - /app/node_modules
+      - /app/shared/node_modules
+
+  # Same idea for the Qdrant collection-ensure one-shot: bind-mount the backend
+  # source so script edits apply without rebuilding the image.
+  qdrant-init:
+    volumes:
+      - ./backend:/app/backend
+      - /app/node_modules
+      - /app/backend/node_modules
+
   backend:
     build:
       target: dev

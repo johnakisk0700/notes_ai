@@ -12,7 +12,7 @@
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
+    "db:migrate": "bun run migrate.ts",
     "db:push": "drizzle-kit push",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

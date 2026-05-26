@@ -44,11 +44,19 @@ bun run format                 # Prettier write (.prettierrc)
 
 # DB migrations (from shared/, needs POSTGRES_URI)
 bun run db:generate            # generate migration from schema changes (drizzle-kit)
-bun run db:migrate             # apply migrations
+bun run db:migrate             # apply pending migrations (runs migrate.ts — Drizzle's
+                               #   programmatic migrator, not `drizzle-kit migrate`).
+                               #   Also runs AUTOMATICALLY on `docker compose up` via the
+                               #   one-shot `migrate` service the backend waits on, so a
+                               #   fresh Postgres volume is migrated before the API serves.
 bun run db:push                # push schema directly (no migration file)
 
 # One-off scripts (from backend/)
-bun scripts/qdrant-init.ts            # create the notes/beverages/… Qdrant collections
+bun scripts/qdrant-ensure.ts          # ensure Qdrant collections exist (idempotent, non-destructive).
+                                      #   Runs AUTOMATICALLY on `docker compose up` via the one-shot
+                                      #   `qdrant-init` service the backend waits on.
+bun scripts/qdrant-init.ts            # DESTRUCTIVE reset: drops + reseeds `polites`, then ensures
+                                      #   collections. Run by hand only (guarded by import.meta.main).
 bun scripts/seed-wines-customers.ts   # seed Postgres wines/customers (autocomplete) from data/*.json
 ```
 

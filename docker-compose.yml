@@ -3,6 +3,9 @@
 #   DEV   (default):  docker compose up                  (or: bun run dev)
 #         → backend + frontend hot-reload (plain HTTP); docker-compose.override.yml
 #           is auto-applied. Source is bind-mounted, so code edits need NO rebuild.
+#         → one-shot init services run before the backend starts: `migrate` (DB
+#           migrations, once Postgres is healthy) and `qdrant-init` (ensures Qdrant
+#           collections exist). Both are idempotent — see those services below.
 #         → after changing deps (package.json/bun.lock) or a Dockerfile, run
 #           `bun run dev:rebuild` (docker compose up --build --renew-anon-volumes):
 #           --build alone won't surface new deps because the anonymous
@@ -48,17 +51,58 @@ services:
     ports:
       - "127.0.0.1:5100:5100"
     depends_on:
-      postgres-ai-assistant:
-        condition: service_started
+      # Wait for migrations to finish before the API starts, so a fresh Postgres
+      # volume has its tables before the first request hits verifyJWT (which reads
+      # the `profile` table). `migrate` itself waits on postgres being healthy.
+      migrate:
+        condition: service_completed_successfully
+      # Ensures the Qdrant collections exist (notes, …) before the API serves, so
+      # store-note doesn't 500 on a fresh volume. qdrant-init itself waits on Qdrant.
+      qdrant-init:
+        condition: service_completed_successfully
       redis-ai-assistant:
-        condition: service_started
-      qdrant-ai-assistant:
         condition: service_started
       # Chat persistence connects to Mongo at worker startup, so wait until mongod
       # actually accepts connections — `condition: service_started` alone races the
       # mongod boot and the connect fails with ECONNREFUSED on a cold `up`.
       mongo-ai-assistant:
         condition: service_healthy
+
+  # One-shot: applies the shared/drizzle migrations, then exits. The backend
+  # gates on this completing (service_completed_successfully), so tables always
+  # exist before the API serves. Idempotent — re-running only applies pending
+  # migrations. (Prod-on-VM still migrates via deploy.ts; this covers the
+  # docker-compose dev + local-prod paths.)
+  migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: migrate
+    container_name: ai-assistant-migrate
+    restart: "no"
+    environment:
+      POSTGRES_URI: postgres://postgres:example@postgres-ai-assistant:5432/postgres
+    depends_on:
+      postgres-ai-assistant:
+        condition: service_healthy
+
+  # One-shot: ensures the Qdrant collections (notes, …) exist, then exits. The
+  # backend gates on this completing, so store-note doesn't 500 on a fresh Qdrant
+  # volume. Idempotent — create-on-404. (The destructive polites reset is
+  # qdrant-init.ts's own main(), run by hand only.)
+  qdrant-init:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: qdrant-init
+    container_name: ai-assistant-qdrant-init
+    restart: "no"
+    environment:
+      QDRANT_HOST: qdrant-ai-assistant
+      QDRANT_PORT: 6333
+    depends_on:
+      qdrant-ai-assistant:
+        condition: service_started
 
   frontend:
     build:
@@ -96,6 +140,14 @@ services:
       POSTGRES_PASSWORD: example
     volumes:
       - ./data/postgres_data:/var/lib/postgresql/data
+    # The `migrate` service (and backend) wait on this, so a cold `up` doesn't
+    # race the postgres boot — pg_isready confirms the server accepts connections.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   mongo-ai-assistant:
     image: mongo:7

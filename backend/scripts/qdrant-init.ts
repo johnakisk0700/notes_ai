@@ -102,4 +102,10 @@ async function main() {
   // await migrateSales();
 }
 
-main();
+// Only run the destructive reset (drops + reseeds `polites`) when this file is
+// executed directly (`bun scripts/qdrant-init.ts`). Importing it — e.g. the
+// startup `qdrant-ensure.ts` reusing `init_collections()` — must have NO side
+// effects, so guard the entrypoint.
+if (import.meta.main) {
+  main();
+}

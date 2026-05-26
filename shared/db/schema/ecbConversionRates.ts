@@ -10,11 +10,11 @@ export const ecbConversionRatesTable = pgTable(
     rateDate: date("rate_date").notNull(),
     ...timestamps,
   },
-  table => ({
-    pk: primaryKey({ columns: [table.from, table.to] }),
-    fromToIdx: index("idx_ecb_rates_from_to").on(table.from, table.to),
-    createdAtIdx: index("idx_ecb_rates_created_at").on(table.created_at.desc()),
-  })
+  table => [
+    primaryKey({ columns: [table.from, table.to] }),
+    index("idx_ecb_rates_from_to").on(table.from, table.to),
+    index("idx_ecb_rates_created_at").on(table.created_at.desc()),
+  ]
 );
 
 export type EcbConversionRate = typeof ecbConversionRatesTable.$inferSelect;

@@ -15,6 +15,25 @@ COPY frontend/package.json ./frontend/package.json
 COPY shared/package.json ./shared/package.json
 RUN bun install
 
+# ---- Migrate: one-shot — applies shared/drizzle migrations, then exits ----
+# Backed by the compose `migrate` service the backend waits on
+# (condition: service_completed_successfully). The migration files are baked in;
+# in dev the override bind-mounts ./shared so new migrations apply without a
+# rebuild. POSTGRES_URI comes from the compose env (shared/.env is .dockerignored).
+FROM deps AS migrate
+WORKDIR /app/shared
+COPY shared ./
+CMD ["bun", "run", "db:migrate"]
+
+# ---- Qdrant init: one-shot — ensures Qdrant collections exist, then exits ----
+# Backed by the compose `qdrant-init` service the backend waits on. Idempotent
+# (create-on-404). Source is baked in; the dev override bind-mounts ./backend so
+# changes apply without a rebuild. QDRANT_HOST/PORT come from the compose env.
+FROM deps AS qdrant-init
+WORKDIR /app/backend
+COPY backend ./
+CMD ["bun", "run", "scripts/qdrant-ensure.ts"]
+
 # ---- Dev: hot-reload (source bind-mounted by docker-compose.override.yml) ----
 FROM deps AS dev
 # fluent-ffmpeg shells out to the `ffmpeg` binary at runtime (transcription/audio)

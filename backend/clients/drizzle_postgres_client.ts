@@ -1,49 +1,23 @@
 import "dotenv/config";
 import { drizzle } from "drizzle-orm/bun-sql";
-import * as notesSchema from "@shared/db/schema/notes";
-import * as remindersSchema from "@shared/db/schema/reminders";
+import * as schema from "@shared/db/schema";
 
-const schema = { ...notesSchema, ...remindersSchema };
-
-// You can specify any property from the bun sql connection options
+// Register the full schema barrel so the relational query API
+// (`drizzlePg.query.<table>.findMany`) and all defined `relations()` work for
+// every table — not just notes/reminders. The barrel exports tables, enums and
+// relations; drizzle reads what it needs and ignores the rest.
 export const drizzlePg = drizzle({
   schema,
+  // Connection target comes solely from POSTGRES_URI (compose sets the in-container
+  // host; shared/.env sets localhost:5433 for host-run dev). Don't hardcode host/
+  // port/credentials here — they'd silently conflict with the URL.
   connection: {
-    // Required
     url: process.env.POSTGRES_URI,
-
-    // Optional configuration
-    hostname: "localhost",
-    port: 5433,
-    database: "postgres",
-    username: "postgres",
-    password: "example",
 
     // Connection pool settings
     max: 5, // Maximum connections in pool
     idleTimeout: 30, // Close idle connections after 30s
     maxLifetime: 0, // Connection lifetime in seconds (0 = forever)
     connectionTimeout: 30, // Timeout when establishing new connections
-
-    // SSL/TLS options
-    //   tls: true,
-    // tls: {
-    //   rejectUnauthorized: true,
-    //   requestCert: true,
-    //   ca: "path/to/ca.pem",
-    //   key: "path/to/key.pem",
-    //   cert: "path/to/cert.pem",
-    //   checkServerIdentity(hostname, cert) {
-    //     ...
-    //   },
-    // },
-
-    // Callbacks
-    onconnect: client => {
-      // console.log("Connected to database");
-    },
-    onclose: client => {
-      // console.log("Connection closed");
-    },
   },
 });

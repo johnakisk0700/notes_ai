@@ -3,10 +3,11 @@
 export * from "./customers";
 export * from "./ecbConversionRates";
 export * from "./kataskopos";
-export * from "./messages";
 export * from "./notes";
 export * from "./profile";
 export * from "./reminders";
 export * from "./tefteri";
-export * from "./threads";
 export * from "./wines";
+
+// NB: AI chat threads/messages are NOT in Postgres — they live in MongoDB
+// (backend/model/mongo-db/UserThreads). See docs/data-stores.md.
