@@ -4,7 +4,7 @@ import React from 'react';
 import { toast } from 'sonner';
 import { NoteComponent } from './NoteComponent';
 import { useTranslation } from 'react-i18next';
-import { PageRule } from '../Common/PageRule';
+import { NoteSearch } from './NoteSearch';
 
 const NotesList: React.FC = () => {
   const { t } = useTranslation();
@@ -17,17 +17,27 @@ const NotesList: React.FC = () => {
       toast.success(t('successful_note_deletion'));
       fetchNotes();
     } catch (error) {
-      console.error('Error deleting note:', error);
+      if (import.meta.env.DEV) console.error('Error deleting note:', error);
       toast.error(t('failed_deletion') + 'note.');
     }
   };
   return (
-    <div className="flex flex-col gap-3 pb-24 shrink-0 w-full max-w-5xl mx-auto px-1">
-      <PageRule label={t('personal_notes')} />
-      {filteredNotes?.map(note => (
-        <NoteComponent key={note.id} note={note} handleDelete={handleDelete} />
-      ))}
-      <div className="my-20"></div>
+    <div className="flex w-full shrink-0 flex-col pb-24 pt-14">
+      {/* Search sticks just under the floating title masthead (h-14). A frosted layer
+          (semi-transparent paper + backdrop-blur) BLURS the notes scrolling up behind it
+          instead of hiding them behind a solid dark block; the notebook margin line continues
+          across it. Tune the mask via the bg opacity / blur strength. */}
+      <div className="nb-margin-rule sticky top-14 z-10 backdrop-blur-md">
+        <div className="mx-auto w-full max-w-7xl px-3 pt-2 pb-2 md:px-1 md:pl-11">
+          <NoteSearch className="h-9 bg-background dark:bg-background" />
+        </div>
+      </div>
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-2 px-3 md:px-1 md:pl-11">
+        {filteredNotes?.map(note => (
+          <NoteComponent key={note.id} note={note} handleDelete={handleDelete} />
+        ))}
+        <div className="my-20"></div>
+      </div>
     </div>
   );
 };

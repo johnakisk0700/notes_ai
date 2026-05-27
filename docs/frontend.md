@@ -21,6 +21,10 @@ Single-page app served statically (nginx in prod, Vite dev server locally).
 
 Dev: `bun run dev` → http://localhost:5173 (Docker dev maps 5173; prod nginx → 8081).
 Build: `bun run build` → `dist/`, served by nginx (`frontend/Dockerfile`, `nginx.conf`).
+Routes are **code-split**: each page in `App.tsx` is a `React.lazy()` import under one
+`<Suspense>`, and `vite.config.ts` (`rolldownOptions.output.manualChunks`) splits the heavy
+vendors (react, tiptap/prosemirror, radix, clerk, markdown) into their own chunks — the entry
+bundle is ~260 kB (down from a single ~1.4 MB file).
 Env (Vite-inlined): `VITE_API_DEV_URL`, `VITE_API_PROD_URL`, `VITE_CLERK_PUBLISHABLE_KEY`.
 
 ## Directory map (`src/`)
@@ -42,7 +46,7 @@ components/
   ui/                 shadcn primitives (~25: button, dialog, sidebar, command,
                       drawer, calendar, popover, sheet, tabs, tooltip, sonner, …)
   icons/              hand-rolled SVG components (OpenAI, Deepseek, Claude, chevrons…)
-  Common/             Header, PageRule, SpiralBinding, AudioRecorder, RealtimeAudioRecorder, TiptapEditor/
+  Common/             Header, PageRule, SpiralBinding, TopSpiralBinding, AudioRecorder, RealtimeAudioRecorder, TiptapEditor/
   Chat/               ChatMessage, StreamChat, CustomMarkdown
   Notes/              NoteComponent, NotesList, NoteEditor, NoteSearch
   Admin/              AdminNotesList, UserSelector
@@ -125,12 +129,18 @@ CSS variables, `lucide` icons, aliases `@/components`, `@/lib/utils`, `@/compone
   exactly **one** deliberate second tone, `--highlight` (amber), used as a
   highlighter swipe (`<mark>` in chat) and the reminder flag — nothing else
   introduces colour (the `--chart-*` ramp is ink + graphite tints, no rainbow).
-  Two ambient skeuomorphic touches: **`.nb-paper`** (faint ruled lines + a left
+  Ambient skeuomorphic touches: **`.nb-paper`** (faint ruled lines + a left
   margin line; `background-attachment: local` so the ruling scrolls with the
-  page) on the chat/notes scroll surfaces, and **`SpiralBinding`** — a graphite
-  wire coil, a fixed overlay centered on the sidebar/page seam (small muted tilted
-  rings straddling it), that tracks the sidebar (visible when expanded, faded out
-  when collapsed; hidden on mobile). Fonts are
+  page) on the chat/notes scroll surfaces; a **paper grain** (`--nb-grain` /
+  `--nb-grain-sidebar` — desaturated SVG fractal noise blended `soft-light` into
+  the `.nb-page` background and the sidebar only; the sidebar uses a coarser grain
+  as a different "cover stock", and nothing else — chrome, text, the note dialog —
+  is grained); and two graphite wire coils sharing `.nb-coil-wire`:
+  **`SpiralBinding`**, a fixed overlay centered on the sidebar/page seam (muted
+  rings straddling it) that tracks the sidebar (visible when expanded, faded out
+  when collapsed; hidden on mobile), and **`TopSpiralBinding`**, the same wire
+  flipped to hang vertical loops along a surface's top edge — it crowns the
+  note-editor dialog so the open note reads as a top-bound steno pad. Fonts are
   loaded via a Google Fonts `<link>` in `index.html` (all with Greek coverage):
   **Inter** (sans / UI), **Literata** (serif — Lexi's chat answers), **JetBrains
   Mono** (mono — code, charts, the `❯` prompt glyphs).
@@ -159,6 +169,12 @@ to a plain code block, so a half-typed chart never throws). The Greek system pro
 (`backend/utils/gptPromptGenerator.ts`) tells Lexi when to use tables/charts and documents
 the exact `chart` schema. The streaming status line is a calm fading mono whisper
 (`useFadeInOut` + `statusUpdate`), **not** an animated dot loader.
+The dated "Ask Lexi" introduction is a header-height first row inside the scrolling
+conversation, aligned with the floating sidebar toggle, so it clears above the viewport
+as messages begin; on narrow screens it keeps only the date.
+Notebook page rules span the sheet while their labels, search, and cards share a wide aligned content lane;
+the notes sheet runs beneath its floating title while search leads the content below it. When the desktop
+sidebar collapses, the sheet goes flush-left so its toggle remains centred in the margin.
 
 ## API integration (`integrations/api.ts`)
 
@@ -221,4 +237,7 @@ editor with a formatting toolbar and a user `@mention` dropdown.
   runs Prettier (`.prettierrc`). The react-hooks v7 React-Compiler rules
   (`set-state-in-effect`, `use-memo`) are set to **warn** — pervasive and not
   auto-fixable; remaining hard errors are mostly pre-existing `no-explicit-any`.
+- **No raw `console.*` in shipped code** — frontend logs reach the prod browser console
+  (unlike the backend's pino patch). Debug logs are dropped; error logs worth keeping are
+  gated behind `if (import.meta.env.DEV)`.
 - Tailwind v4 has **no `tailwind.config`** — theme tokens live in `index.css`.

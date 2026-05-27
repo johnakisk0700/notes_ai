@@ -40,18 +40,17 @@ export const verifyJWT = async (req, res, next) => {
   if (!userId) return res.status(401).json({ error: "Invalid token" });
 
   try {
-    // Resolve the Clerk user from the verified session.
-    const user = await clerkClient.users.getUser(userId);
-
     // Ensure a local profile row exists. Clerk owns identity; our Postgres owns
     // role/settings keyed by the Clerk user ID. Lazily provision on first request
     // so users created directly in Clerk (or before create-profile ran) still work.
+    // Existing users do not need a remote Clerk user lookup on every API request.
     let rows = await drizzlePg
       .select({ role: profileTable.role })
       .from(profileTable)
       .where(eq(profileTable.id, userId));
 
     if (rows.length === 0) {
+      const user = await clerkClient.users.getUser(userId);
       const email =
         user.primaryEmailAddress?.emailAddress ?? user.emailAddresses?.[0]?.emailAddress ?? `${userId}@no-email.local`;
 
@@ -69,8 +68,7 @@ export const verifyJWT = async (req, res, next) => {
       rows = await drizzlePg.select({ role: profileTable.role }).from(profileTable).where(eq(profileTable.id, userId));
     }
 
-    req.user = user; // Clerk user object; req.user.id is the Clerk user ID
-    req.user.isAdmin = rows[0]?.role === "admin";
+    req.user = { id: userId, isAdmin: rows[0]?.role === "admin" };
     next();
   } catch (err) {
     console.error("JWT verification error:", err);

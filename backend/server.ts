@@ -62,29 +62,24 @@ if (cluster.isPrimary) {
     console.log(`Worker ${worker.process.pid} exited`);
   });
 } else {
-  // Chat-thread persistence lives in Mongo. Connect best-effort: if Mongo is
-  // down the API still serves (notes + streamed answers work), persistence
-  // just no-ops until it recovers.
-  try {
-    await connectToDatabase();
-  } catch (err) {
-    console.error("MongoDB connection failed at startup; chat persistence disabled until it recovers:", err);
-  }
+  // Chat-thread persistence lives in Mongo. Connect in the background with retry:
+  // the API serves immediately (notes + streamed answers work) whether or not Mongo
+  // is up, persistence starts once connected, and the driver auto-reconnects on drops.
+  // Best-effort throughout — see clients/mongoose_client.ts and services/chat-threads.ts.
+  connectToDatabase();
 
   const app = express();
 
   // Middleware to parse JSON bodies
   app.use(
     cors({
+      // Prod is same-origin: the native host nginx serves the SPA and proxies /api
+      // under https://mneme.narusec.io. Localhost entries cover dev (Vite) + local
+      // prod test (frontend container on :8081).
       origin: [
-        "https://mysert.com",
-        "https://mysert.com:80",
-        "http://168.231.104.96:42096",
-        "http://168.231.104.96",
-        "http://168.231.104.96:80",
-        "http://localhost:8080",
-        "http://localhost:8081",
+        "https://mneme.narusec.io",
         "http://localhost:5173",
+        "http://localhost:8081",
       ],
       methods: "GET,POST,PUT,DELETE,OPTIONS",
       allowedHeaders: "Content-Type,Authorization",
@@ -147,20 +142,24 @@ if (cluster.isPrimary) {
   const PORT = process.env.APP_PORT;
   app.use(errorHandler);
 
-  // --- Server: plain HTTP in dev (no TLS certs in container), HTTPS in prod ---
-  const isDev = process.env.MODE === "dev";
-  const server = isDev ? http.createServer(app) : https.createServer(handleHTTPSCertificates(), app);
+  // --- Server: HTTP or HTTPS ---
+  // Serve plain HTTP when MODE=dev (no certs in the dev container) OR when
+  // BACKEND_TLS=off (prod behind the native nginx, which terminates TLS and proxies
+  // to :5100). Serve HTTPS only when terminating TLS directly — reading certs from
+  // TLS_KEY_PATH / TLS_CERT_PATH. Keeping TLS off MODE means the dev-auth-bypass
+  // (gated on MODE=dev) can never engage while serving HTTP in production.
+  const tlsEnabled = process.env.MODE !== "dev" && process.env.BACKEND_TLS !== "off";
+  const server = tlsEnabled ? https.createServer(handleHTTPSCertificates(), app) : http.createServer(app);
 
   server.listen({ port: PORT, reusePort: true }, async () => {
-    console.log(`Wine-Assistant Server (${isDev ? "HTTP" : "HTTPS"}) is running on port: [${PORT}]`);
+    console.log(`Wine-Assistant Server (${tlsEnabled ? "HTTPS" : "HTTP"}) is running on port: [${PORT}]`);
   });
 }
 
 function handleHTTPSCertificates() {
-  return {
-    key: process.env.MODE !== "dev" ? fs.readFileSync("/etc/letsencrypt/live/www.mysert.com/privkey.pem") : "",
-    cert: process.env.MODE !== "dev" ? fs.readFileSync("/etc/letsencrypt/live/www.mysert.com/fullchain.pem") : "",
-  };
+  const keyPath = process.env.TLS_KEY_PATH ?? "/etc/letsencrypt/live/mneme.narusec.io/privkey.pem";
+  const certPath = process.env.TLS_CERT_PATH ?? "/etc/letsencrypt/live/mneme.narusec.io/fullchain.pem";
+  return { key: fs.readFileSync(keyPath), cert: fs.readFileSync(certPath) };
 }
 
 function setupCronJobs() {

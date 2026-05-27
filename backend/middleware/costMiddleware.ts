@@ -50,9 +50,7 @@ export const costMiddleware = (req: Request, res: Response, next: NextFunction) 
         }
       }
       if (totalCost.toNumber() > 0) {
-        console.log(
-          `💰 ${req.user?.user_metadata.first_name} ${req.user?.user_metadata.last_name}: $${totalCost.toFixed(8)}`
-        );
+        console.log(`Cost for ${req.user?.id ?? "unknown user"}: $${totalCost.toFixed(8)}`);
       }
     });
 

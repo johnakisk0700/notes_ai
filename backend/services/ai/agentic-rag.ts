@@ -77,10 +77,14 @@ export function streamNotesChat(opts: {
   now: string;
   threadId?: string;
   newThreadId?: string;
+  // The in-flight user-turn write (thread create / user-message append). The assistant
+  // turn awaits it before persisting, so its push always targets an existing doc.
+  persisted?: Promise<void>;
   model?: ChatModelId;
   effort?: ReasoningEffort;
 }): void {
-  const { req, res, messages, userIds, userId, now, threadId, newThreadId, model: selectedModel, effort } = opts;
+  const { req, res, messages, userIds, userId, now, threadId, newThreadId, persisted, model: selectedModel, effort } =
+    opts;
   const { model, id: modelId } = resolveChatModel(selectedModel);
   const tools = buildNoteTools({ userIds });
 
@@ -160,8 +164,11 @@ export function streamNotesChat(opts: {
     },
     // Persist the whole assistant turn — text + tool-call parts — so the thread
     // re-renders tool steps after a reload. Best-effort (never fails the answer).
-    onFinish: ({ responseMessage }) => {
+    onFinish: async ({ responseMessage }) => {
       if (!threadId || !responseMessage) return;
+      // Wait for the user-turn write (thread create / user-message append) to land first,
+      // so this push targets an existing doc. `persisted` never rejects (best-effort).
+      if (persisted) await persisted;
       appendMessage(threadId, userId, {
         role: "assistant",
         content: textFromParts(responseMessage.parts),

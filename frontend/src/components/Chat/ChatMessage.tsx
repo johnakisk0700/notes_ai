@@ -82,12 +82,15 @@ const UserMessage = ({ message }: { message: AppUIMessage }) => {
       </div>
     );
 
-  // The question: no bubble — just the one approved skeuomorphic touch, an ink
-  // margin rule down its left edge, set in the UI sans (vs. Lexi's serif reply).
+  // A soft ink wash keeps the question distinct without turning it into a
+  // heavy chat bubble; UI sans contrasts with Lexi's serif reply.
   return (
     <div className="group flex w-fit max-w-[85%] items-start gap-1 self-end" id={message.id}>
       <UserMessageActions setEditMode={setEditMode} />
-      <div className="whitespace-pre-wrap border-l-2 border-primary py-0.5 pl-2.5 text-sm text-foreground/90">
+      <div
+        data-chat-user-content
+        className="whitespace-pre-wrap rounded-md border-primary/80 bg-primary/60 py-1 pl-3 pr-3 text-sm font-medium leading-5 text-foreground/95"
+      >
         {content}
       </div>
     </div>
@@ -154,7 +157,9 @@ const AiMessageActions = ({ content, messageId, metadata }: MessageActionsProps)
         <RefreshCcw />
       </Button>
       {/* Muted model + cost stamp — just visible, grouped with the answer's footer. */}
-      {badge ? <span className="ml-1.5 font-mono text-[10px] tabular-nums text-muted-foreground/60">{badge}</span> : null}
+      {badge ? (
+        <span className="ml-1.5 font-mono text-[10px] tabular-nums text-muted-foreground/60">{badge}</span>
+      ) : null}
     </div>
   );
 };

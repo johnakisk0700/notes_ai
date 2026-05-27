@@ -9,7 +9,6 @@ export function WineProvider({ children }) {
   useEffect(() => {
     const localWineNames = localStorage.getItem('wine_db');
     if (localWineNames) {
-      console.log('Retrieved wine list from localStorage');
       setWineNames(JSON.parse(localWineNames));
     } else {
       (async () => {

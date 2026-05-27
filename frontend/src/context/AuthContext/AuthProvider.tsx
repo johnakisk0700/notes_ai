@@ -39,7 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (error) {
         // verifyJWT provisions the profile on first request; if the lookup still
         // fails, fall back to a non-admin role rather than blocking the app.
-        console.error('Failed to load profile role:', error);
+        if (import.meta.env.DEV) console.error('Failed to load profile role:', error);
         if (!cancelled) setIsAdmin(false);
       } finally {
         if (!cancelled) setLoadingUser(false);

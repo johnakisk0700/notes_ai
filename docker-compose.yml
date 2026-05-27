@@ -159,6 +159,8 @@ services:
     ports:
       - "127.0.0.1:27018:27017"
     volumes:
+      # Bind mount is the prod default (Linux VM, no perf penalty). Dev swaps this for
+      # a named volume in docker-compose.override.yml — see the comment there.
       - ./data/mongo_data:/data/db
     healthcheck:
       test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]

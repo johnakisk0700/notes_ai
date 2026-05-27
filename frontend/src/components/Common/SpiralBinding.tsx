@@ -42,8 +42,8 @@ export const SpiralBinding = () => {
   return (
     <div
       className={cn(
-        'nb-coil pointer-events-none fixed inset-y-0 left-[var(--sidebar-width)] z-20 -translate-x-1/2 transition-opacity duration-200 ease-linear',
-        state === 'expanded' ? 'opacity-100' : 'opacity-0'
+        'nb-coil pointer-events-none fixed inset-y-0 z-50 -translate-x-1/2 transition-[left,opacity] duration-200 ease-linear',
+        state === 'expanded' ? 'left-(--sidebar-width) opacity-100' : 'left-0 opacity-0'
       )}
       style={{ width: W }}
       aria-hidden

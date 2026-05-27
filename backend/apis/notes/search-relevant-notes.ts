@@ -4,10 +4,9 @@
 // here; the streamed answer + cost are handled in services/ai/agentic-rag.ts.
 import type { Request, Response } from "express";
 import type { UIMessage } from "ai";
-import { appendMessage, createThread, deriveThreadTitle } from "services/chat-threads";
+import { recordUserTurn } from "services/chat-threads";
 import { streamNotesChat } from "services/ai/agentic-rag";
 import { isChatModelId, isReasoningEffort } from "@shared/ai/chatModels";
-import { logger } from "utils/logger";
 
 interface SearchNotesBody {
   messages?: UIMessage[];
@@ -46,19 +45,18 @@ async function searchRelevantNotes(req: Request, res: Response) {
 
   const userText = lastUserText(messages);
 
+  // Record the user's turn off the response path: the thread id is generated locally
+  // (so a new chat's id streams back immediately) and the write runs in the background,
+  // so a slow or down Mongo never delays the first token. `persisted` lets the assistant
+  // turn wait for this write to land before appending to the thread.
   let activeThreadId = typeof threadId === "string" && threadId ? threadId : undefined;
   let newThreadId: string | undefined;
-  try {
-    if (!activeThreadId && userText) {
-      const created = await createThread(userId, deriveThreadTitle(userText));
-      activeThreadId = created.id;
-      newThreadId = created.id;
-    }
-    if (activeThreadId && userText) {
-      await appendMessage(activeThreadId, userId, { role: "user", content: userText });
-    }
-  } catch (err) {
-    logger.error("Thread persistence (user message) failed; continuing:", err);
+  let persisted: Promise<void> | undefined;
+  if (userText) {
+    const turn = recordUserTurn({ threadId: activeThreadId, userId, text: userText });
+    activeThreadId = turn.threadId;
+    if (turn.isNew) newThreadId = turn.threadId;
+    persisted = turn.persisted;
   }
 
   streamNotesChat({
@@ -70,6 +68,7 @@ async function searchRelevantNotes(req: Request, res: Response) {
     now: now ?? new Date().toISOString(),
     threadId: activeThreadId,
     newThreadId,
+    persisted,
     model,
     effort,
   });

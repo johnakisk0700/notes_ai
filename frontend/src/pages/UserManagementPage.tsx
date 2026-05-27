@@ -10,7 +10,6 @@ import type { Tefteri } from '@shared/db/schema/tefteri';
 import { ShieldUser, Trash, UserIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 
 interface UserProfile {
@@ -20,10 +19,8 @@ interface UserProfile {
 
 export const UserManagementPage = () => {
   const { t } = useTranslation();
-  const navigate = useNavigate();
-  const { user, isAdmin } = useAuth();
+  const { isAdmin } = useAuth();
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -39,10 +36,8 @@ export const UserManagementPage = () => {
       } = await api.get<{ data: { profile: Profile; tefteri: Tefteri | null }[] }>('get-profiles');
       setProfiles(profiles);
     } catch (error) {
-      console.error('Error loading profiles:', error);
+      if (import.meta.env.DEV) console.error('Error loading profiles:', error);
       toast.error(t('failed_to_load_profiles'));
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -66,7 +61,7 @@ export const UserManagementPage = () => {
 
       toast.success(`${selectedUser.profile.first_name || selectedUser.profile.email} has been deleted`);
     } catch (error) {
-      console.error('Error deleting user:', error);
+      if (import.meta.env.DEV) console.error('Error deleting user:', error);
       toast.error(t('failed_deletion'));
     } finally {
       setShowDeleteDialog(false);
@@ -94,7 +89,7 @@ export const UserManagementPage = () => {
 
       toast.success(`${t('successful_update')} ${selectedUser.profile.first_name || selectedUser.profile.email}`);
     } catch (error) {
-      console.error('Error updating role:', error);
+      if (import.meta.env.DEV) console.error('Error updating role:', error);
       toast.error('Failed to update role');
     } finally {
       setShowConfirmDialog(false);

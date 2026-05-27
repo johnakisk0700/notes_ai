@@ -20,7 +20,7 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
       setThreads(await fetchThreads());
     } catch (error) {
       // Sidebar simply shows no threads if the list can't be loaded.
-      console.error('Failed to load chat threads:', error);
+      if (import.meta.env.DEV) console.error('Failed to load chat threads:', error);
     }
   }, []);
 

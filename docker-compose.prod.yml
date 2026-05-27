@@ -1,26 +1,36 @@
 # PROD overrides — apply explicitly (this disables the dev override):
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
+#   (or: bun run prod locally / bun deploy.ts eu for the VM — see docs/deployment.md)
 #
-# Backend runs the bundled dist/server.js. With BACKEND_MODE=production it serves
-# HTTPS and reads Let's Encrypt certs from the mounted /etc/letsencrypt. If TLS is
-# terminated by an upstream proxy, set BACKEND_MODE=dev to serve plain HTTP.
-# Frontend is a static build served by nginx on host port 8081.
+# Topology: the *native host nginx* terminates TLS for mneme.narusec.io, serves the
+# static SPA build, and reverse-proxies /api/ to the backend on 127.0.0.1:5100. So
+# this compose runs the backend (plain HTTP, BACKEND_TLS=off) + data services + the
+# one-shot migrate / qdrant-init only. The `frontend` container is parked behind a
+# profile (the frontend is native on the VM) — opt in with
+# `--profile frontend-container` for a local full-stack prod test.
+# Set BACKEND_TLS=on to instead have the backend serve HTTPS directly (TLS_*_PATH certs).
 services:
   backend:
     build:
       target: runtime
     restart: always
     environment:
-      MODE: ${BACKEND_MODE:-production}
+      MODE: production
       NODE_ENV: production
+      # HTTP behind the native nginx (which holds the TLS cert). MODE stays
+      # "production" so the dev-auth-bypass can never engage. See backend/server.ts.
+      BACKEND_TLS: ${BACKEND_TLS:-off}
+    # Mounted certs are only read when BACKEND_TLS != off (direct-HTTPS mode).
     volumes:
       - /etc/letsencrypt:/etc/letsencrypt:ro
 
   frontend:
+    # In prod the frontend is served by the native host nginx, not this container.
+    profiles: ["frontend-container"]
     build:
       target: runtime
       args:
-        VITE_API_PROD_URL: ${VITE_API_URL:-http://localhost:5100/api/}
+        VITE_API_PROD_URL: ${VITE_API_PROD_URL:-http://localhost:5100/api/}
         VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY:-}
     restart: always
     ports:

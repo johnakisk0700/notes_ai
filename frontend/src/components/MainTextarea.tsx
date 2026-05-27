@@ -57,7 +57,7 @@ export const MainTextArea = ({ sendQuery, stopTextStream, isStreaming }: MainTex
       const { data } = await api.post('/get-transcription', request);
       setQuery(prev => prev + data.transcript);
     } catch (error) {
-      console.error('Error transcribing audio:', error);
+      if (import.meta.env.DEV) console.error('Error transcribing audio:', error);
       toast.error('Failed to transcribe audio');
     } finally {
       setIsTranscribing(false);
@@ -88,7 +88,7 @@ export const MainTextArea = ({ sendQuery, stopTextStream, isStreaming }: MainTex
           />
         </div>
 
-        <div className="w-full pb-1.5 pt-0.5 flex items-center gap-2">
+        <div className="mt-1.5 flex w-full items-center gap-2 border-t border-border/60 pb-1.5 pt-2">
           <ModelSelector value={model} onChange={setModel} effort={effort} onEffortChange={setEffort} />
           {isAdmin ? <UserSelector selectedUsers={selectedUsers} setSelectedUsers={setSelectedUsers} /> : null}
           <div className="flex gap-2 items-center ml-auto">

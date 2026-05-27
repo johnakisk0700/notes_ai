@@ -3,6 +3,13 @@
 Four stores, each with a clear role. **Postgres via Drizzle is the source of truth**
 for relational app data; Qdrant holds vectors; Mongo holds chat history; Redis caches.
 
+> **Storage backing.** In dev these run in named Docker volumes
+> (`notes_ai_{postgres,mongo,qdrant}_data`, declared in `docker-compose.override.yml`) —
+> the repo sits on a Windows/macOS drive bind-mounted into the Linux VM, and DB fsync
+> over that 9p/virtiofs boundary is slow. In prod they use `./data` bind mounts on the
+> Linux VM (the base-compose default — no boundary there, and host-visible for the
+> snapshot backups in `docs/deployment.md`).
+
 ## Postgres (Drizzle)
 
 Schema: `shared/db/schema/`. Client: `backend/clients/drizzle_postgres_client.ts`
@@ -70,9 +77,15 @@ drops + rebuilds the `notes` collection from Postgres if a full re-sync is ever 
 ## MongoDB
 
 Models: `backend/model/mongo-db/`. Client: `backend/clients/mongoose_client.ts`,
-connected at worker startup (best-effort — failure is logged, not fatal). Holds AI
-chat history: `UserThread` (one per conversation, embeds a `Message[]`), written by
+connected in the background at worker startup with retry/backoff (best-effort — the
+API serves whether or not Mongo is up; once connected, the driver auto-reconnects on
+drops). Buffering is off (`bufferCommands: false`), so while Mongo is unreachable
+writes no-op and reads return empty **instantly** instead of stalling ~10s then
+erroring. Holds AI chat history: `UserThread` (one per conversation, embeds a
+`Message[]`), written by
 the chat flow (`services/chat-threads.ts`) and read by `get-threads` / `get-thread`.
+Threads are indexed by `user_id` plus descending `inserted_at` for the sidebar list;
+single-thread loads use Mongo's `_id` index and enforce `user_id` ownership in the filter.
 Each `Message` stores `{ role, content?, parts?, metadata?, timestamp }`: `content` is the
 plain-text projection (user text / Lexi's answer); `parts` holds the full AI SDK UIMessage parts
 (text + tool-call parts, Mixed) for assistant turns, so reloaded threads re-render the tool

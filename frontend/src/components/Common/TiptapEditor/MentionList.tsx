@@ -67,7 +67,7 @@ export const MentionList: FC<MentionListProps> = forwardRef(({ items, command },
       {items.length ? (
         items.map((item, index) => (
           <button
-            ref={el => (itemRefs.current[index] = el)}
+            ref={el => { itemRefs.current[index] = el; }}
             className={index === selectedIndex ? 'is-selected' : ''}
             key={index}
             onClick={() => selectItem(index)}

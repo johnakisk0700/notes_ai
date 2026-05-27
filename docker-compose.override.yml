@@ -65,3 +65,30 @@ services:
       - /app/node_modules
       - /app/frontend/node_modules
       - /app/shared/node_modules
+
+  # Data stores on named Docker volumes (declared below) instead of the base
+  # ./data bind mounts. On a Windows/macOS host the repo is bind-mounted into the
+  # Linux VM, and DB fsync over that 9p/virtiofs boundary is slow and stalls — the
+  # same boundary that breaks inotify (hence WATCH_POLLING above). Named volumes live
+  # on the VM's native filesystem, so the DBs run at near-native speed. PROD keeps the
+  # bind mounts (Linux host: no boundary, and host-visible data dirs for the snapshot
+  # backups in docs/deployment.md) — prod uses base + docker-compose.prod.yml, which
+  # never loads this file. Compose merges service volumes by target path, so each
+  # entry below replaces the base bind mount; qdrant's config-file mount (a different
+  # target) is preserved.
+  postgres-ai-assistant:
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  mongo-ai-assistant:
+    volumes:
+      - mongo_data:/data/db
+
+  qdrant-ai-assistant:
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+volumes:
+  postgres_data:
+  mongo_data:
+  qdrant_data:

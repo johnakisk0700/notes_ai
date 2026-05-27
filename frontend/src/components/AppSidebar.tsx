@@ -14,7 +14,16 @@ import {
 import { useAuth } from '@/context/AuthContext/AuthContext';
 import { useNoteEditor } from '@/context/NoteEditorContext';
 import { useThreads } from '@/context/ThreadsContext';
-import { Bot, ChevronsUpDownIcon, MessageCircle, Notebook, PlusIcon, SlidersHorizontal, Trash2, Users } from 'lucide-react';
+import {
+  ChevronsUpDownIcon,
+  MessageCircle,
+  MessageSquarePlus,
+  Notebook,
+  PenLine,
+  SlidersHorizontal,
+  Trash2,
+  Users,
+} from 'lucide-react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
 import { Button } from './ui/button';
 import { useMemo, type MouseEvent } from 'react';
@@ -31,12 +40,6 @@ export function AppSidebar() {
           description: t('personal_notes_description'),
           icon: <Notebook className="size-5" />,
           url: '/notes',
-        },
-        {
-          title: t('ai_assistant'),
-          description: t('ai_assistant_description'),
-          icon: <Bot className="size-5" />,
-          url: '/',
         },
       ],
       adminPages: [
@@ -83,7 +86,7 @@ export function AppSidebar() {
       // If we just deleted the open thread, fall back to a fresh chat.
       if (location.pathname === `/thread/${id}`) navigate('/');
     } catch (err) {
-      console.error('Failed to delete thread:', err);
+      if (import.meta.env.DEV) console.error('Failed to delete thread:', err);
     }
   };
 
@@ -91,38 +94,74 @@ export function AppSidebar() {
 
   return (
     <Sidebar>
-      <SidebarHeader>
-        <SidebarGroupContent>
-          {/* Title row sized so its center matches the main header's open/close
-              toggle — settings ⚙ and the toggle line up across the sidebar/page seam. */}
-          <div className="flex h-10 items-center justify-between mb-2 px-1">
-            <div className="font-serif text-xl tracking-tight">Mneme</div>
-            <Button variant="ghost" size="icon" className="size-7 text-muted-foreground" asChild>
-              <NavLink to={'/settings'} aria-label="Settings" onClick={() => handleNavigation()}>
-                <SlidersHorizontal />
-              </NavLink>
-            </Button>
-          </div>
-
-          <Button className="size-10 w-full justify-between font-bold mb-2" size="lg" onClick={() => openEditor()}>
-            {t('new_note')} <PlusIcon />
+      <SidebarHeader className="gap-0 p-2 md:pr-4">
+        {/* Title row sized so its center matches the main header's open/close
+            toggle; the controls line up across the sidebar/page edge. */}
+        <div className="mb-2 flex h-10 items-center justify-between px-1">
+          <div className="font-serif text-xl tracking-tight">Mneme</div>
+          <Button variant="ghost" size="icon" className="size-7 text-muted-foreground" asChild>
+            <NavLink to={'/settings'} aria-label="Settings" onClick={() => handleNavigation()}>
+              <SlidersHorizontal />
+            </NavLink>
           </Button>
+        </div>
+
+        <div className="grid gap-1 rounded-lg border border-sidebar-border/70 bg-sidebar-accent/25 p-1.5">
+          <Button className="h-10 w-full justify-between px-3 font-semibold shadow-sm" onClick={() => openEditor()}>
+            {t('new_note')} <PenLine />
+          </Button>
+          <Button
+            variant="ghost"
+            className="h-10 w-full justify-between border border-transparent px-3 font-semibold text-sidebar-foreground hover:border-sidebar-border hover:bg-sidebar-accent"
+            onClick={handleNewChat}
+          >
+            {t('new_chat')} <MessageSquarePlus />
+          </Button>
+        </div>
+      </SidebarHeader>
+
+      <SidebarContent className="gap-0">
+        <SidebarGroup className="gap-3 pt-1 md:pr-4">
+          <SidebarMenu>
+            {menu.pages.map(item => (
+              <SidebarMenuItem key={item.title} className="rounded-md border">
+                <SidebarMenuButton asChild>
+                  <NavLink
+                    to={item.url}
+                    className="grid h-fit py-2.5 text-sm transition-all"
+                    onClick={() => handleNavigation(item.url)}
+                  >
+                    <div className="flex items-center gap-2">
+                      {item.icon}
+                      <span>{item.title}</span>
+                    </div>
+
+                    <p className="text-xs text-foreground/50">{item.description}</p>
+                  </NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
 
           {isAdmin && (
-            <Collapsible className="mb-2">
+            <Collapsible className="border-t border-sidebar-border/70 pt-2">
               <CollapsibleTrigger asChild>
-                <Button className="w-full justify-between font-semibold bg-destructive/20" size="lg" variant="secondary">
+                <Button
+                  className="h-9 w-full justify-between px-2 font-medium text-sidebar-foreground/70 hover:text-sidebar-foreground"
+                  size="sm"
+                  variant="ghost"
+                >
                   {t('administration')} <ChevronsUpDownIcon />
                 </Button>
               </CollapsibleTrigger>
-              <CollapsibleContent className="mt-0.5 bg-destructive/15 rounded-lg">
+              <CollapsibleContent className="mt-1 rounded-lg bg-sidebar-accent/30 p-0.5">
                 <SidebarMenu>
                   {menu.adminPages.map(item => (
                     <SidebarMenuItem key={item.title}>
                       <SidebarMenuButton asChild>
                         <NavLink
                           to={item.url}
-                          className="h-fit grid py-2.5 text-sm"
+                          className="grid h-fit py-2.5 text-sm"
                           onClick={() => handleNavigation(item.url)}
                         >
                           <div className="flex items-center gap-2">
@@ -130,7 +169,9 @@ export function AppSidebar() {
                             <span>{item.title}</span>
                           </div>
 
-                          <p className="text-foreground/50 text-xs">{item.description}</p>
+                          <p className="mt-0.5 pl-7 text-xs leading-snug text-sidebar-foreground/55">
+                            {item.description}
+                          </p>
                         </NavLink>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -140,43 +181,11 @@ export function AppSidebar() {
             </Collapsible>
           )}
 
-          <SidebarMenu>
-            {menu.pages.map(item => (
-              <SidebarMenuItem key={item.title} className="border-1 rounded-md">
-                <SidebarMenuButton asChild>
-                  <NavLink
-                    to={item.url}
-                    className="h-fit grid py-2.5 text-sm transition-all"
-                    onClick={() => handleNavigation(item.url)}
-                  >
-                    <div className="flex items-center gap-2">
-                      {item.icon}
-                      <span>{item.title}</span>
-                    </div>
-
-                    <p className="text-foreground/50 text-xs">{item.description}</p>
-                  </NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ))}
-          </SidebarMenu>
-        </SidebarGroupContent>
-      </SidebarHeader>
-
-      <SidebarContent>
-        <SidebarGroup>
-          <Button
-            variant="secondary"
-            className="w-full justify-between font-bold mb-2"
-            size="lg"
-            onClick={handleNewChat}
-          >
-            {t('new_chat')} <PlusIcon />
-          </Button>
-
           {threads.length > 0 && (
-            <SidebarGroupContent className="text-foreground/75">
-              <div className="px-1 py-1 text-xs font-medium text-foreground/50">{t('recent_chats')}</div>
+            <SidebarGroupContent className="border-t border-sidebar-border/70 pt-2 text-sidebar-foreground/75">
+              <div className="px-2 pb-1 text-[0.6875rem] font-medium uppercase tracking-[0.12em] text-sidebar-foreground/45">
+                {t('recent_chats')}
+              </div>
               <SidebarMenu>
                 {threads.map(thread => (
                   <SidebarMenuItem key={thread.id} className="group/thread relative">
@@ -195,7 +204,7 @@ export function AppSidebar() {
                       type="button"
                       aria-label={t('delete_thread')}
                       title={t('delete_thread')}
-                      className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-foreground/40 opacity-0 transition-opacity hover:text-destructive group-hover/thread:opacity-100"
+                      className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-sidebar-foreground/40 opacity-0 transition-opacity hover:text-destructive group-hover/thread:opacity-100"
                       onClick={e => handleDeleteThread(e, thread.id)}
                     >
                       <Trash2 className="h-4 w-4" />

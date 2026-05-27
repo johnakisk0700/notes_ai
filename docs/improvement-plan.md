@@ -17,6 +17,27 @@ Each item notes: **what / why / where / how / verify**, and whether it's a
 
 ---
 
+## Status — updated 2026-05-27
+
+Done since this plan was written:
+- **#1** real threads (sidebar via `ThreadsContext`) and **#11** Prettier (`.prettierrc`) — earlier.
+- **#3** the `MentionList` React-19 ref-callback bug — fixed (block-body ref). The wider
+  tsc/lint backlog is mostly cleared: only **2** `TS6133` remain, both in `NoteEditor.tsx`
+  (`setIsTranscribing` / `handleTranscriptUpdate`), left for the editor refactor (#15).
+- **#4** route-level code-splitting + vendor `manualChunks` — entry bundle ~1.4 MB → ~260 kB.
+- **#8** `console.*` cleanup — debug logs removed; error logs gated behind `import.meta.env.DEV`.
+- **Bug found via #3 — admin note delete was dead.** `AdminNotesPage.handleDelete` was never
+  passed down, and `AdminNotesList` forwarded a no-op `() => {}` to `NoteComponent`, so the
+  admin trash button did nothing. Now wired through an `onDelete` prop **with a confirm
+  dialog** (`note_deletion_warning`), using the already-admin-authorized `POST /delete-note`
+  (`isAdmin` can delete any note; see `backend/apis/notes/delete-note.ts`).
+
+Still open: **#2** TipTap runtime QA, **#5/#6** provider/plugin perf, **#7** tests, **#9**
+`noImplicitAny`, **#10** hardcoded strings, **#12/#13** structure/eslint tidy, **#14** Node
+version, **#15** NoteEditor dialog refactor (being handled separately).
+
+---
+
 ## P1 — Correctness & functional gaps
 
 ### 1. Sidebar shows MOCK chat threads, not real ones  **[verified]**

@@ -49,15 +49,13 @@ const AudioRecorder = ({ onTranscriptionComplete, isTranscribing = false, ...pro
           reader.readAsDataURL(blob);
         });
 
-        console.log('Base64 size in MB:', base64Audio.length / (1024 * 1024));
-
         onTranscriptionComplete(base64Audio);
       };
 
       mediaRecorder.current.start();
       setIsRecording(true);
     } catch (error) {
-      console.error('Error accessing microphone:', error);
+      if (import.meta.env.DEV) console.error('Error accessing microphone:', error);
       toast.error('Error accessing microphone');
     }
   };

@@ -54,8 +54,8 @@ export const StreamChatProvider = ({ children }: { children: ReactNode }) => {
     return m ? decodeURIComponent(m[1]) : undefined;
   }, [location.pathname]);
 
-  // Values the transport reads at send time, and a guard so the hydrate effect
-  // doesn't refetch a thread we just created locally mid-stream.
+  // Values the transport reads at send time, and the thread whose messages are
+  // already rendered (including a thread created locally during a stream).
   const threadIdRef = useRef<string | undefined>(undefined);
   const selectedUsersRef = useRef<string[]>([]);
   const loadedThreadRef = useRef<string | undefined>(undefined);
@@ -132,23 +132,25 @@ export const StreamChatProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     if (!routeThreadId) {
       // Root "/" = new chat: clear unless already empty.
-      if (loadedThreadRef.current !== undefined) {
+      if (threadIdRef.current !== undefined || loadedThreadRef.current !== undefined) {
         loadedThreadRef.current = undefined;
         threadIdRef.current = undefined;
         setMessages([]);
       }
       return;
     }
+    threadIdRef.current = routeThreadId;
     // Already showing this thread (incl. one we just created) — nothing to load.
     if (routeThreadId === loadedThreadRef.current) return;
 
     let cancelled = false;
-    loadedThreadRef.current = routeThreadId;
-    threadIdRef.current = routeThreadId;
     (async () => {
       try {
         const detail = await fetchThread(routeThreadId);
         if (cancelled) return;
+        // Mark loaded only after hydration succeeds. In development StrictMode
+        // discards the first mount effect and reruns it before this resolves.
+        loadedThreadRef.current = routeThreadId;
         setMessages(
           detail.messages.map(m => ({
             id: m.id,

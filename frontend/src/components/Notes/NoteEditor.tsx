@@ -20,6 +20,7 @@ import { Label } from '../ui/label';
 import { Separator } from '../ui/separator';
 import { useAuth } from '@/context/AuthContext/AuthContext';
 import { RealtimeAudioRecorder } from '../Common/RealtimeAudioRecorder';
+import { TopSpiralBinding } from '../Common/TopSpiralBinding';
 import { NoteToolbar } from './NoteToolbar';
 
 export const NoteEditor = () => {
@@ -45,8 +46,12 @@ export const NoteEditor = () => {
         aria-description="Note editing content and tools."
         showCloseButton={false}
         onPressClose={() => closeEditor()}
-        className="bg-secondary/60 backdrop-blur-md min-h-[100dvh] min-w-[100dvw] lg:min-h-[75dvh] lg:min-w-[60dvw] max-h-[100dvh] max-w-[100dvw] p-0 transition-none"
+        className="bg-card min-h-[100dvh] min-w-[100dvw] lg:min-h-[75dvh] lg:min-w-[60dvw] max-h-[100dvh] max-w-[100dvw] overflow-visible rounded-none p-0 shadow-xl transition-none lg:rounded-b-xl lg:rounded-t-none"
       >
+        {/* The coil that binds the sheet at its top edge — turns the dialog into a steno pad.
+            Only on lg+, where the dialog is a floating sheet; below that it's fullscreen and the
+            coil would sit half-clipped against the screen edge (the seam coil hides on mobile too). */}
+        <TopSpiralBinding className="hidden lg:block" />
         <EditorCore />
       </DialogContent>
     </Dialog>
@@ -262,7 +267,7 @@ const EditorCore = () => {
 
   const isReminderSet = selectedDate && selectedTime;
   return (
-    <div className="relative grid grid-rows-[auto_auto_auto_1fr] gap-3 p-4 pt-3.5 max-h-[100dvh]" tabIndex={0}>
+    <div className="relative grid grid-rows-[auto_auto_auto_1fr] gap-3 p-4 pt-6 max-h-[100dvh]" tabIndex={0}>
       {/* Header — reminder controls on the left, primary actions on the right */}
       <DialogHeader>
         <DialogTitle hidden={true}>Note Editor</DialogTitle>
@@ -373,8 +378,8 @@ const EditorCore = () => {
       {/* Formatting toolbar */}
       <NoteToolbar editor={editor} disabled={editorUnavailable} />
 
-      {/* Editor surface */}
-      <div className="relative max-h-full max-w-full overflow-hidden rounded-lg bg-background/40 text-sm text-foreground/90">
+      {/* Editor surface — ruled paper, so writing sits on notebook lines */}
+      <div className="nb-paper relative max-h-full max-w-full overflow-hidden rounded-lg bg-background/40 text-sm text-foreground/90">
         <RealtimeAudioRecorder
           onStreamingText={handleStreamingText}
           onFinalText={handleFinalText}

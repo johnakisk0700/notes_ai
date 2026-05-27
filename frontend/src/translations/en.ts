@@ -54,6 +54,7 @@ const enContent = {
   are_you_sure: 'Are you sure?',
   account_deletion_warning:
     'This action cannot be undone. This will permanently delete your account and remove your data from our servers.',
+  note_deletion_warning: 'This action cannot be undone. The note will be permanently deleted.',
   cancel: 'Cancel',
   confirm: 'Confirm',
   verify_email: 'Verify your email',

@@ -20,7 +20,7 @@ export const useRealtimeTranscriber = () => {
       pcRef.current = connection;
       setIsRecording(true);
     } catch (error) {
-      console.error('Failed to start recording:', error);
+      if (import.meta.env.DEV) console.error('Failed to start recording:', error);
     } finally {
       setIsConnecting(false);
     }
@@ -79,7 +79,6 @@ const connectToOpenAIRTC = async (
   dc.addEventListener('message', e => {
     try {
       const msg = JSON.parse(e.data);
-      console.log('[oai]', msg);
 
       switch (msg.type) {
         // streaming user STT (partial updates as you speak)
@@ -98,7 +97,7 @@ const connectToOpenAIRTC = async (
           break;
       }
     } catch {
-      console.warn('non-JSON message', e.data);
+      if (import.meta.env.DEV) console.warn('non-JSON message', e.data);
     }
   });
 

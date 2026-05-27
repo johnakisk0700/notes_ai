@@ -31,8 +31,8 @@ const UserThreadsSchema = new mongoose.Schema({
   },
 });
 
-// Create compound index
-UserThreadsSchema.index({ user_id: 1, thread_id: 1 });
+// Supports the sidebar query: a user's threads ordered newest first.
+UserThreadsSchema.index({ user_id: 1, inserted_at: -1 });
 
 // Create the model with type
 export const UserThread = mongoose.model<IUserThread>("UserThread", UserThreadsSchema);

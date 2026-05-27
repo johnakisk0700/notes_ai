@@ -42,17 +42,18 @@ Postgres, keyed by the Clerk user ID.
 - `clerkMiddleware()` is applied globally in `server.ts`.
 - `verifyJWT` (`backend/authentication/verifyJWT.ts`):
   1. `getAuth(req)` → `userId` (401 if missing).
-  2. `clerkClient.users.getUser(userId)` → the Clerk user, attached as `req.user`.
-  3. Loads `role` from the `profile` table; sets `req.user.isAdmin`.
+  2. Loads `role` from the `profile` table and attaches `{ id, isAdmin }` as `req.user`.
+  3. Only when that profile row is missing, fetches the Clerk user to lazily populate it.
 - The `profile` PK is the Clerk user ID (`text`), so no ID mapping is needed.
 
 ## Profile provisioning
 
 Every Clerk user needs a matching `profile` row (for role + tefteri). The email/password
 sign-up calls `POST /api/create-profile`. For everyone else — Google OAuth users, users
-created directly in Clerk, or if `create-profile` failed — `verifyJWT` lazily creates the
-row from the Clerk user (`firstName`/`lastName`/primary email) on the first authenticated
-request. So no auth path can end up without a profile.
+created directly in Clerk, or if `create-profile` failed — `verifyJWT` lazily fetches
+the Clerk user and creates the row (`firstName`/`lastName`/primary email) on the first
+authenticated request. Established users are served from Postgres without a per-request
+Clerk API fetch. So no auth path can end up without a profile.
 
 ## Required config
 

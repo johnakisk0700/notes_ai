@@ -12,7 +12,8 @@
     "dev:down": "docker compose down",
     "prod": "docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d",
     "prod:down": "docker compose -f docker-compose.yml -f docker-compose.prod.yml down",
-    "logs": "docker compose logs -f"
+    "logs": "docker compose logs -f",
+    "deploy": "bun deploy.ts"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.10",

@@ -21,9 +21,16 @@ bun run dev          # DEV:  hot-reload backend + Vite (HTTP). Source is bind-mo
                      #       so code edits need NO rebuild — just save. Runs foreground.
 bun run dev:rebuild  # DEV:  rebuild images + renew anon volumes. Use this (not `dev`)
                      #       after changing deps (package.json/bun.lock) or a Dockerfile.
-bun run prod         # PROD: bundled backend (HTTPS) + nginx-served frontend (detached)
+bun run prod         # PROD (local): bundled backend on HTTP (detached). The frontend
+                     #       container is behind the `frontend-container` profile — add
+                     #       `--profile frontend-container` for a full local prod test.
 bun run dev:down     # stop the dev stack          (prod:down for prod)
 bun run logs         # tail all service logs
+
+# Deploy to the VM (mneme.narusec.io) — from repo root. Builds the SPA, rsyncs to the
+# VM, brings up the Docker backend + DBs (migrations auto-run). Native nginx serves the
+# SPA + proxies /api. Full runbook + VM prerequisites in docs/deployment.md.
+bun deploy.ts eu     # full deploy   (bun deploy.ts backend = backend-only, no SPA rebuild)
 
 # Hot reload uses POLLING by default (WATCH_POLLING=true) because the repo lives on
 # a Windows drive bind-mounted into Linux — native file events (inotify) don't cross
@@ -75,8 +82,9 @@ frontend (axios, Bearer token) ─► backend /api/* ─► Postgres (notes/remi
                                        └─► MongoDB (chat threads/messages)
 ```
 
-- Server forks a worker per 2 CPUs (`cluster`). Dev = plain HTTP, prod = HTTPS
-  with Let's Encrypt certs. Entry: `backend/server.ts` (all routes registered here).
+- Server forks a worker per 2 CPUs (`cluster`). Dev = plain HTTP; in prod the backend
+  serves HTTP behind the native host nginx (which terminates TLS for mneme.narusec.io —
+  see `docs/deployment.md`). Entry: `backend/server.ts` (all routes registered here).
 - Chat flow (agentic RAG on the Vercel AI SDK): `POST /api/search-notes` runs a streaming
   multi-step tool loop (`streamText` + `stopWhen`) where the model calls note-retrieval
   tools (`search_notes`, `filter_by_date`, `list_recent_notes` — `services/ai/notes-tools.ts`), reads the
@@ -128,12 +136,19 @@ frontend (axios, Bearer token) ─► backend /api/* ─► Postgres (notes/remi
 The Postgres source of truth is `shared/db/schema/` only (the old pre-Drizzle
 `backend/model/postgresql/*.sql` and custom migration runner have been removed).
 
+**Storage backing:** in dev the stores persist in named Docker volumes
+(`notes_ai_{postgres,mongo,qdrant}_data`, set in `docker-compose.override.yml`) — fast on
+Windows/macOS hosts, where a `./data` bind mount is slow over the VM's 9p/virtiofs
+boundary. Prod keeps the `./data` bind mounts (base-compose default, Linux VM). See
+`docs/data-stores.md`.
+
 ## Auth — Clerk (only)
 
 - Frontend: `ClerkProvider` in `frontend/src/main.tsx`. Requests attach the Clerk
   session token as `Authorization: Bearer` (see `frontend/src/integrations/api.ts`).
 - Backend: `clerkMiddleware()` + `verifyJWT` (`backend/authentication/verifyJWT.ts`)
-  resolves the Clerk user and loads `role` (admin/user) from the `profile` table.
+  loads `role` (admin/user) from the `profile` table and fetches the Clerk user
+  only when lazily provisioning a missing profile.
 - The `profile` table PK **is** the Clerk user ID (`text`).
 
 There is **no Supabase**. If you see `@supabase/*` imports, they are leftover — do
@@ -182,6 +197,7 @@ Sloppy code (unclear names, overlong functions, logic that needs a mental map to
 ## Deeper docs
 
 - `docs/architecture.md` — services, request lifecycle, clustering, Docker dev/prod.
+- `docs/deployment.md` — production deploy runbook (native nginx + Dockerized backend on the VM, mneme.narusec.io).
 - `docs/data-stores.md` — every Postgres table, Qdrant collection, Mongo model.
 - `docs/api-reference.md` — all backend endpoints.
 - `docs/auth.md` — Clerk flow front-to-back + profile provisioning.

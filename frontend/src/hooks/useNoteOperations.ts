@@ -1,4 +1,3 @@
-import { useAuth } from '@/context/AuthContext/AuthContext';
 import { api } from '@/integrations/api';
 import type { FullNote } from '@shared/dto/GetNoteDTO';
 import { useState } from 'react';
@@ -6,7 +5,6 @@ import { toast } from 'sonner';
 import { useGlobalAbortController } from './useGlobalAbortController';
 
 export const useNoteOperations = (onSuccess?: () => void) => {
-  const { user } = useAuth();
   const { getSignal } = useGlobalAbortController();
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -126,7 +124,7 @@ export const useNoteOperations = (onSuccess?: () => void) => {
       return true;
     } catch (error) {
       if (error instanceof Error && error.name !== 'AbortError') {
-        console.error('Error saving note:', error);
+        if (import.meta.env.DEV) console.error('Error saving note:', error);
         toast.error('Failed to save note');
       }
       return false;

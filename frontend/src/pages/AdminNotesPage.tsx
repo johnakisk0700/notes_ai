@@ -1,4 +1,6 @@
 import { AdminNotesList } from '@/components/Admin/AdminNotesList';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useAuth } from '@/context/AuthContext/AuthContext';
 import { api } from '@/integrations/api';
 import type { Note } from '@shared/db/schema/notes';
@@ -15,6 +17,8 @@ interface GroupedNotes {
 const AdminNotes: React.FC = () => {
   const { t } = useTranslation();
   const [groupedNotes, setGroupedNotes] = useState<GroupedNotes>({});
+  // The note awaiting delete-confirmation; null means the dialog is closed.
+  const [noteToDelete, setNoteToDelete] = useState<string | null>(null);
 
   const { isAdmin } = useAuth();
   useEffect(() => {
@@ -40,7 +44,6 @@ const AdminNotes: React.FC = () => {
 
       const profileMap = new Map(profiles?.map(p => [p.profile.id, p.profile]));
       const emailMap = new Map(profiles?.map(p => [p.profile.id, p.profile.email]));
-      console.log(profileMap);
       const grouped = (notes || []).reduce((acc: GroupedNotes, note) => {
         const profile: any = profileMap.get(note.userId);
         const email: any = emailMap.get(note.userId);
@@ -64,27 +67,49 @@ const AdminNotes: React.FC = () => {
 
       setGroupedNotes(grouped);
     } catch (error) {
-      console.error('Error loading notes:', error);
+      if (import.meta.env.DEV) console.error('Error loading notes:', error);
       toast.error('Failed to load notes');
     }
   };
 
-  const handleDelete = async (noteId: string) => {
+  // The note cards only open the dialog (setNoteToDelete); the actual delete waits for
+  // confirmation here. Admins can delete any user's note — the backend authorizes it.
+  const confirmDelete = async () => {
+    if (!noteToDelete) return;
     try {
-      await api.post('/delete-note', { noteId });
-      toast.success('Note deleted successfully');
+      await api.post('/delete-note', { noteId: noteToDelete });
+      toast.success(t('successful_note_deletion'));
       loadNotes();
     } catch (error) {
-      console.error('Error deleting note:', error);
-      toast.error('Failed to delete note');
+      if (import.meta.env.DEV) console.error('Error deleting note:', error);
+      toast.error(t('failed_deletion'));
+    } finally {
+      setNoteToDelete(null);
     }
   };
 
   return (
     <div className="h-[100dvh] w-full overflow-y-scroll hide-scrollbar">
       {Object.entries(groupedNotes).map(([userIdentifier, notes]) => (
-        <AdminNotesList key={userIdentifier} userIdentifier={userIdentifier} notes={notes} />
+        <AdminNotesList key={userIdentifier} userIdentifier={userIdentifier} notes={notes} onDelete={setNoteToDelete} />
       ))}
+
+      <Dialog open={noteToDelete !== null} onOpenChange={open => !open && setNoteToDelete(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('are_you_sure')}</DialogTitle>
+            <DialogDescription>{t('note_deletion_warning')}</DialogDescription>
+          </DialogHeader>
+          <div className="ml-auto flex gap-2">
+            <Button variant="secondary" onClick={() => setNoteToDelete(null)}>
+              {t('cancel')}
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete}>
+              {t('confirm')}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

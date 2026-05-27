@@ -3,6 +3,8 @@ import { MainTextArea } from '@/components/MainTextarea';
 import { useStreamChat } from '@/context/StreamChatContext';
 import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 
+const QUESTION_OPTICAL_NUDGE_PX = 1;
+
 export const MainChatPage: React.FC = () => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [userMessageHeight, setUserMessageHeight] = useState<number>(0);
@@ -36,16 +38,29 @@ export const MainChatPage: React.FC = () => {
     const lastMessage = messages[messages.length - 1];
     if (lastMessage.role !== 'user') return;
 
-    const userMessageElement = document.getElementById(lastMessage.id);
-    const scroller = scrollContainerRef.current;
-    if (!userMessageElement || !scroller) return;
+    const alignQuestionToToggle = () => {
+      const userMessageElement = document.getElementById(lastMessage.id);
+      const scroller = scrollContainerRef.current;
+      if (!userMessageElement || !scroller) return;
 
-    // Align the question's top with the sidebar toggle, so it lines up with the
-    // floating header controls (the see-through header sits over the conversation).
-    const toggle = document.querySelector('[data-sidebar="trigger"]');
-    const targetTop = toggle ? toggle.getBoundingClientRect().top : scroller.getBoundingClientRect().top + 10;
-    const elementTop = userMessageElement.getBoundingClientRect().top;
-    scroller.scrollTo({ top: scroller.scrollTop + elementTop - targetTop, behavior: 'smooth' });
+      const toggle = document.querySelector('[data-sidebar="trigger"]');
+      const questionContent = userMessageElement.querySelector<HTMLElement>('[data-chat-user-content]');
+      const questionBounds = (questionContent ?? userMessageElement).getBoundingClientRect();
+      const toggleBounds = toggle?.getBoundingClientRect();
+      const offset = toggleBounds
+        ? questionBounds.top +
+          Math.min(questionBounds.height, toggleBounds.height) / 2 -
+          (toggleBounds.top + toggleBounds.height / 2 + QUESTION_OPTICAL_NUDGE_PX)
+        : questionBounds.top - (scroller.getBoundingClientRect().top + 10);
+      if (Math.abs(offset) > 0.5) {
+        scroller.scrollTo({ top: scroller.scrollTop + offset, behavior: 'smooth' });
+      }
+    };
+
+    // Preserve the glide into place while giving freshly mounted placeholders
+    // one extra frame to settle before confirming the same destination.
+    alignQuestionToToggle();
+    requestAnimationFrame(alignQuestionToToggle);
   };
 
   // Calculate remaining height for AI message - Fix the dependency
@@ -64,9 +79,9 @@ export const MainChatPage: React.FC = () => {
     <>
       <div
         ref={scrollContainerRef}
-        className="nb-paper absolute bottom-0 left-0 overflow-y-scroll max-h-full scrollbar-thin top-0 w-full pb-32 pl-[8px] text-sm"
+        className="nb-paper absolute bottom-0 left-0 top-0 max-h-full w-full overflow-y-scroll pb-32 text-sm [overflow-anchor:none] scrollbar-thin"
       >
-        <div className="min-h-[calc(100dvh-10rem)] mx-auto max-w-4xl w-full top-0 relative ">
+        <div className="min-h-[calc(100dvh-10rem)] mx-auto max-w-2xl w-full top-0 relative">
           <StreamChat aiMessageHeight={calculateAIMessageHeight} onAIContainerReady={handleAIContainerReady} />
         </div>
       </div>

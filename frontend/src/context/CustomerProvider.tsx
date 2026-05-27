@@ -9,7 +9,6 @@ export function CustomerProvider({ children }) {
   useEffect(() => {
     const localCustomerNames = localStorage.getItem('customers_db');
     if (localCustomerNames) {
-      console.log('Retrieved customers list from localStorage');
       setCustomer(JSON.parse(localCustomerNames));
     } else {
       (async () => {

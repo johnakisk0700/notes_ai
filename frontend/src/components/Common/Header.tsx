@@ -1,44 +1,45 @@
 import { useLocation } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { SidebarTrigger } from '../ui/sidebar';
-import { NoteSearch } from '../Notes/NoteSearch';
+import { PageRule } from './PageRule';
 
 /**
- * Top bar — SEE-THROUGH. It has no fill or rule, so the notebook paper (and the
- * messages scrolling under it) stay visible; it only floats the controls. Because
- * it overlays the conversation on chat, the bar itself is pointer-events-none and
- * only the interactive bits opt back in, so scrolling the top of the page works.
- *  - chat: the sidebar toggle + "Ρωτήστε τη Lexi…" title + today's date, in a row
- *    the active message scrolls up to line up with.
- *  - /notes: the toggle + search box (the page title is a PageRule below the list).
+ * Top bar — SEE-THROUGH. It floats only controls over the notebook paper. On
+ * chat, the title and date are part of the scrolling conversation introduction;
+ * here only the sidebar toggle remains. On /notes, it carries the dated title.
  * The toggle lines up vertically with the settings button in the sidebar header.
  */
 export const Header = () => {
   const { pathname } = useLocation();
-  const { t, i18n } = useTranslation();
-
-  const isChat = pathname === '/' || pathname.startsWith('/thread');
+  const { t } = useTranslation();
   const isNotes = pathname === '/notes';
-
-  const today = new Date().toLocaleDateString(i18n.language === 'en' ? 'en-US' : 'el-GR', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  });
 
   return (
     <header className="pointer-events-none relative z-50 flex h-14 shrink-0 items-center gap-3 px-2.5">
-      {/* ml-1.5 centers the toggle in the notebook's left ruled margin (~2.25rem). */}
-      <SidebarTrigger className="pointer-events-auto ml-1.5 shrink-0" />
+      {isNotes && (
+        <>
+          {/* Solid paper behind the title so notes scrolling up are hidden, not bleeding
+              through the see-through bar. Below the controls (-z-10), flush-left like the page. */}
+          <div className="absolute inset-0 -z-10 bg-background" aria-hidden />
+          {/* Continue the notebook's faint margin line across the masthead; it paints only the
+              1px rule and shares .nb-page's flush-left origin so it lines up with the ruled paper
+              below (no jog at the masthead/paper seam). */}
+          <div className="nb-margin-rule pointer-events-none absolute inset-0 -z-10" aria-hidden />
+        </>
+      )}
 
-      {isChat ? (
-        <div className="flex min-w-0 flex-1 items-baseline justify-between gap-3">
-          <span className="truncate font-mono text-xs text-muted-foreground">{t('chat_tips')}</span>
-          <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground/70">{today}</span>
-        </div>
-      ) : isNotes ? (
-        <div className="pointer-events-auto mx-auto w-full max-w-5xl">
-          <NoteSearch className="h-9" />
+      {/* Lifted above the masthead (z-10) so it stays clickable; nudged left to sit just
+          inside the flush page's left edge. */}
+      <SidebarTrigger className="relative z-10 -ml-1.5 pointer-events-auto shrink-0" />
+
+      {isNotes ? (
+        <div className="absolute inset-0 flex items-center">
+          <PageRule
+            label={t('personal_notes')}
+            className="pointer-events-auto mb-0 mt-0 h-14"
+            contentClassName="mx-auto h-full w-full max-w-7xl items-center px-1 pb-0 pl-11"
+            labelClassName="translate-x-px"
+          />
         </div>
       ) : null}
     </header>

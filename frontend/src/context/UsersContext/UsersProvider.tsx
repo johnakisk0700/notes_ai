@@ -11,10 +11,9 @@ export function UsersProvider({ children }) {
     (async () => {
       try {
         const names = await fetchAllUsers();
-        console.log('Retrieved user list');
         setUsers(names);
       } catch (error) {
-        console.error('Error loading users:', error);
+        if (import.meta.env.DEV) console.error('Error loading users:', error);
         toast.error('Failed to load users');
       }
     })();
