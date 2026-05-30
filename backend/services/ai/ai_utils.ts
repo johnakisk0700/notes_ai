@@ -2,12 +2,12 @@ import Decimal from "decimal.js";
 import { usdToEur } from "utils/ecbConversionRates";
 import { AI_MODELS, type ModelNames } from "./ai_models.js";
 
-// input/output in x$/1 million tokens
-export const calculateCompletionCost = async (inputTokens: number, outputTokens: number, modelName: string) => {
+// inputCost/outputCost are USD per single token (e.g. $0.25/1M == 0.00000025 per token)
+export const calculateCompletionCost = async (inputTokens: number, outputTokens: number, modelName: ModelNames) => {
   const { inputCost, outputCost } = AI_MODELS[modelName];
 
   // Calculate the actual cost based on the number of tokens
-  // inputCost and outputCost are in X$/1 million tokens
+  // inputCost and outputCost are USD per single token (e.g. $0.25/1M == 0.00000025 per token)
   const actualInputCost = inputCost.times(inputTokens).toDecimalPlaces(10);
   const actualOutputCost = outputCost.times(outputTokens).toDecimalPlaces(10);
 

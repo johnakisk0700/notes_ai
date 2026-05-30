@@ -33,6 +33,18 @@ interface SearchNotesBody {
 
 const OBJECT_ID_RE = /^[a-f0-9]{24}$/i;
 
+// `now` is the client's LOCAL-offset ISO timestamp, interpolated into the system prompt so the
+// model knows the user's "today". Validate it's a short, parseable date (kills the unbounded /
+// newline / prompt-injection vector of an arbitrary string) but keep the client's local-offset
+// string verbatim — re-serializing to UTC would shift "today" across midnight for UTC+2/+3 users.
+// Fall back to the server's UTC now when missing or invalid.
+function validatedNow(value: unknown): string {
+  if (typeof value === "string" && value.length <= 40 && !Number.isNaN(new Date(value).getTime())) {
+    return value;
+  }
+  return new Date().toISOString();
+}
+
 /** The text of the latest user message in an AI SDK UI message list. */
 function lastUserText(messages: UIMessage[]): string {
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -74,7 +86,12 @@ async function searchRelevantNotes(req: Request, res: Response) {
   const model = isChatModelId(rawModel) ? rawModel : undefined;
   const effort = isReasoningEffort(rawEffort) ? rawEffort : undefined;
   const userId = req.user.id;
-  const userIds = selectedUsers && selectedUsers.length ? [userId, ...selectedUsers] : [userId];
+  // SECURITY: reading OTHER users' notes via `selectedUsers` is an admin-only affordance. The UI
+  // only shows the picker to admins, but that's not a trust boundary — gate it on the server so a
+  // non-admin can't POST a victim's id and have the retrieval tools surface their notes. The self
+  // id always comes from the verified session (req.user.id), never the request body.
+  const extraUsers = req.user.isAdmin && Array.isArray(selectedUsers) ? selectedUsers : [];
+  const userIds = extraUsers.length ? [userId, ...extraUsers] : [userId];
 
   // The assistant turn's id, correlating the live stream to its persisted placeholder.
   // Client-minted so it can poll before the first byte; server mints a fallback otherwise.
@@ -118,7 +135,7 @@ async function searchRelevantNotes(req: Request, res: Response) {
     messages,
     userIds,
     userId,
-    now: now ?? new Date().toISOString(),
+    now: validatedNow(now),
     threadId: activeThreadId,
     newThreadId,
     generationId,

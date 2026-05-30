@@ -29,5 +29,10 @@ const client = new OpenAI({
 
 export async function embedText(text: string): Promise<number[]> {
   const res = await client.embeddings.create({ model: EMBEDDING_MODEL, input: text.slice(0, MAX_INPUT_CHARS) });
-  return res.data[0].embedding;
+  // A provider can return a 200 with an empty/malformed `data` array; reading `[0].embedding`
+  // blind throws an opaque "Cannot read properties of undefined". Fail with a clear message
+  // instead (the save path rolls back, the search path degrades to a typed empty result).
+  const vector = res.data?.[0]?.embedding;
+  if (!vector) throw new Error("Embedding provider returned no data");
+  return vector;
 }

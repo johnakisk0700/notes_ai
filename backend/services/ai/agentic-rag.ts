@@ -17,6 +17,7 @@ import type { Request, Response } from "express";
 import { resolveChatModel } from "clients/llm_providers";
 import {
   DEFAULT_REASONING_EFFORT,
+  modelHasVision,
   supportsReasoning,
   type ChatModelId,
   type ReasoningEffort,
@@ -79,7 +80,7 @@ const FALLBACK_EUR_PER_USD = new Decimal("0.92");
 function lexiSystemPrompt(now: string): string {
   return [
     "Είσαι η Λέξι, μια έμπειρη γραμματέας που βοηθάει τον χρήστη να βρίσκει πληροφορίες μέσα στις σημειώσεις του.",
-    `Σήμερα είναι: ${now}.`,
+    `Σήμερα είναι: ${now}. Αυτή η ημερομηνία είναι στην τοπική ώρα του χρήστη· όταν δίνεις εύρος στο filter_by_date, χρησιμοποίησε το ίδιο offset ζώνης ώρας ώστε τα όρια της ημέρας να ταιριάζουν με την τοπική του μέρα.`,
     "",
     "- Για ερωτήσεις πάνω στις σημειώσεις, ψάξε με τα εργαλεία πριν απαντήσεις· μη βασίζεσαι στη μνήμη σου. Μπορείς να ψάξεις και ξανά αν χρειαστεί.",
     "- Βασίσου ΜΟΝΟ στις σημειώσεις που επιστρέφουν τα εργαλεία. Αν δεν υπάρχει σχετική πληροφορία, πες το ευγενικά — μην επινοείς.",
@@ -122,7 +123,7 @@ type ContentPart = { type: string; data?: unknown; image?: unknown; text?: strin
 // fetch that bearer-gated url. So we inline the MOST-RECENT image's bytes (the one under
 // active discussion) and turn OLDER images into id placeholders the model can re-request
 // via view_image (see prepareStep below). Returns a shallow copy; never mutates the input.
-async function inlineChatImages(messages: ModelMessage[], userId: string): Promise<ModelMessage[]> {
+async function inlineChatImages(messages: ModelMessage[], userId: string, hasVision: boolean): Promise<ModelMessage[]> {
   const refs: Array<{ mi: number; pi: number; id: string }> = [];
   messages.forEach((m, mi) => {
     if (!Array.isArray(m.content)) return;
@@ -144,7 +145,13 @@ async function inlineChatImages(messages: ModelMessage[], userId: string): Promi
   for (let i = 0; i < refs.length; i++) {
     const { mi, pi, id } = refs[i];
     const content = (out[mi] as { content: ContentPart[] }).content;
-    if (i === activeIdx) {
+    // Vision gating is authoritative HERE, not just in the composer: a thread can already hold an
+    // image when the user switches to a non-vision model, and history keeps user image parts. Never
+    // inline bytes for a model that can't see them (the provider would reject the part and error the
+    // turn) — leave a text placeholder so the conversation still flows.
+    if (!hasVision) {
+      content[pi] = { type: "text", text: `[εικόνα ${id} — το επιλεγμένο μοντέλο δεν υποστηρίζει εικόνες]` };
+    } else if (i === activeIdx) {
       const img = await loadChatImage(userId, id);
       content[pi] = img
         ? { type: "image", image: img.base64, mediaType: img.mediaType }
@@ -240,6 +247,7 @@ export function streamNotesChat(opts: {
     effort,
   } = opts;
   const { model, id: modelId } = resolveChatModel(selectedModel);
+  const hasVision = modelHasVision(modelId);
   const tools = buildNoteTools({ userIds, userId });
 
   // Per-turn deadline (see TURN_DEADLINE_MS). Aborts streamText if the turn overruns; the
@@ -271,7 +279,7 @@ export function streamNotesChat(opts: {
       });
       // Inline the active image's bytes (the provider can't fetch our authed url) and turn
       // older images into id placeholders the model can re-request via view_image.
-      const preparedMessages = await inlineChatImages(modelMessages, userId);
+      const preparedMessages = await inlineChatImages(modelMessages, userId, hasVision);
 
       // Persist the streaming answer text to its placeholder, throttled (poll-first live
       // catch-up). Only when there's a thread to target. `answerText` is the cumulative text
@@ -306,23 +314,28 @@ export function streamNotesChat(opts: {
         // Before each step: (1) re-inject any image the model asked to see again as a user
         // message; (2) on the final allowed step, drop tools so it must produce an answer.
         prepareStep: async ({ stepNumber, steps, messages: stepMessages }) => {
-          for (const call of stepToolCalls(steps)) {
-            if (call.toolName !== "view_image") continue;
-            const id = imageIdOfCall(call);
-            if (id && !viewedImages.has(id)) {
-              const img = await loadChatImage(userId, id);
-              if (img) viewedImages.set(id, img);
-            }
-          }
-          const injected: ModelMessage[] = [...viewedImages.entries()].map(([id, img]) => ({
-            role: "user",
-            content: [
-              { type: "image", image: img.base64, mediaType: img.mediaType },
-              { type: "text", text: `(η εικόνα ${id} που ζήτησες)` },
-            ],
-          }));
           const step: { messages?: ModelMessage[]; toolChoice?: "none" } = {};
-          if (injected.length) step.messages = [...(stepMessages as ModelMessage[]), ...injected];
+          // Re-inject any image the model asked to see again as a user message — but only for a
+          // vision model (a non-vision model can't see images, and the provider rejects image parts).
+          if (hasVision) {
+            for (const call of stepToolCalls(steps)) {
+              if (call.toolName !== "view_image") continue;
+              const id = imageIdOfCall(call);
+              if (id && !viewedImages.has(id)) {
+                const img = await loadChatImage(userId, id);
+                if (img) viewedImages.set(id, img);
+              }
+            }
+            const injected: ModelMessage[] = [...viewedImages.entries()].map(([id, img]) => ({
+              role: "user",
+              content: [
+                { type: "image", image: img.base64, mediaType: img.mediaType },
+                { type: "text", text: `(η εικόνα ${id} που ζήτησες)` },
+              ],
+            }));
+            if (injected.length) step.messages = [...(stepMessages as ModelMessage[]), ...injected];
+          }
+          // On the final allowed step, drop tools so the model must produce an answer.
           if (stepNumber >= MAX_STEPS - 1) step.toolChoice = "none";
           return step;
         },

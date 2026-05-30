@@ -9,22 +9,33 @@ import { useTranslation } from 'react-i18next';
 // A draft_note tool result means "open this draft in the editor". Fire openWithDraft once
 // per tool call, and ONLY for drafts produced in the live turn (isStreaming) — a draft part
 // rehydrated from thread history is marked handled without reopening the editor.
-function useDraftNoteAutoOpen(messages: ReturnType<typeof useStreamChat>['messages'], isStreaming: boolean) {
+function useDraftNoteAutoOpen(
+  messages: ReturnType<typeof useStreamChat>['messages'],
+  isStreaming: boolean,
+  threadId: string | undefined
+) {
   const { openWithDraft } = useNoteEditor();
   const handledRef = useRef<Set<string>>(new Set());
+
+  // StreamChat stays mounted across thread switches, so reset the dedupe set per thread —
+  // otherwise it would grow unbounded and could suppress a draft in a newly viewed thread.
+  useEffect(() => {
+    handledRef.current = new Set();
+  }, [threadId]);
 
   useEffect(() => {
     for (const m of messages) {
       if (m.role !== 'assistant') continue;
-      m.parts.forEach((part, i) => {
-        if (part.type !== 'tool-draft_note') return;
+      for (const part of m.parts) {
+        if (part.type !== 'tool-draft_note') continue;
         const p = part as { toolCallId?: string; state?: string; output?: { title?: string; content?: string } };
-        if (p.state !== 'output-available' || !p.output) return;
-        const key = p.toolCallId ?? `${m.id}:${i}`;
-        if (handledRef.current.has(key)) return;
-        handledRef.current.add(key);
+        if (p.state !== 'output-available' || !p.output) continue;
+        // Drafts always carry a toolCallId; without one we can't dedupe safely, so skip it.
+        if (!p.toolCallId) continue;
+        if (handledRef.current.has(p.toolCallId)) continue;
+        handledRef.current.add(p.toolCallId);
         if (isStreaming) openWithDraft({ title: p.output.title ?? '', content: p.output.content ?? '' });
-      });
+      }
     }
   }, [messages, isStreaming, openWithDraft]);
 }
@@ -35,9 +46,9 @@ interface StreamChatProps {
 }
 
 export const StreamChat = ({ aiMessageHeight, onAIContainerReady }: StreamChatProps) => {
-  const { messages, isStreaming } = useStreamChat();
+  const { messages, isStreaming, threadId } = useStreamChat();
   const { t } = useTranslation();
-  useDraftNoteAutoOpen(messages, isStreaming);
+  useDraftNoteAutoOpen(messages, isStreaming, threadId);
 
   const hasCalledReadyRef = useRef<boolean>(false);
 
@@ -78,7 +89,7 @@ export const StreamChat = ({ aiMessageHeight, onAIContainerReady }: StreamChatPr
           <ChatMessage
             message={message}
             key={message.id}
-            style={{ minHeight: isLast && message.role !== 'user' ? aiMessageHeight : '' }}
+            minHeight={isLast && message.role !== 'user' ? aiMessageHeight : undefined}
             thinking={isLast && message.role === 'assistant' && thinking}
           />
         );

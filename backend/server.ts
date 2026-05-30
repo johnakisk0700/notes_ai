@@ -21,6 +21,7 @@ import { getThread } from "apis/threads/get-thread.js";
 import { deleteThread } from "apis/threads/delete-thread.js";
 import { updateToolTransaction } from "apis/threads/update-tool-transaction.js";
 import { connectToDatabase } from "clients/mongoose_client";
+import { pruneOrphanChatImages } from "services/chat-threads";
 import { textToVoice } from "clients/text_to_voice";
 import cors from "cors";
 import express from "express/index";
@@ -70,6 +71,16 @@ if (cluster.isPrimary) {
   // Best-effort throughout — see clients/mongoose_client.ts and services/chat-threads.ts.
   connectToDatabase();
 
+  // Mongo-backed crons must run in a worker (the primary never connects to Mongo), but only ONE
+  // worker should run them — pin to worker id 1 so the orphan-image sweep doesn't fan out across
+  // every worker. The sweep itself is idempotent + fail-safe, so a duplicate run would be harmless.
+  if (cluster.worker?.id === 1) {
+    cron.schedule("30 3 * * *", () => void pruneOrphanChatImages(), {
+      name: "prune_orphan_chat_images",
+      timezone: "UTC",
+    });
+  }
+
   const app = express();
 
   // Middleware to parse JSON bodies
@@ -86,8 +97,18 @@ if (cluster.isPrimary) {
       methods: "GET,POST,PUT,DELETE,OPTIONS",
       allowedHeaders: "Content-Type,Authorization",
       credentials: true,
-    }),
-    express.json({ limit: "100mb" }), // Move this here with limit
+    })
+  );
+
+  // Image uploads get a SMALLER body limit than the global 100mb (which exists for audio).
+  // This must run BEFORE the global express.json below: a body parser short-circuits once a
+  // body is parsed (req._body), and Express runs middleware in registration order — so the
+  // first parser to match wins. Scoped to /api/chat-image, the global parser then no-ops for
+  // it. 12mb comfortably covers an 8MB image base64-encoded (~10.7MB) plus JSON overhead.
+  app.use("/api/chat-image", express.json({ limit: "12mb" }));
+
+  app.use(
+    express.json({ limit: "100mb" }), // 100mb for audio transcription (base64 in JSON body)
     express.urlencoded({ limit: "100mb", extended: true }),
     express.raw({ limit: "100mb", type: "audio/*" })
   );

@@ -87,27 +87,37 @@ function ErrorCard({ label, text }: { label: string; text?: string }) {
   );
 }
 
+// A persisted assistant turn surfaces its 24-hex generationId as its message id; the live useChat
+// overlay assigns its own local id (not 24-hex). So a non-ObjectId id means we're acting on the
+// turn that's streaming right now.
+const OBJECT_ID_RE = /^[a-f0-9]{24}$/i;
+
 function usePersistToolTransaction(messageId: string, part: ToolPart) {
-  const { threadId } = useStreamChat();
+  const { threadId, streamingGenerationId } = useStreamChat();
   const queryClient = useQueryClient();
 
   return async (status: ThreadToolTransactionStatus, output?: unknown) => {
-    if (!threadId || !part.toolCallId) return;
+    // The server persists tool decisions keyed by generationId. When the click happens mid-stream
+    // the rendered messageId is the SDK's local id, which matches no placeholder — substitute the
+    // streaming turn's generationId so an Apply/Discard during streaming still persists (and so it
+    // survives a refresh, as documented). Persisted/seeded turns already carry the generationId.
+    const persistId = OBJECT_ID_RE.test(messageId) ? messageId : streamingGenerationId;
+    if (!threadId || !part.toolCallId || !persistId) return;
     const optimistic = { status, updatedAt: new Date().toISOString() };
     queryClient.setQueryData<ThreadDetail>(threadKeys.detail(threadId), prev =>
-      patchToolTransaction(prev, messageId, part.toolCallId!, optimistic, output)
+      patchToolTransaction(prev, persistId, part.toolCallId!, optimistic, output)
     );
 
     try {
       const transaction = await updateToolTransaction({
         threadId,
-        messageId,
+        messageId: persistId,
         toolCallId: part.toolCallId,
         status,
         output,
       });
       queryClient.setQueryData<ThreadDetail>(threadKeys.detail(threadId), prev =>
-        patchToolTransaction(prev, messageId, part.toolCallId!, transaction, output)
+        patchToolTransaction(prev, persistId, part.toolCallId!, transaction, output)
       );
     } catch {
       // The note action already succeeded. Keep the in-session state even if

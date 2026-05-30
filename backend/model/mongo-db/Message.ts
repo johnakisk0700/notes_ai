@@ -21,7 +21,7 @@ export interface Message {
   status?: "streaming" | "complete" | "error";
   generationId?: string;
   updatedAt?: number;
-  timestamp: number;
+  timestamp: Date;
 }
 
 // Define the schema for conversation messages
@@ -69,6 +69,6 @@ export const MessageSchema = new Schema({
   timestamp: {
     type: Date,
     required: true,
-    default: Date.now(),
+    default: Date.now,
   },
 });

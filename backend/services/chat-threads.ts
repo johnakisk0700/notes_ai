@@ -8,7 +8,13 @@ import mongoose from "mongoose";
 import type { ThreadDetail, ThreadMessageStatus, ThreadSummary, ThreadToolTransaction } from "@shared";
 import { UserThread } from "model/mongo-db/UserThreads";
 import { logger } from "utils/logger";
-import { deleteChatImage, imageIdsFromMessages } from "services/chat-images";
+import {
+  deleteChatImage,
+  imageIdsFromMessages,
+  listImageOwners,
+  listUserImages,
+  ORPHAN_IMAGE_MIN_AGE_MS,
+} from "services/chat-images";
 
 const TITLE_MAX = 50;
 
@@ -97,14 +103,20 @@ async function upsertUserTurn(
   const placeholder = assistantPlaceholder(generationId, now);
 
   if (typeof truncateToCount === "number" && Number.isInteger(truncateToCount) && truncateToCount >= 0) {
-    await UserThread.updateOne({ _id: threadId, user_id: userId }, [
+    const res = await UserThread.updateOne({ _id: threadId, user_id: userId }, [
       {
         $set: {
-          messages: { $concatArrays: [{ $slice: ["$messages", truncateToCount] }, [userMessage, placeholder]] },
+          messages: {
+            $concatArrays: [{ $slice: [{ $ifNull: ["$messages", []] }, truncateToCount] }, [userMessage, placeholder]],
+          },
         },
       },
     ]);
-    return;
+    // If the thread isn't persisted yet (the user edited/retried the very first turn before its
+    // create write landed — likely on slow/flaky Mongo), the pipeline update matches nothing. Don't
+    // drop the turn: fall through to the normal create-or-append upsert below, which inserts the
+    // thread with just this turn (the truncated prefix of a non-existent thread is empty anyway).
+    if ((res.matchedCount ?? 0) > 0) return;
   }
 
   try {
@@ -220,26 +232,23 @@ export async function updateThreadToolTransaction(opts: {
   if (!mongoose.isValidObjectId(threadId)) return false;
 
   const messageFilter = { _id: threadId, user_id: userId, "messages.generationId": assistantMessageId };
-  const messageArrayFilter = { arrayFilters: [{ "m.generationId": assistantMessageId }] };
   const patch = { toolCallId, transaction, ...(output !== undefined ? { output } : {}) };
 
-  // Transaction log first: this works even while the assistant turn is still streaming
-  // and the finalized tool `parts` have not been written yet.
-  const pull = await UserThread.updateOne(
-    messageFilter,
-    { $pull: { "messages.$[m].toolTransactions": { toolCallId } } },
-    messageArrayFilter
-  );
-  if ((pull.matchedCount ?? 0) === 0) return false;
-
-  await UserThread.updateOne(
+  // Append the decision to the message's transaction log in ONE atomic update — no read-modify-
+  // write window, so concurrent double-clicks can't lose-update each other. This works even while
+  // the turn is still streaming and the finalized tool `parts` haven't been written yet. A rapid
+  // re-click can append a second entry for the same toolCallId, but that's harmless: the read path
+  // (applyToolTransactions) collapses entries to the LAST one per toolCallId, and a card is normally
+  // decided once, so the array stays tiny.
+  const logged = await UserThread.updateOne(
     messageFilter,
     {
       $push: { "messages.$[m].toolTransactions": patch },
       $set: { "messages.$[m].updatedAt": Date.now() },
     },
-    messageArrayFilter
+    { arrayFilters: [{ "m.generationId": assistantMessageId }] }
   );
+  if ((logged.matchedCount ?? 0) === 0) return false;
 
   const set: Record<string, unknown> = {
     "messages.$[m].parts.$[p].transaction": transaction,
@@ -336,7 +345,7 @@ function msFromDate(value: unknown): number {
   return value instanceof Date ? value.getTime() : 0;
 }
 
-function applyToolTransactions(parts: unknown, patches: unknown): unknown[] | undefined {
+export function applyToolTransactions(parts: unknown, patches: unknown): unknown[] | undefined {
   if (!Array.isArray(parts) || parts.length === 0) return undefined;
   if (!Array.isArray(patches) || patches.length === 0) return parts;
 
@@ -378,6 +387,42 @@ export async function deleteThread(threadId: string, userId: string): Promise<bo
     await Promise.all(imageIds.map(id => deleteChatImage(userId, id)));
   }
   return deleted;
+}
+
+// Reclaim chat-image files that no thread references — covers images uploaded but never sent
+// (abandoned compose) or whose send/persist failed, which thread-delete cleanup alone never reaps.
+// FAIL-SAFE by construction: a file is deleted ONLY when it is both (a) older than the min age (so a
+// just-staged, not-yet-sent image is never reaped) AND (b) absent from the user's referenced-id set,
+// which is recomputed per user from live threads. Any per-user error skips that user WITHOUT
+// deleting, so a transient DB/FS fault can never delete a referenced image. Best-effort + idempotent.
+export async function pruneOrphanChatImages(now: number = Date.now()): Promise<{ scanned: number; deleted: number }> {
+  if (!mongoReady()) return { scanned: 0, deleted: 0 };
+  let scanned = 0;
+  let deleted = 0;
+  const owners = await listImageOwners();
+  for (const userId of owners) {
+    try {
+      const files = await listUserImages(userId);
+      scanned += files.length;
+      const stale = files.filter(f => now - f.mtimeMs > ORPHAN_IMAGE_MIN_AGE_MS);
+      if (stale.length === 0) continue;
+      // Only hit Mongo when there's something potentially reclaimable. A read failure throws → the
+      // catch skips this user, so we never delete without a confirmed reference set.
+      const docs = await UserThread.find({ user_id: userId }).select("messages").lean();
+      const referenced = new Set(
+        docs.flatMap(d => imageIdsFromMessages((d.messages ?? []) as Array<{ parts?: unknown }>))
+      );
+      for (const file of stale) {
+        if (referenced.has(file.id)) continue;
+        await deleteChatImage(userId, file.id);
+        deleted++;
+      }
+    } catch (err) {
+      logger.error(`Orphan chat-image sweep skipped user ${userId} (kept all their files):`, err);
+    }
+  }
+  if (deleted > 0) logger.info(`Orphan chat-image sweep removed ${deleted} unreferenced file(s) of ${scanned} scanned`);
+  return { scanned, deleted };
 }
 
 function toSummary(doc: any): ThreadSummary {

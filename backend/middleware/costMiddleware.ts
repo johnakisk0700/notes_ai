@@ -16,7 +16,13 @@ export const costMiddleware = (req: Request, res: Response, next: NextFunction) 
     req.addCost = costTracker.addCost;
     req.getTotalCost = costTracker.getTotalCost;
 
-    res.on("finish", async () => {
+    // Flush at most once: "finish" fires on a normal response, but a client socket
+    // disconnect fires "close" (not "finish") — and the chat keeps generating via
+    // consumeStream, so without the close path that completed turn's cost is lost.
+    let flushed = false;
+    const flushCost = async () => {
+      if (flushed) return;
+      flushed = true;
       const totalCost = req.getTotalCost();
       const kataskoposEntries: InsertKataskopos[] = costTracker.getCostEntries().map(cost => ({
         userId: req.user.id,
@@ -52,7 +58,10 @@ export const costMiddleware = (req: Request, res: Response, next: NextFunction) 
       if (totalCost.toNumber() > 0) {
         console.log(`Cost for ${req.user?.id ?? "unknown user"}: $${totalCost.toFixed(8)}`);
       }
-    });
+    };
+
+    res.on("finish", flushCost);
+    res.on("close", flushCost);
 
     next();
   });

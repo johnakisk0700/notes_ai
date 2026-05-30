@@ -23,6 +23,15 @@ const BASE_DIR = process.env.CHAT_IMAGES_DIR ?? path.resolve(process.cwd(), "../
 // under the 100mb json limit.
 const MAX_BYTES = Number(process.env.CHAT_IMAGE_MAX_BYTES) || 8 * 1024 * 1024;
 
+// Max length of the *encoded* base64 string for MAX_BYTES of data. base64 expands N bytes
+// to ceil(N/3)*4 chars; the +1024 slack covers padding/whitespace. We reject on this BEFORE
+// the Buffer.from decode so an oversized payload can't allocate a ~75MB heap buffer first.
+const MAX_BASE64_LEN = Math.ceil(MAX_BYTES / 3) * 4 + 1024;
+
+// An image must be older than this before the orphan sweep may reclaim it — so an image that's
+// been uploaded but not yet sent (staged in the composer) is never reaped out from under the user.
+export const ORPHAN_IMAGE_MIN_AGE_MS = Number(process.env.CHAT_IMAGE_ORPHAN_MIN_AGE_MS) || 24 * 60 * 60 * 1000;
+
 const ID_RE = /^[a-f0-9]{32}$/;
 const SAFE_USER_RE = /^[A-Za-z0-9_-]+$/;
 
@@ -69,6 +78,11 @@ export interface SavedImage {
 
 /** Validate + persist an uploaded image; returns its id, detected type, and reference url. */
 export async function saveChatImage(userId: string, base64: string): Promise<SavedImage> {
+  // Bound the decode-time allocation: reject by encoded string length before Buffer.from
+  // turns a ~100MB payload into a ~75MB heap buffer (the post-decode check below stays as
+  // defense in depth).
+  if ((base64?.length ?? 0) > MAX_BASE64_LEN) throw new AppError({ message: "Image too large", statusCode: 413 });
+
   const buf = Buffer.from(base64 ?? "", "base64");
   if (buf.length === 0) throw new AppError({ message: "Empty image", statusCode: 400 });
   if (buf.length > MAX_BYTES) throw new AppError({ message: "Image too large", statusCode: 413 });
@@ -128,6 +142,40 @@ export async function deleteChatImage(userId: string, id: string): Promise<void>
   } catch {
     /* already gone — best-effort */
   }
+}
+
+/** The user-id directories that currently hold chat images (for the orphan sweep). Empty if the
+ *  base dir doesn't exist yet. Only well-formed user dirs are returned. */
+export async function listImageOwners(): Promise<string[]> {
+  try {
+    const entries = await fs.readdir(BASE_DIR, { withFileTypes: true });
+    return entries.filter(e => e.isDirectory() && SAFE_USER_RE.test(e.name)).map(e => e.name);
+  } catch {
+    return []; // base dir not created yet — nothing stored
+  }
+}
+
+/** A user's stored image files with their last-modified time (ms). Used by the orphan sweep to
+ *  age files; malformed names and vanished files are skipped. */
+export async function listUserImages(userId: string): Promise<Array<{ id: string; mtimeMs: number }>> {
+  if (!SAFE_USER_RE.test(userId)) return [];
+  let names: string[];
+  try {
+    names = await fs.readdir(userDir(userId));
+  } catch {
+    return []; // user dir gone — nothing to do
+  }
+  const out: Array<{ id: string; mtimeMs: number }> = [];
+  for (const name of names) {
+    if (!ID_RE.test(name)) continue;
+    try {
+      const stat = await fs.stat(path.join(userDir(userId), name));
+      out.push({ id: name, mtimeMs: stat.mtimeMs });
+    } catch {
+      /* vanished between readdir and stat — skip */
+    }
+  }
+  return out;
 }
 
 /** Collect the chat-image ids referenced by a set of stored messages (their file parts). */

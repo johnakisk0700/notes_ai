@@ -151,6 +151,9 @@ frontend (axios, Bearer token) ─► backend /api/* ─► Postgres (notes/remi
   note text from Postgres and `search_notes` only ranks candidate ids in Qdrant, so a Qdrant↔Postgres
   desync can't surface a deleted/stale note. Note reads + the retrieval tools' user-scoped
   queries go through `backend/repositories/notes.ts` (one home for the `userId` tenancy filter).
+  Reading **other** users' notes via the request body's `selectedUsers` is **admin-only**, gated
+  server-side in `search-relevant-notes.ts` (`req.user.isAdmin`) — the admin-only UI picker is not
+  a trust boundary; the self id always comes from the verified session, never the body.
   Create/update embed **inside the save transaction**
   (sync-or-fail — a failed embed rolls back the save, so the stores stay in lockstep; the client's
   localStorage draft means nothing is lost); `scripts/reembed-notes.ts`
@@ -166,8 +169,12 @@ frontend (axios, Bearer token) ─► backend /api/* ─► Postgres (notes/remi
   `ImagePart` before the call and turns older images into `[εικόνα <id>]` placeholders; the model
   re-examines one via the **`view_image`** tool, which makes the server re-inject those bytes as a
   **user** message in `prepareStep` (images aren't honored on `role:"tool"` messages over OpenRouter's
-  OpenAI-compatible transport). Upload is gated on `modelHasVision` (`shared/ai/chatModels.ts`); image
-  files are unlinked when their thread is deleted. See `backend/services/chat-images.ts`.
+  OpenAI-compatible transport). Vision is enforced **server-side** too (`agentic-rag.ts` checks
+  `modelHasVision` before inlining — a non-vision model gets a text placeholder, not image bytes — so
+  switching models mid-thread can't error the turn), not just gated in the composer. Image files are
+  unlinked when their thread is deleted, and a daily orphan sweep (`pruneOrphanChatImages`, one
+  worker, 03:30 UTC) reclaims files no thread references that are older than the min-age (so a staged-
+  but-unsent upload is never reaped). See `backend/services/chat-images.ts`.
 - **Model prompt prep:** prior assistant turns are fed to the model as **text only**
   (`historyForModel`, `services/ai/message-history.ts`) — their persisted tool-call/reasoning parts
   round-trip from Mongo (Mixed) with schema-invalid fields (e.g. `providerExecuted: null`) and would make
@@ -198,7 +205,8 @@ frontend (axios, Bearer token) ─► backend /api/* ─► Postgres (notes/remi
 - **Disk** (`data/chat-images/<userId>/<id>`) — chat image attachment bytes, referenced by a
   `/api/chat-image/<id>` file part on the user's Mongo message. One file per image (crypto-random id,
   magic-byte–validated raster). Mounted into the backend container in `docker-compose.yml` (base) so it
-  rides the `./data` backing; unlinked on thread delete. See `backend/services/chat-images.ts`.
+  rides the `./data` backing; unlinked on thread delete, with a daily orphan sweep reclaiming
+  unreferenced files older than the min-age. See `backend/services/chat-images.ts`.
 
 The Postgres source of truth is `shared/db/schema/` only (the old pre-Drizzle
 `backend/model/postgresql/*.sql` and custom migration runner have been removed).

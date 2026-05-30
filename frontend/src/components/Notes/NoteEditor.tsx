@@ -48,22 +48,24 @@ export const NoteEditor = () => {
         onPressClose={() => closeEditor()}
         className="bg-transparent h-[100dvh] min-w-[100dvw] lg:h-[80dvh] lg:min-w-[60dvw] max-h-[100dvh] max-w-[100dvw] overflow-visible rounded-none border-none p-0 shadow-xl transition-none lg:rounded-b-2xl lg:rounded-t-none"
       >
-        {/* Stacked pages — a uniform little stack of paper peeking out behind the top sheet
-            toward the LEFT, so the editor reads as the top sheet of a steno pad. Every leaf
-            shares ONE colour (card lifted ~10% toward white — neutral, no hue smudge — so the
-            stack stays visible on dark themes without reading as multi-toned) and the same
-            even step; the plain dark shadow between them is what reads as separate leaves.
+        {/* Stacked pages — loose leaves hanging behind the top sheet from the front binding,
+            splaying LEFT and RIGHT (and down) by pre-set amounts meant to look randomly piled.
+            Each leaf leans toward the side it pokes out, like a sheet swung off the coil. Colour
+            is card lifted toward white (neutral — no hue smudge) by a small, gently graded
+            amount (4%→10% by depth, outermost lightest so its edge against the dark backdrop
+            reads); a soft downward shadow gives the hang its depth. The down-offsets stay larger
+            than each leaf's tilt-lift so a rotated top corner can't peek above the bound edge.
             z-0 keeps them under the opaque sheet (z-[1]). Desktop only. */}
-        <div className="pointer-events-none absolute inset-0 z-0 hidden rounded-[inherit] lg:block" style={{ backgroundColor: 'color-mix(in srgb, var(--card) 90%, #fff)', transform: 'translate(-20px, 12px)', boxShadow: '-2px 3px 6px -1px rgba(0, 0, 0, 0.16)' }} aria-hidden />
-        <div className="pointer-events-none absolute inset-0 z-0 hidden rounded-[inherit] lg:block" style={{ backgroundColor: 'color-mix(in srgb, var(--card) 90%, #fff)', transform: 'translate(-15px, 9px)', boxShadow: '-2px 3px 6px -1px rgba(0, 0, 0, 0.16)' }} aria-hidden />
-        <div className="pointer-events-none absolute inset-0 z-0 hidden rounded-[inherit] lg:block" style={{ backgroundColor: 'color-mix(in srgb, var(--card) 90%, #fff)', transform: 'translate(-10px, 6px)', boxShadow: '-2px 3px 6px -1px rgba(0, 0, 0, 0.16)' }} aria-hidden />
-        <div className="pointer-events-none absolute inset-0 z-0 hidden rounded-[inherit] lg:block" style={{ backgroundColor: 'color-mix(in srgb, var(--card) 90%, #fff)', transform: 'translate(-5px, 3px)', boxShadow: '-2px 3px 6px -1px rgba(0, 0, 0, 0.16)' }} aria-hidden />
+        <div className="pointer-events-none absolute inset-0 z-0 hidden rounded-[inherit] lg:block" style={{ backgroundColor: 'color-mix(in srgb, var(--card) 90%, #fff)', transform: 'translate(-13px, 11px) rotate(-0.6deg)', boxShadow: '0 3px 6px -1px rgba(0, 0, 0, 0.16)' }} aria-hidden />
+        <div className="pointer-events-none absolute inset-0 z-0 hidden rounded-[inherit] lg:block" style={{ backgroundColor: 'color-mix(in srgb, var(--card) 92%, #fff)', transform: 'translate(9px, 16px) rotate(0.5deg)', boxShadow: '0 3px 6px -1px rgba(0, 0, 0, 0.16)' }} aria-hidden />
+        <div className="pointer-events-none absolute inset-0 z-0 hidden rounded-[inherit] lg:block" style={{ backgroundColor: 'color-mix(in srgb, var(--card) 94%, #fff)', transform: 'translate(-7px, 10px) rotate(-0.4deg)', boxShadow: '0 3px 6px -1px rgba(0, 0, 0, 0.16)' }} aria-hidden />
+        <div className="pointer-events-none absolute inset-0 z-0 hidden rounded-[inherit] lg:block" style={{ backgroundColor: 'color-mix(in srgb, var(--card) 96%, #fff)', transform: 'translate(11px, 13px) rotate(0.6deg)', boxShadow: '0 3px 6px -1px rgba(0, 0, 0, 0.16)' }} aria-hidden />
 
         {/* The top sheet — the page you write on. Opaque card + paper grain; the stack
             shows only where this sheet doesn't cover it. Carries the background the dialog
             itself no longer paints, so it must sit above the stack (z-[1]) and below the
             content (z-10). Present on every breakpoint (mobile is just this full-bleed sheet). */}
-        <div className="nb-notepad bg-card pointer-events-none absolute inset-0 z-[1] rounded-[inherit]" style={{ boxShadow: '-3px 4px 9px -3px rgba(0, 0, 0, 0.22)' }} aria-hidden />
+        <div className="nb-notepad bg-card pointer-events-none absolute inset-0 z-[1] rounded-[inherit]" style={{ boxShadow: '0 5px 12px -2px rgba(0, 0, 0, 0.22)' }} aria-hidden />
 
         {/* The coil that binds the sheet at its top edge — turns the dialog into a steno pad.
             Only on lg+, where the dialog is a floating sheet; below that it's fullscreen and the
@@ -277,7 +279,7 @@ const EditorCore = () => {
 
   const isReminderSet = selectedDate && selectedTime;
   return (
-    <div className="relative z-10 grid h-full min-h-0 grid-rows-[auto_auto_auto_1fr] gap-3 p-4 pt-6 lg:pt-10" tabIndex={0}>
+    <div className="relative z-10 grid h-full min-h-0 grid-rows-[auto_auto_auto_1fr] gap-3 p-4 pt-6 lg:pt-14" tabIndex={0}>
       {/* Header — reminder controls on the left, primary actions on the right */}
       <DialogHeader>
         <DialogTitle hidden={true}>Note Editor</DialogTitle>

@@ -46,6 +46,10 @@ interface StreamChatContextType {
   threadId?: string;
   isThreadLoaded: boolean;
   isViewingLiveStream: boolean;
+  // The streaming turn's generationId (undefined when idle). Note-action cards rendered from the
+  // live overlay carry the AI SDK's local message id, not this persisted id — they need it to
+  // persist an Apply/Discard against the right Mongo placeholder while the turn is still streaming.
+  streamingGenerationId?: string;
   model: ChatModelId;
   setModel: (model: ChatModelId) => void;
   effort: ReasoningEffort;
@@ -91,9 +95,15 @@ export const StreamChatProvider = ({ children }: { children: ReactNode }) => {
   // the optimistic cache write authoritative (skip the refetch → no flicker); anything else
   // (error/disconnect) needs the catch-up poll.
   const needsReconcileRef = useRef(true);
+  // Synchronous in-flight lock: the `isStreaming` guard is a render-derived value that lags the SDK's
+  // synchronous 'submitted' transition, so two near-simultaneous submits could both pass it. This ref
+  // flips the instant a turn starts (startTurn) and clears when streaming ends (reconcile effect).
+  const sendingRef = useRef(false);
   // Reactive mirror of streamingTurnRef.threadId for the render gate (refs aren't reactive):
   // the live overlay is shown only on the thread that's actually streaming.
   const [streamingThreadId, setStreamingThreadId] = useState<string | undefined>(undefined);
+  // Reactive mirror of the streaming turn's generationId, for persisting mid-stream tool decisions.
+  const [streamingGenerationId, setStreamingGenerationId] = useState<string | undefined>(undefined);
 
   // Selected chat model, persisted to localStorage. A ref mirrors it so the memoized transport
   // body always sends the current choice without re-creating the transport.
@@ -166,6 +176,9 @@ export const StreamChatProvider = ({ children }: { children: ReactNode }) => {
     refetchIntervalInBackground: true,
     refetchOnWindowFocus: 'always',
     refetchOnReconnect: 'always',
+    // A brand-new client-minted thread 404s until its background user-turn upsert lands; don't burn
+    // the global retry budget (+ backoff) on that expected 404 — the next poll/focus refetch resolves it.
+    retry: (count, err) => (err as { response?: { status?: number } })?.response?.status !== 404 && count < 3,
   });
 
   const {
@@ -184,12 +197,15 @@ export const StreamChatProvider = ({ children }: { children: ReactNode }) => {
     // write authoritative (no reconcile refetch → no flicker-back-to-streaming); a disconnect
     // stays 'streaming' so the poll catches the server-side completion; error/abort is terminal.
     // Read streamingTurnRef (captured at send), NOT the route-mutable refs.
-    onFinish: ({ message, messages: turnMessages, isAbort, isDisconnect, isError }) => {
+    onFinish: ({ message, messages: turnMessages, isDisconnect, isError }) => {
       const turn = streamingTurnRef.current;
       if (!turn) return;
-      const clean = !isError && !isAbort && !isDisconnect;
-      if (clean) needsReconcileRef.current = false;
-      const finalStatus = clean ? 'complete' : isDisconnect ? 'streaming' : 'error';
+      // A deliberate user Stop (isAbort) is NOT a failure — keep the streamed partial as a completed
+      // turn instead of flagging it 'error'/interrupted. A network disconnect stays 'streaming' so the
+      // catch-up poll picks up the server-side completion; only a real stream error is terminal 'error'.
+      const settled = !isError && !isDisconnect; // clean finish or intentional stop
+      if (settled) needsReconcileRef.current = false;
+      const finalStatus = settled ? 'complete' : isDisconnect ? 'streaming' : 'error';
       queryClient.setQueryData<ThreadDetail>(threadKeys.detail(turn.threadId), prev =>
         optimisticThread(turn.threadId, turnMessages, message.id, turn.generationId, finalStatus, prev)
       );
@@ -255,6 +271,8 @@ export const StreamChatProvider = ({ children }: { children: ReactNode }) => {
       }
       queryClient.invalidateQueries({ queryKey: threadKeys.list });
       setStreamingThreadId(undefined);
+      setStreamingGenerationId(undefined);
+      sendingRef.current = false;
     }
     prevStreamingRef.current = isStreaming;
   }, [isStreaming, queryClient]);
@@ -266,7 +284,9 @@ export const StreamChatProvider = ({ children }: { children: ReactNode }) => {
     generationIdRef.current = generationId;
     streamingTurnRef.current = { threadId, generationId };
     needsReconcileRef.current = true;
+    sendingRef.current = true;
     setStreamingThreadId(threadId);
+    setStreamingGenerationId(generationId);
   };
 
   const sendQuery = async (
@@ -276,7 +296,7 @@ export const StreamChatProvider = ({ children }: { children: ReactNode }) => {
     image?: ChatImageAttachment | null
   ) => {
     const text = query.trim();
-    if ((!text && !image) || isStreaming) return;
+    if ((!text && !image) || isStreaming || sendingRef.current) return;
     selectedUsersRef.current = selectedUsers ?? [];
     setQuery?.('');
     truncateRef.current = undefined; // a normal send appends; no truncation
@@ -305,7 +325,7 @@ export const StreamChatProvider = ({ children }: { children: ReactNode }) => {
   // discarded tail can't resurface from the persisted source of truth.
   const retryMessage = (messageId: string) => {
     const id = threadIdRef.current;
-    if (!id) return;
+    if (!id || sendingRef.current) return;
     const idx = messages.findIndex(m => m.id === messageId);
     if (idx < 1) return;
     const prevUser = messages[idx - 1];
@@ -321,7 +341,7 @@ export const StreamChatProvider = ({ children }: { children: ReactNode }) => {
   // Replace a user message with edited text and re-run from there (durably truncating the tail).
   const editMessage = (messageId: string, newText: string) => {
     const id = threadIdRef.current;
-    if (!id) return;
+    if (!id || sendingRef.current) return;
     const idx = messages.findIndex(m => m.id === messageId);
     if (idx < 0) return;
     const files = filesOf(messages[idx]); // keep the image attachment on edit
@@ -341,6 +361,7 @@ export const StreamChatProvider = ({ children }: { children: ReactNode }) => {
     threadId: routeThreadId,
     isThreadLoaded,
     isViewingLiveStream: showLiveOverlay,
+    streamingGenerationId,
     model,
     setModel,
     effort,

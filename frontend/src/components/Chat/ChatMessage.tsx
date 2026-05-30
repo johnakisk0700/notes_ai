@@ -2,7 +2,7 @@ import { useStreamChat } from '@/context/StreamChatContext';
 import type { AppUIMessage } from '@/context/StreamChatContext';
 import { useAuthedImageUrl } from '@/integrations/useAuthedImageUrl';
 import { Check, CopyIcon, EditIcon, ImageOff, RefreshCcw, X } from 'lucide-react';
-import { useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../ui/button';
 import { CustomMarkdown } from './CustomMarkdown';
@@ -16,7 +16,9 @@ const NOTE_ACTION_TOOLS = new Set(['tool-create_note', 'tool-propose_note_edit',
 
 interface ChatMessageProps {
   message: AppUIMessage;
-  style?: React.CSSProperties;
+  // Reserved height for the last assistant reply (a primitive, so React.memo can skip
+  // prior messages — an inline style object would get a fresh identity every render).
+  minHeight?: number | string;
   // True for the in-flight assistant reply that hasn't started streaming text yet
   // (initial wait / tool calls / between-step gaps) — render the thinking indicator.
   thinking?: boolean;
@@ -90,10 +92,13 @@ function statusOf(metadata: unknown): AnswerMeta['status'] {
   return (metadata as AnswerMeta | undefined)?.status;
 }
 
-export const ChatMessage = ({ message, style, thinking }: ChatMessageProps) => {
+// Memoized so prior (non-streaming) messages don't re-render on every streaming tick.
+// useChat keeps stable identities for finalized turns — only the streaming message updates —
+// so memo skips them as long as props stay primitive (see `minHeight`).
+export const ChatMessage = memo(({ message, minHeight, thinking }: ChatMessageProps) => {
   if (message.role === 'user') return <UserMessage message={message} />;
-  return <AIMessage message={message} style={style} thinking={thinking} />;
-};
+  return <AIMessage message={message} minHeight={minHeight} thinking={thinking} />;
+});
 
 const UserMessage = ({ message }: { message: AppUIMessage }) => {
   const content = textOf(message);
@@ -163,11 +168,11 @@ const UserMessage = ({ message }: { message: AppUIMessage }) => {
 
 const AIMessage = ({
   message,
-  style,
+  minHeight,
   thinking,
 }: {
   message: AppUIMessage;
-  style?: React.CSSProperties;
+  minHeight?: number | string;
   thinking?: boolean;
 }) => {
   const { t } = useTranslation();
@@ -177,7 +182,7 @@ const AIMessage = ({
   const streaming = thinking || status === 'streaming';
   const interrupted = !streaming && status === 'error';
   return (
-    <div style={style} id={message.id}>
+    <div style={{ minHeight }} id={message.id}>
       {message.parts.map((part, i) => {
         // Stable key per part: tool parts keep their card instance (and its local state)
         // across re-renders even if earlier parts grow/shift; others fall back to index.
@@ -217,11 +222,22 @@ const AIMessage = ({
 const AiMessageActions = ({ content, messageId, metadata }: MessageActionsProps) => {
   const [copied, setCopied] = useState(false);
   const { retryMessage } = useStreamChat();
+  // One reset timer at a time; cleared on rapid re-clicks and on unmount so it can't
+  // fire setCopied after the component is gone.
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(resetTimerRef.current), []);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(content);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1000);
+  // Optional-chained + awaited: navigator.clipboard is undefined on non-secure-context
+  // origins (HTTP over a LAN IP — our mobile case), so guard against the TypeError/rejection.
+  const handleCopy = async () => {
+    clearTimeout(resetTimerRef.current);
+    try {
+      await navigator.clipboard?.writeText(content);
+      setCopied(true);
+      resetTimerRef.current = setTimeout(() => setCopied(false), 1000);
+    } catch {
+      /* clipboard unavailable / denied — no-op */
+    }
   };
 
   const badge = answerBadge(metadata);

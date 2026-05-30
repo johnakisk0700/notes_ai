@@ -16,6 +16,7 @@ import { cleanNoteText } from "utils/noteText";
 import { rerank } from "./rerank.js";
 import { createNote } from "services/notes-write";
 import { chatImageExists } from "services/chat-images";
+import { logger } from "utils/logger";
 
 // Retrieval tuning (env-overridable). CANDIDATE_K is the pool fed to the reranker;
 // FINAL_K is how many survive to the model; RERANK_MIN_SCORE drops weak matches.
@@ -64,6 +65,23 @@ function rerankText(row: NoteRow): string {
   return clip(cleanNoteText([row.title, row.content].filter(Boolean).join("\n")), RERANK_CHARS);
 }
 
+interface NotesResult {
+  count: number;
+  notes: NoteHit[];
+}
+
+// The read tools must NEVER throw (a thrown execute surfaces a raw tool-error to the model and an
+// error card to the user, instead of the intended "no notes" state). Run their body through this so
+// a transient embed / Qdrant / Postgres fault degrades to a typed empty result. Written as a thunk
+// wrapper (not an execute wrapper) so each tool's input stays typed from its zod schema by the SDK.
+// The write tools keep their own try/catch (they return {saved:false}/{found:false}).
+function safeNotesQuery(run: () => Promise<NotesResult>): Promise<NotesResult> {
+  return run().catch(err => {
+    logger.error("Note retrieval tool failed:", err);
+    return { count: 0, notes: [] };
+  });
+}
+
 export function buildNoteTools({ userIds, userId }: { userIds: string[]; userId: string }) {
   return {
     search_notes: tool({
@@ -79,39 +97,40 @@ export function buildNoteTools({ userIds, userId }: { userIds: string[]; userId:
           ),
         top_k: z.number().int().min(1).max(20).optional().describe("Max notes to return (default 6)."),
       }),
-      execute: async ({ query, top_k }): Promise<{ count: number; notes: NoteHit[] }> => {
-        const vector = await embedText(query);
+      execute: ({ query, top_k }) =>
+        safeNotesQuery(async () => {
+          const vector = await embedText(query);
 
-        // 1) Rank a bounded candidate pool by vector similarity — Qdrant just gives ordered ids.
-        const result = await qdrantClient.query("notes", {
-          query: vector,
-          with_payload: false,
-          with_vector: false,
-          limit: CANDIDATE_K,
-          filter: { must: [{ key: "user_id", match: { any: userIds } }] },
-          ...(MIN_COSINE != null ? { score_threshold: MIN_COSINE } : {}),
-        });
-        const ids = result.points.map(p => String(p.id));
-        if (ids.length === 0) return { count: 0, notes: [] };
+          // 1) Rank a bounded candidate pool by vector similarity — Qdrant just gives ordered ids.
+          const result = await qdrantClient.query("notes", {
+            query: vector,
+            with_payload: false,
+            with_vector: false,
+            limit: CANDIDATE_K,
+            filter: { must: [{ key: "user_id", match: { any: userIds } }] },
+            ...(MIN_COSINE != null ? { score_threshold: MIN_COSINE } : {}),
+          });
+          const ids = result.points.map(p => String(p.id));
+          if (ids.length === 0) return { count: 0, notes: [] };
 
-        // 2) Postgres is the source of truth: pull live rows for those ids (scoped to the
-        //    user), dropping any id missing from PG. A deleted note whose vector lingers is
-        //    silently filtered out, and the text we rerank/show is always current.
-        const rows = await notesRepo.candidatesByIds(userIds, ids);
-        const byId = new Map(rows.map(r => [String(r.id), r]));
-        const candidates = ids
-          .map(id => byId.get(id))
-          .filter((r): r is NoteRow => r != null)
-          .map(row => ({ ...toNoteHit(row), text: rerankText(row) }));
+          // 2) Postgres is the source of truth: pull live rows for those ids (scoped to the
+          //    user), dropping any id missing from PG. A deleted note whose vector lingers is
+          //    silently filtered out, and the text we rerank/show is always current.
+          const rows = await notesRepo.candidatesByIds(userIds, ids);
+          const byId = new Map(rows.map(r => [String(r.id), r]));
+          const candidates = ids
+            .map(id => byId.get(id))
+            .filter((r): r is NoteRow => r != null)
+            .map(row => ({ ...toNoteHit(row), text: rerankText(row) }));
 
-        // 3) Rerank → keep only the relevance-gated top few (the strict step). The ranked
-        //    items are candidates (a NoteHit plus the reranker-only `text`); drop `text`.
-        const ranked = await rerank(query, candidates, { topN: top_k ?? FINAL_K, minScore: RERANK_MIN_SCORE });
-        return {
-          count: ranked.length,
-          notes: ranked.map(({ noteId, title, date, snippet }) => ({ noteId, title, date, snippet })),
-        };
-      },
+          // 3) Rerank → keep only the relevance-gated top few (the strict step). The ranked
+          //    items are candidates (a NoteHit plus the reranker-only `text`); drop `text`.
+          const ranked = await rerank(query, candidates, { topN: top_k ?? FINAL_K, minScore: RERANK_MIN_SCORE });
+          return {
+            count: ranked.length,
+            notes: ranked.map(({ noteId, title, date, snippet }) => ({ noteId, title, date, snippet })),
+          };
+        }),
     }),
 
     filter_by_date: tool({
@@ -123,14 +142,25 @@ export function buildNoteTools({ userIds, userId }: { userIds: string[]; userId:
         from: z
           .string()
           .optional()
-          .describe("Start of range, ISO 8601 (e.g. 2026-05-01 or 2026-05-01T00:00:00Z), inclusive. Omit for no lower bound."),
-        to: z.string().optional().describe("End of range, ISO 8601, inclusive. Omit for no upper bound."),
+          .describe(
+            "Start of range, inclusive. ISO 8601 in the USER'S LOCAL timezone — use the SAME offset as " +
+              "today's date in the system prompt (e.g. 2026-05-01T00:00:00+03:00), so day boundaries match " +
+              "the user's local day, not UTC. Omit for no lower bound."
+          ),
+        to: z
+          .string()
+          .optional()
+          .describe(
+            "End of range, inclusive. Same local-offset ISO 8601 as `from` (e.g. 2026-05-31T23:59:59+03:00). " +
+              "Omit for no upper bound."
+          ),
         limit: z.number().int().min(1).max(50).optional().describe("Max notes (default 20)."),
       }),
-      execute: async ({ from, to, limit }): Promise<{ count: number; notes: NoteHit[] }> => {
-        const rows = await notesRepo.byDateRange(userIds, { from, to, limit: limit ?? 20 });
-        return { count: rows.length, notes: rows.map(toNoteHit) };
-      },
+      execute: ({ from, to, limit }) =>
+        safeNotesQuery(async () => {
+          const rows = await notesRepo.byDateRange(userIds, { from, to, limit: limit ?? 20 });
+          return { count: rows.length, notes: rows.map(toNoteHit) };
+        }),
     }),
 
     list_recent_notes: tool({
@@ -140,10 +170,11 @@ export function buildNoteTools({ userIds, userId }: { userIds: string[]; userId:
       inputSchema: z.object({
         limit: z.number().int().min(1).max(30).optional().describe("How many notes (default 10)."),
       }),
-      execute: async ({ limit }): Promise<{ count: number; notes: NoteHit[] }> => {
-        const rows = await notesRepo.recent(userIds, limit ?? 10);
-        return { count: rows.length, notes: rows.map(toNoteHit) };
-      },
+      execute: ({ limit }) =>
+        safeNotesQuery(async () => {
+          const rows = await notesRepo.recent(userIds, limit ?? 10);
+          return { count: rows.length, notes: rows.map(toNoteHit) };
+        }),
     }),
 
     // Re-examine an OLDER attached image. The most-recent image is already inlined for the

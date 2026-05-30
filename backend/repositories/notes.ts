@@ -27,6 +27,16 @@ export interface NoteRow {
   created_at: Date | string | null;
 }
 
+// Parse a (model-supplied) date string; undefined for missing OR unparseable input. The chat's
+// filter_by_date tool lets the model pass free-form `from`/`to`, and `new Date("last week")` is an
+// Invalid Date that throws at query-bind time — which would break the retrieval tools' never-throw
+// contract from inside the data layer. Treating a bad bound as "no bound" keeps the query safe.
+function toValidDate(value?: string): Date | undefined {
+  if (!value) return undefined;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? undefined : d;
+}
+
 export const notesRepo = {
   /** A single note scoped to its owner — tenancy enforced by the signature. */
   findForUser: (noteId: string, userId: string): Promise<FullNote | undefined> =>
@@ -58,8 +68,10 @@ export const notesRepo = {
   /** A user's notes in a creation-date range, newest first — used by filter_by_date. */
   byDateRange: (userIds: string[], opts: { from?: string; to?: string; limit: number }): Promise<NoteRow[]> => {
     const conds: SQL[] = [inArray(notesTable.userId, userIds)];
-    if (opts.from) conds.push(gte(notesTable.created_at, new Date(opts.from)));
-    if (opts.to) conds.push(lte(notesTable.created_at, new Date(opts.to)));
+    const from = toValidDate(opts.from);
+    const to = toValidDate(opts.to);
+    if (from) conds.push(gte(notesTable.created_at, from));
+    if (to) conds.push(lte(notesTable.created_at, to));
     return drizzlePg
       .select(NOTE_COLUMNS)
       .from(notesTable)

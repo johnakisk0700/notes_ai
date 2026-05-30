@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from './ui/button';
 import { ArrowUp, ImageIcon, Loader2Icon, Square, X } from 'lucide-react';
 import AudioRecorder from './Common/AudioRecorder';
@@ -65,6 +65,9 @@ export const MainTextArea = ({ sendQuery, stopTextStream, isStreaming }: MainTex
   const [isUploading, setIsUploading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Mirrors the staged image's previewUrl so the unmount cleanup (empty deps) can revoke
+  // the latest one — navigating away mid-stage otherwise leaks the object URL.
+  const previewUrlRef = useRef<string | null>(null);
 
   const canAttachImages = modelHasVision(model);
 
@@ -73,7 +76,15 @@ export const MainTextArea = ({ sendQuery, stopTextStream, isStreaming }: MainTex
       if (prev) URL.revokeObjectURL(prev.previewUrl);
       return null;
     });
+    previewUrlRef.current = null;
   };
+
+  // Revoke a still-staged preview URL on unmount (send/clear already revoke + null it out).
+  useEffect(() => {
+    return () => {
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    };
+  }, []);
 
   // Switching to a model without vision drops a pending image — it can't be sent.
   const handleModelChange = (id: ChatModelId) => {
@@ -95,6 +106,7 @@ export const MainTextArea = ({ sendQuery, stopTextStream, isStreaming }: MainTex
     if (pending) {
       URL.revokeObjectURL(pending.previewUrl);
       setImage(null);
+      previewUrlRef.current = null;
     }
     await sendQuery(query, setQuery, selectedUsers, pending);
   };
@@ -127,12 +139,14 @@ export const MainTextArea = ({ sendQuery, stopTextStream, isStreaming }: MainTex
       const base64 = await fileToBase64(file);
       const { data } = await api.post('/chat-image', { image: { content: base64 }, mediaType: file.type });
       clearImage(); // one image per message — replace any previous
+      const previewUrl = URL.createObjectURL(file);
+      previewUrlRef.current = previewUrl;
       setImage({
         id: data.id,
         url: data.url,
         mediaType: data.mediaType,
         filename: file.name || 'pasted-image', // pasted screenshots have no filename
-        previewUrl: URL.createObjectURL(file),
+        previewUrl,
       });
     } catch (error) {
       if (import.meta.env.DEV) console.error('Error uploading image:', error);
@@ -166,7 +180,7 @@ export const MainTextArea = ({ sendQuery, stopTextStream, isStreaming }: MainTex
     }
   };
 
-  const handleRecordingComplete = async base64Audio => {
+  const handleRecordingComplete = async (base64Audio: string) => {
     try {
       setIsTranscribing(true);
       const request = {
