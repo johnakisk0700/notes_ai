@@ -87,13 +87,23 @@ erroring. Holds AI chat history: `UserThread` (one per conversation, embeds a
 the chat flow (`services/chat-threads.ts`) and read by `get-threads` / `get-thread`.
 Threads are indexed by `user_id` plus descending `inserted_at` for the sidebar list;
 single-thread loads use Mongo's `_id` index and enforce `user_id` ownership in the filter.
-Each `Message` stores `{ role, content?, parts?, metadata?, timestamp }`: `content` is the
-plain-text projection (user text / Lexi's answer); `parts` holds the full AI SDK UIMessage parts
-(text + tool-call parts, Mixed) for assistant turns, so reloaded threads re-render the tool
-cards; `metadata` (Mixed) carries the answer's `{ model, costEur, totalTokens }` for the per-answer
+Each `Message` stores `{ role, content?, parts?, metadata?, status?, generationId?, updatedAt?, timestamp }`:
+`content` is the plain-text projection (user text / Lexi's answer); `parts` holds the full AI SDK
+UIMessage parts (text + tool-call parts, Mixed) for assistant turns, so reloaded threads re-render the
+tool cards; `metadata` (Mixed) carries the answer's `{ model, costEur, totalTokens }` for the per-answer
 badge. User turns store `content` only — **except** when they attach an image, where `parts` also
 carries the `{ type:"file", url:"/api/chat-image/<id>" }` reference so the thumbnail re-renders on
 reload; the client falls back to `content` when `parts` is absent.
+
+The last three fields drive **poll-first answer durability** (so an answer survives a dropped/
+backgrounded connection on mobile — see `docs/chat-durability-plan.md`). An assistant turn is written
+as a `status:"streaming"` **placeholder** at generation start, its `content` grown by throttled partial
+writes, then **finalized** to `status:"complete"` (or `"error"` on abort/failure). `generationId` is the
+client-minted id correlating the live stream to the placeholder — it's also surfaced as the assistant
+message's DTO `id`, so the client's optimistic write and the polled read reconcile to one message.
+`updatedAt` is a heartbeat (bumped on every partial write); `getThread` serves a `streaming` placeholder
+whose heartbeat is older than `STALE_MS` (120s, > the 60s turn deadline) as effective `error` at read
+time (pure — it never writes on read), so an answer abandoned by a crashed worker stops the client poll.
 
 > Mongo holds **only** chat threads now — the unused `User` and `ECBConversionRate`
 > models were removed. USD→EUR rates live in the Postgres `ecb_conversion_rates`

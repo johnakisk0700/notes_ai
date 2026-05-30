@@ -121,14 +121,26 @@ frontend (axios, Bearer token) ─► backend /api/* ─► Postgres (notes/remi
   gated to the streaming turn so reopening a thread doesn't re-pop it),
   plus a `ThinkingIndicator` while no answer text is streaming yet (`context/StreamChatContext.tsx`,
   `components/Chat/`).
-  A new thread's id comes back as a transient `data-thread` part so the client routes to
-  `/thread/:id`. The assistant turn is persisted to a Mongo thread with its **full UIMessage
-  `parts`** (text + tool calls) plus `metadata` (`{ model, costEur, totalTokens }`, set via
-  `messageMetadata` → shown as a muted per-answer badge), assembled via `createUIMessageStream`'s
-  `onFinish` (`responseMessage`), so reopening a thread re-renders the tool cards + badge. `GET /api/get-threads` / `GET /api/get-thread` /
-  `POST /api/delete-thread` back the sidebar + history. See
-  `backend/apis/notes/search-relevant-notes.ts`, `backend/services/ai/agentic-rag.ts`, and
-  `backend/services/chat-threads.ts`. (Legacy `services/ai/ai_chat.ts` still powers note
+  The **client mints the thread id** (and a per-turn `generationId`) and sends them in the request,
+  so it can poll for the answer even if the stream never delivers a byte (flaky mobile). The assistant
+  turn is persisted as a **placeholder** (`status:"streaming"`, folded into the user-turn write — one
+  idempotent upsert), grown by throttled fire-and-forget **partial-text** writes (`onChunk`) as it
+  streams, then **finalized** (`status:"complete"`, full UIMessage `parts` + `metadata`
+  `{ model, costEur, totalTokens }` → muted per-answer badge) in `createUIMessageStream`'s `onFinish`
+  (`pipeUIMessageStreamToResponse({ consumeSseStream: consumeStream })` makes that fire even on
+  abort/disconnect); on error/abort it's marked `status:"error"`, and `getThread` serves a `streaming`
+  placeholder stuck past `STALE_MS` (120s, heartbeat = `updatedAt`) as `error`. **Poll-first durability
+  (built for flaky mobile):** the persisted Mongo thread is the source of truth — the client reads it via
+  **TanStack Query** `useQuery(['thread', id])`, polling while the latest turn is `streaming` and catching
+  up on reconnect/foreground (`refetchOnReconnect`/`refetchOnWindowFocus` `'always'`); the live `useChat`
+  stream is a best-effort **overlay** (rendered only while a turn streams on this client), reconciled by
+  writing the finished turn into the RQ cache (`setQueryData`, keyed by `generationId`) then invalidating
+  — so a Mongo-down or empty refetch can't wipe a streamed answer. `result.consumeStream()` keeps the
+  server generating through a client disconnect. `GET /api/get-threads` / `GET /api/get-thread` /
+  `POST /api/delete-thread` back the sidebar + history (`['threads']` query). See
+  `docs/chat-durability-plan.md`, `backend/apis/notes/search-relevant-notes.ts`,
+  `backend/services/ai/agentic-rag.ts`, `backend/services/chat-threads.ts`, and
+  `frontend/src/context/StreamChatContext.tsx`. (Legacy `services/ai/ai_chat.ts` still powers note
   titling via `get-note-title`.) Retrieval: a dense **`gemini-embedding-001`** candidate pool (3072-dim, via OpenRouter —
   `clients/embedding_client.ts`, shared by indexing + query) is reranked by **Jina
   `v2-base-multilingual`** and gated to the top few (`services/ai/rerank.ts`; set `JINA_API_KEY`
@@ -153,6 +165,12 @@ frontend (axios, Bearer token) ─► backend /api/* ─► Postgres (notes/remi
   **user** message in `prepareStep` (images aren't honored on `role:"tool"` messages over OpenRouter's
   OpenAI-compatible transport). Upload is gated on `modelHasVision` (`shared/ai/chatModels.ts`); image
   files are unlinked when their thread is deleted. See `backend/services/chat-images.ts`.
+- **Model prompt prep:** prior assistant turns are fed to the model as **text only**
+  (`historyForModel`, `services/ai/message-history.ts`) — their persisted tool-call/reasoning parts
+  round-trip from Mongo (Mixed) with schema-invalid fields (e.g. `providerExecuted: null`) and would make
+  `streamText` reject the whole prompt (*"messages do not match the ModelMessage[] schema"*), wedging a
+  thread; the UI still renders the full persisted parts, only the model input is reduced.
+  `convertToModelMessages` also passes `ignoreIncompleteToolCalls`.
 
 ## Data stores (who owns what)
 
@@ -165,8 +183,12 @@ frontend (axios, Bearer token) ─► backend /api/* ─► Postgres (notes/remi
   `backend/scripts/qdrant-init.ts` but currently **dormant** — only `notes` is
   queried (the wine/customer RAG path is commented out; autocomplete reads Postgres).
 - **MongoDB** — AI chat threads/messages (`backend/model/mongo-db/`), connected at
-  worker startup and written by the chat flow (see below). Best-effort: if Mongo is
-  down the API still serves, persistence just no-ops.
+  worker startup and written by the chat flow (see below). Each message carries the
+  poll-first lifecycle fields `status` (`streaming`/`complete`/`error`), `generationId`
+  (client-minted; correlates the live stream ↔ persisted turn, and is the assistant's
+  DTO id), and `updatedAt` (heartbeat for the read-time staleness rule). Best-effort: if
+  Mongo is down the API still serves, persistence just no-ops (and the client keeps the
+  live/optimistic answer on screen).
 - **Redis** — runtime cache (includes the live ECB conversion rate).
 - **Disk** (`data/chat-images/<userId>/<id>`) — chat image attachment bytes, referenced by a
   `/api/chat-image/<id>` file part on the user's Mongo message. One file per image (crypto-random id,

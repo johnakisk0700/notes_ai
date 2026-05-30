@@ -15,6 +15,7 @@ Single-page app served statically (nginx in prod, Vite dev server locally).
 | Routing        | `react-router` v7 (`BrowserRouter` + `<Routes>`)                  |
 | Auth           | Clerk (`@clerk/clerk-react`)                                      |
 | HTTP           | `axios` instance (CRUD) + the Vercel AI SDK transport for the chat stream |
+| Server state    | `@tanstack/react-query` v5 — chat threads (`['thread', id]` poll-first source of truth, `['threads']` sidebar list). `QueryClientProvider` in `main.tsx`; config in `integrations/queryClient.ts`. Being adopted incrementally (chat first). |
 | Editor         | TipTap 3 (note editor; `@mention` of wines + customers + users)   |
 | i18n           | `i18next` + `react-i18next` (el default, en)                      |
 | Misc           | `sonner` (toasts), `react-day-picker` (calendar), `cmdk`, `vaul`, `fuse.js`, `date-fns` |
@@ -123,27 +124,32 @@ CSS variables, `lucide` icons, aliases `@/components`, `@/lib/utils`, `@/compone
   not the legacy individual `@radix-ui/react-*` packages.
 - **Theming** is in `src/index.css`: oklch CSS variables for light (`:root`) and
   dark (`.dark`) plus a Tailwind v4 `@theme inline` block mapping them to
-  `--color-*` / `--radius-*` / `--shadow-*` tokens. It's a **notebook** theme:
-  dark is the hero ("midnight notebook" — warm blue-charcoal paper), light is warm
-  ecru paper, and the primary accent (`--primary`) is fountain-pen ink. There is
-  exactly **one** deliberate second tone, `--highlight` (amber), used as a
-  highlighter swipe (`<mark>` in chat) and the reminder flag — nothing else
-  introduces colour (the `--chart-*` ramp is ink + graphite tints, no rainbow).
-  Ambient skeuomorphic touches: **`.nb-paper`** (a single faint left margin
-  line — line-less paper, no horizontal ruling, so nothing has to sit on a
-  baseline grid) on the chat/notes scroll surfaces; a **paper grain** (`--nb-grain` /
-  `--nb-grain-sidebar` — desaturated SVG fractal noise blended `soft-light` into
-  the `.nb-page` background and the sidebar only; the sidebar uses a coarser grain
-  as a different "cover stock", and nothing else — chrome, text, the note dialog —
-  is grained); and two graphite wire coils sharing `.nb-coil-wire`:
-  **`SpiralBinding`**, a fixed overlay centered on the sidebar/page seam (muted
-  rings straddling it) that tracks the sidebar (visible when expanded, faded out
-  when collapsed; hidden on mobile), and **`TopSpiralBinding`**, the same wire
-  flipped to hang vertical loops along a surface's top edge — it crowns the
-  note-editor dialog so the open note reads as a top-bound steno pad. Fonts are
-  loaded via a Google Fonts `<link>` in `index.html` (all with Greek coverage):
-  **Inter** (sans / UI), **Literata** (serif — Lexi's chat answers), **JetBrains
-  Mono** (mono — code, charts, the `❯` prompt glyphs).
+  `--color-*` / `--radius-*` / `--shadow-*` tokens. The base look is a **notebook**:
+  dark "midnight notebook" (warm blue-charcoal paper), light warm ecru, fountain-pen
+  ink accent (`--primary`), and one deliberate second tone `--highlight` (amber) for
+  the `<mark>` swipe + reminder flag (the `--chart-*` ramp is ink + graphite, no rainbow).
+- **Palettes (pluggable themes).** On top of light/dark there's an orthogonal palette
+  axis: each palette is a self-contained file in `src/themes/*.css` overriding the base
+  tokens under `html[data-theme="<name>"]:not(.dark)` / `html[data-theme="<name>"].dark`
+  (specificity 0,2,1 — wins over `:root`/`.dark` regardless of `@import` order, and the
+  `:not(.dark)`/`.dark` pair prevents light↔dark leakage). To add one: create the file,
+  `@import` it in `index.css`, and append it to `ThemeProvider`'s `PALETTES`.
+  `ThemeProvider` sets `data-theme` on `<html>` (state + `localStorage`; `classic` = no
+  attribute = the base look) and `SettingsPage` has the picker next to the language
+  selector. Shipped: `paper` (soft white / near-black, neutral), `stark` (pure white/black,
+  flat), `warm` (near-white, faint warmth). `paper.css` is the documented template.
+- Ambient skeuomorphic touches: the page is **line-less paper** now — `.nb-paper` /
+  `.nb-margin-rule` are inert hooks (no ruling, no margin line). Texture is a **`.nb-page`**
+  background (`--nb-grain`, blended `soft-light`): base/`classic` uses desaturated fractal
+  noise; the white palettes swap in a subtler **fibre** (`--nb-fiber` — anisotropic
+  turbulence → faint vertical laid-lines), and `stark` is flat (`--nb-grain: none`). The
+  sidebar keeps a coarser grain (`--nb-grain-sidebar`) as a different "cover stock". Two
+  graphite wire coils share `.nb-coil-wire`, coloured by **`--nb-binder`** (tokenised so a
+  future Settings control can recolour the binding): **`SpiralBinding`** (fixed overlay on
+  the sidebar/page seam, tracks the sidebar, hidden on mobile) and **`TopSpiralBinding`**
+  (loops along a top edge — crowns the note-editor dialog as a top-bound steno pad). Fonts
+  load via a Google Fonts `<link>` in `index.html` (Greek coverage): **Inter** (sans/UI),
+  **Literata** (serif — Lexi's answers), **JetBrains Mono** (mono — code, charts, `❯`).
 - **`cn()`** (`src/lib/utils.ts`) merges class names (clsx + tailwind-merge).
 - **Local customizations to watch:** `dialog.tsx` adds a non-stock `onPressClose`
   prop (fires on overlay click and the X button) used by the global `NoteEditor`,
@@ -174,9 +180,15 @@ shown while no answer text has streamed yet), **not** an animated dot loader.
 The dated "Ask Lexi" introduction is a header-height first row inside the scrolling
 conversation, aligned with the floating sidebar toggle, so it clears above the viewport
 as messages begin; on narrow screens it keeps only the date.
-Notebook page rules span the sheet while their labels, search, and cards share a wide aligned content lane;
-the notes sheet runs beneath its floating title while search leads the content below it. When the desktop
-sidebar collapses, the sheet goes flush-left so its toggle remains centred in the margin.
+Every non-chat route renders through the shared **`<Page>`** wrapper (`components/Common/Page.tsx`):
+one scroll surface + a centered, guttered, vertically-padded content column at a standard width
+(`prose` / `wide` / `full`), so pages position identically and the spacing lives in one place. Pages
+pass an optional `title` (rendered as a `PageRule`); the **floating sidebar toggle** sits in that
+title's left margin and mirrors the sidebar's settings gear across the seam — a ghost button at the
+same `size-7`, same 14px top offset, and the same inset from the seam, so the two read as a reflection. The toggle is an absolute overlay that reserves no layout space, so
+content stays full-width (key on mobile) and the paper runs to the top edge — titled pages align the
+title to it, untitled ones just clear it. The **chat page is the sole exception** for positioning: it
+fills the view and manages its own scroll under that floating toggle.
 
 ## API integration (`integrations/api.ts`)
 
@@ -186,6 +198,12 @@ sidebar collapses, the sheet goes flush-left so its toggle remains centred in th
 - **Chat stream** — `POST /api/search-notes` is consumed via the **Vercel AI SDK**:
   `@ai-sdk/react`'s `useChat` with a `DefaultChatTransport` whose own `fetch` injects the
   same Clerk token (`context/StreamChatContext.tsx`). There is no hand-rolled stream helper.
+- **Poll-first chat durability** — the live `useChat` stream is a best-effort overlay; the
+  **source of truth** is `useQuery(['thread', id])` (TanStack Query), which polls while the turn
+  is still generating and catches up on reconnect/foreground (built for flaky mobile). The
+  finished turn is written into the cache optimistically then reconciled. Helpers:
+  `integrations/threadQueries.ts` (keys, poll decider, `mintObjectId`), `integrations/threadMessages.ts`
+  (DTO↔UIMessage mapping + the optimistic projection). Full design: `docs/chat-durability-plan.md`.
 
 Base URL (`BASE_URL`) is `VITE_API_DEV_URL` in dev, `VITE_API_PROD_URL` in prod build.
 
