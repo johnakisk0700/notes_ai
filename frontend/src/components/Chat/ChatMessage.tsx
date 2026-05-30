@@ -4,9 +4,13 @@ import { Check, CopyIcon, EditIcon, RefreshCcw, X } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../ui/button';
 import { CustomMarkdown } from './CustomMarkdown';
+import { NotePreviewCard } from './NotePreviewCard';
 import { ReasoningCard } from './ReasoningCard';
 import { ThinkingIndicator } from './ThinkingIndicator';
 import { ToolCallCard } from './ToolCallCard';
+
+// Tool calls that get the rich note-preview card; every other tool stays on the chip.
+const NOTE_ACTION_TOOLS = new Set(['tool-create_note', 'tool-propose_note_edit', 'tool-draft_note']);
 
 interface ChatMessageProps {
   message: AppUIMessage;
@@ -116,8 +120,9 @@ const AIMessage = ({
             </div>
           );
         }
-        // Tool calls (tool-search_notes, tool-list_recent_notes, …) → collapsible card.
+        // Note-action tools (create/edit/draft) → rich note preview; the rest → tool chip.
         if (part.type.startsWith('tool-')) {
+          if (NOTE_ACTION_TOOLS.has(part.type)) return <NotePreviewCard key={i} part={part} />;
           return <ToolCallCard key={i} part={part} />;
         }
         // The model's reasoning (when the provider streams it) → quiet disclosure.

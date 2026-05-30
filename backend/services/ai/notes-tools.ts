@@ -14,6 +14,7 @@ import { qdrantClient } from "clients/qdrant_client";
 import { notesRepo, type NoteRow } from "repositories/notes";
 import { cleanNoteText } from "utils/noteText";
 import { rerank } from "./rerank.js";
+import { createNote } from "services/notes-write";
 
 // Retrieval tuning (env-overridable). CANDIDATE_K is the pool fed to the reranker;
 // FINAL_K is how many survive to the model; RERANK_MIN_SCORE drops weak matches.
@@ -57,7 +58,7 @@ function rerankText(row: NoteRow): string {
   return clip(cleanNoteText([row.title, row.content].filter(Boolean).join("\n")), RERANK_CHARS);
 }
 
-export function buildNoteTools({ userIds }: { userIds: string[] }) {
+export function buildNoteTools({ userIds, userId }: { userIds: string[]; userId: string }) {
   return {
     search_notes: tool({
       description:
@@ -137,6 +138,73 @@ export function buildNoteTools({ userIds }: { userIds: string[] }) {
         const rows = await notesRepo.recent(userIds, limit ?? 10);
         return { count: rows.length, notes: rows.map(toNoteHit) };
       },
+    }),
+
+    // --- Write / action tools ---------------------------------------------------------
+    // Unlike the read tools (scoped to `userIds`, which may be a broader read set), writes
+    // target the single authoritative logged-in user `userId`. The model never supplies an
+    // id — tenancy stays a server-side invariant.
+
+    create_note: tool({
+      description:
+        "Save a NEW note for the user — it is persisted IMMEDIATELY. Use when the user asks you to " +
+        "write/keep/save a note (e.g. 'κράτα σημείωση…', 'save a note about…'). Write a short title and " +
+        "the body as Markdown, in the user's language. Do NOT use this to change an existing note " +
+        "(use propose_note_edit) or when the user wants to edit it themselves first (use draft_note).",
+      inputSchema: z.object({
+        title: z.string().describe("A short title in the user's language."),
+        content: z.string().describe("The note body as Markdown, in the user's language."),
+      }),
+      execute: async ({ title, content }) => {
+        const note = await createNote({ userId, title, content });
+        return {
+          saved: true as const,
+          noteId: note.id,
+          title: note.title ?? title,
+          content: note.content,
+          date: isoOrEmpty(note.created_at),
+        };
+      },
+    }),
+
+    propose_note_edit: tool({
+      description:
+        "Propose an edit to ONE existing note (find it first with search_notes/list_recent_notes). This " +
+        "does NOT save — it shows the user a before→after they Apply or discard. Use for requests like " +
+        "'διόρθωσε/πρόσθεσε/ενημέρωσε τη σημείωσή μου'. Provide the FULL new content (the entire note after " +
+        "your changes), not a diff — for an addition, repeat the existing text plus the new part.",
+      inputSchema: z.object({
+        noteId: z.string().describe("Id of the note to edit, from a prior search/list result."),
+        title: z.string().optional().describe("New title, if it should change. Omit to keep the current title."),
+        newContent: z.string().describe("The FULL new note body as Markdown (the complete note after edits)."),
+      }),
+      execute: async ({ noteId, title, newContent }) => {
+        const current = await notesRepo.findForUser(noteId, userId);
+        if (!current) return { found: false as const, noteId };
+        return {
+          found: true as const,
+          noteId,
+          title: title ?? current.title ?? "",
+          before: current.content ?? "",
+          after: newContent,
+          // Carry the existing reminder so Apply can preserve it (a content-only update that
+          // dropped remindAt would wipe the reminder — see apis/notes/update-note).
+          remindAt: current.reminder?.remindAt ? new Date(current.reminder.remindAt).toISOString() : "",
+        };
+      },
+    }),
+
+    draft_note: tool({
+      description:
+        "Prepare a DRAFT note and open it in the user's note editor so THEY review/edit and save it " +
+        "themselves — you save NOTHING. Use when the user wants to write it themselves, or asks for a " +
+        "'προσχέδιο/draft να το πειράξω'. Provide a short title and the body as Markdown, in their language.",
+      inputSchema: z.object({
+        title: z.string().describe("A short title in the user's language."),
+        content: z.string().describe("The draft body as Markdown, in the user's language."),
+      }),
+      // No persistence — the client opens the editor pre-filled with this draft.
+      execute: async ({ title, content }) => ({ openedInEditor: true as const, title, content }),
     }),
   };
 }

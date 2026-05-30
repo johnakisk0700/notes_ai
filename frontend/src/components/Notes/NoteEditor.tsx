@@ -80,7 +80,7 @@ const EditorCore = () => {
     generateTitle,
   } = useNoteOperations();
   const { fetchNotes, notes } = useNotes();
-  const { noteId, closeEditor, isOpen } = useNoteEditor();
+  const { noteId, closeEditor, isOpen, pendingDraft, consumePendingDraft } = useNoteEditor();
 
   const isHttpOperationActive =
     isSavingNote || isLoadingNote || isFetchingTitle || isTranscribing || afterProcessing || !isOpen;
@@ -235,8 +235,15 @@ const EditorCore = () => {
         } else {
           // create mode
           setNoteToEdit(null);
-          const { draftTitle, draftContent } = getLatestDraft();
-          updateNoteState(draftTitle || '', draftContent || '');
+          if (pendingDraft) {
+            // A note handed in by the chat (draft_note) — seed it once, then forget it so a
+            // later blank "new note" falls back to the user's own localStorage draft.
+            updateNoteState(pendingDraft.title || '', pendingDraft.content || '');
+            consumePendingDraft();
+          } else {
+            const { draftTitle, draftContent } = getLatestDraft();
+            updateNoteState(draftTitle || '', draftContent || '');
+          }
         }
       } catch {
         toast.error('Note was not found!');

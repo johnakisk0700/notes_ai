@@ -89,7 +89,12 @@ frontend (axios, Bearer token) ─► backend /api/* ─► Postgres (notes/remi
 - Chat flow (agentic RAG on the Vercel AI SDK): `POST /api/search-notes` runs a streaming
   multi-step tool loop (`streamText` + `stopWhen`) where the model calls note-retrieval
   tools (`search_notes`, `filter_by_date`, `list_recent_notes` — `services/ai/notes-tools.ts`), reads the
-  results, and answers grounded in them. The loop is capped at `MAX_STEPS` (runaway guard —
+  results, and answers grounded in them. The same loop can also **act on notes** (all hard-scoped to the
+  logged-in `userId`, never an id from the model): `create_note` saves immediately via the shared
+  `services/notes-write.ts` save+embed transaction (the same path `/store-note` uses); `propose_note_edit`
+  returns a before→after that the user Applies (→ `/update-note`, forwarding the existing `remindAt` so a
+  content edit can't wipe a reminder) or discards — it does **not** write; `draft_note` persists nothing and
+  just hands a draft to the client, which auto-opens it pre-filled in the note editor. The loop is capped at `MAX_STEPS` (runaway guard —
   the SDK default is a single step; the last step drops tools via `prepareStep` to force an
   answer), and `result.consumeStream()` keeps the turn persisting even if the client
   disconnects. The system prompt carries only persona + answer policy — the SDK injects each
@@ -99,7 +104,10 @@ frontend (axios, Bearer token) ─► backend /api/* ─► Postgres (notes/remi
   (`shared/ai/chatModels.ts`: Qwen/GLM via OpenRouter + GPT via OpenAI). Streamed as an AI SDK UI message stream
   (text + `tool-*` + `reasoning` parts); the client consumes it with `useChat`
   (`experimental_throttle` coalesces token re-renders; `CustomMarkdown` is memoized so only
-  the streaming message re-parses) and renders tool calls + reasoning (`ToolCallCard`/`ReasoningCard`),
+  the streaming message re-parses) and renders tool calls + reasoning (`ToolCallCard`/`ReasoningCard`;
+  the three note-action tools render as a richer `NotePreviewCard` instead — saved note / before→after
+  with Apply·Discard / draft — and a live `draft_note` result auto-opens the editor via `NoteEditorContext`,
+  gated to the streaming turn so reopening a thread doesn't re-pop it),
   plus a `ThinkingIndicator` while no answer text is streaming yet (`context/StreamChatContext.tsx`,
   `components/Chat/`).
   A new thread's id comes back as a transient `data-thread` part so the client routes to
