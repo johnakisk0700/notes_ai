@@ -7,13 +7,15 @@
 #   runtime — production: runs the bundled dist/server.js (this is the default).
 
 # ---- Install workspace dependencies (layer cached on manifest changes) ----
+# The cache mount keeps bun's global package cache across builds, so a dep bump
+# re-links node_modules without re-downloading everything.
 FROM oven/bun:1.2-slim AS deps
 WORKDIR /app
 COPY package.json bun.lock ./
 COPY backend/package.json ./backend/package.json
 COPY frontend/package.json ./frontend/package.json
 COPY shared/package.json ./shared/package.json
-RUN bun install
+RUN --mount=type=cache,target=/root/.bun/install/cache bun install
 
 # ---- Migrate: one-shot — applies shared/drizzle migrations, then exits ----
 # Backed by the compose `migrate` service the backend waits on
@@ -36,10 +38,6 @@ CMD ["bun", "run", "scripts/qdrant-ensure.ts"]
 
 # ---- Dev: hot-reload (source bind-mounted by docker-compose.override.yml) ----
 FROM deps AS dev
-# fluent-ffmpeg shells out to the `ffmpeg` binary at runtime (transcription/audio)
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app/backend
 ENV NODE_ENV=development MODE=dev APP_PORT=5100
 EXPOSE 5100
@@ -56,10 +54,6 @@ RUN bun run build
 
 # ---- Runtime (production) ----
 FROM oven/bun:1.2-slim AS runtime
-# fluent-ffmpeg shells out to the `ffmpeg` binary at runtime (transcription/audio)
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app/backend
 ENV NODE_ENV=production MODE=production APP_PORT=5100
 COPY --from=build /app/node_modules /app/node_modules

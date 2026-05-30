@@ -7,13 +7,15 @@
 #   runtime — production: static build served by nginx (this is the default).
 
 # ---- Install workspace dependencies ----
+# The cache mount keeps bun's global package cache across builds, so a dep bump
+# re-links node_modules without re-downloading everything.
 FROM oven/bun:1.2-slim AS deps
 WORKDIR /app
 COPY package.json bun.lock ./
 COPY backend/package.json ./backend/package.json
 COPY frontend/package.json ./frontend/package.json
 COPY shared/package.json ./shared/package.json
-RUN bun install
+RUN --mount=type=cache,target=/root/.bun/install/cache bun install
 
 # ---- Dev: Vite dev server (source bind-mounted by docker-compose.override.yml) ----
 FROM deps AS dev
