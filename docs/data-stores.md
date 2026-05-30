@@ -87,11 +87,14 @@ erroring. Holds AI chat history: `UserThread` (one per conversation, embeds a
 the chat flow (`services/chat-threads.ts`) and read by `get-threads` / `get-thread`.
 Threads are indexed by `user_id` plus descending `inserted_at` for the sidebar list;
 single-thread loads use Mongo's `_id` index and enforce `user_id` ownership in the filter.
-Each `Message` stores `{ role, content?, parts?, metadata?, status?, generationId?, updatedAt?, timestamp }`:
+Each `Message` stores `{ role, content?, parts?, toolTransactions?, metadata?, status?, generationId?, updatedAt?, timestamp }`:
 `content` is the plain-text projection (user text / Lexi's answer); `parts` holds the full AI SDK
 UIMessage parts (text + tool-call parts, Mixed) for assistant turns, so reloaded threads re-render the
-tool cards; `metadata` (Mixed) carries the answer's `{ model, costEur, totalTokens }` for the per-answer
-badge. User turns store `content` only — **except** when they attach an image, where `parts` also
+tool cards. `toolTransactions` is a message-level log keyed by `toolCallId`; note-action tool parts
+may also carry the same small `transaction` marker (`applied`, `discarded`, `retry_saved`) plus an
+output snapshot, written by `POST /api/update-tool-transaction`, so Apply/Discard state survives
+refresh even if the click happened before the streaming turn finalized. `metadata` (Mixed) carries the answer's `{ model, costEur,
+totalTokens }` for the per-answer badge. User turns store `content` only — **except** when they attach an image, where `parts` also
 carries the `{ type:"file", url:"/api/chat-image/<id>" }` reference so the thumbnail re-renders on
 reload; the client falls back to `content` when `parts` is absent.
 

@@ -97,7 +97,10 @@ const ThemeSelector = () => {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="outline" role="combobox" aria-expanded={open} className="w-[200px] justify-between">
-          {current?.label ?? t('select_theme')}
+          <span className="flex min-w-0 items-center gap-2">
+            <PaletteSwatch palette={current} />
+            <span className="truncate">{current?.label ?? t('select_theme')}</span>
+          </span>
           <ChevronsUpDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
@@ -114,6 +117,7 @@ const ThemeSelector = () => {
                     setOpen(false);
                   }}
                 >
+                  <PaletteSwatch palette={p} />
                   {p.label}
                   <CheckIcon className={cn('ml-auto h-4 w-4', palette === p.value ? 'opacity-100' : 'opacity-0')} />
                 </CommandItem>
@@ -123,5 +127,22 @@ const ThemeSelector = () => {
         </Command>
       </PopoverContent>
     </Popover>
+  );
+};
+
+const PaletteSwatch = ({ palette }: { palette?: (typeof PALETTES)[number] }) => {
+  if (!palette) return null;
+
+  return (
+    <span
+      aria-hidden
+      className="relative h-4 w-4 shrink-0 rounded-full border border-border"
+      style={{ backgroundColor: palette.swatch.surface }}
+    >
+      <span
+        className="absolute bottom-[-1px] right-[-1px] h-2.5 w-2.5 rounded-full border border-background"
+        style={{ backgroundColor: palette.swatch.primary }}
+      />
+    </span>
   );
 };

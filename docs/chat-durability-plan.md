@@ -205,6 +205,12 @@ A multi-agent adversarial review found 7 real bugs; the 2 high + 4 medium were f
    **text** answer before conversion (+ `ignoreIncompleteToolCalls` as belt-and-suspenders); the UI still
    renders the full persisted parts, only the model input is reduced. Verified the real thread now converts
    clean. (My first guess — dangling tool call alone — was wrong; the persisted-doc replay corrected it.)
+10. **(med) note-action cards lost durable human decision state** — Apply/Discard/manual retry lived only in
+   React state/session caches, so a refresh could resurrect a pending/loading card and the model had no
+   explicit memory of whether the user accepted the proposed edit. → finalized `tool-*` parts are hydrated
+   with tool outputs from `onStepFinish`, `POST /api/update-tool-transaction` stores a small transaction
+   log keyed by `toolCallId` and overlays it onto the relevant tool part on read, and `historyForModel`
+   projects note-action parts into deterministic text summaries for later turns.
 
 ## Known limitations (v1, deliberate)
 - **Stop button** stays local (`useChat.stop()`): the server keeps generating (`consumeStream`) and

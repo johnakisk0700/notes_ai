@@ -134,15 +134,17 @@ CSS variables, `lucide` icons, aliases `@/components`, `@/lib/utils`, `@/compone
   (specificity 0,2,1 — wins over `:root`/`.dark` regardless of `@import` order, and the
   `:not(.dark)`/`.dark` pair prevents light↔dark leakage). To add one: create the file,
   `@import` it in `index.css`, and append it to `ThemeProvider`'s `PALETTES`.
-  `ThemeProvider` sets `data-theme` on `<html>` (state + `localStorage`; `classic` = no
-  attribute = the base look) and `SettingsPage` has the picker next to the language
-  selector. Shipped: `paper` (soft white / near-black, neutral), `stark` (pure white/black,
-  flat), `warm` (near-white, faint warmth). `paper.css` is the documented template.
+  `ThemeProvider` sets `data-theme` on `<html>` (state + `localStorage`; default =
+  `paper` / Graphite Paper; `classic` = no attribute = the base look) and
+  `SettingsPage` has the picker next to the language selector. Shipped: `paper`
+  (Graphite Paper, neutral), `classic` (Midnight Ecru), `warm` (Warm Linen), `sage`
+  (Sage Ledger), and `copper` (Copper Ink). `paper.css` is the documented template.
+  Stale saved palette values are ignored, so removed palettes fall back to the default.
 - Ambient skeuomorphic touches: the page is **line-less paper** now — `.nb-paper` /
   `.nb-margin-rule` are inert hooks (no ruling, no margin line). Texture is a **`.nb-page`**
   background (`--nb-grain`, blended `soft-light`): base/`classic` uses desaturated fractal
-  noise; the white palettes swap in a subtler **fibre** (`--nb-fiber` — anisotropic
-  turbulence → faint vertical laid-lines), and `stark` is flat (`--nb-grain: none`). The
+  noise; the alternate palettes swap in a subtler **fibre** (`--nb-fiber` — anisotropic
+  turbulence → faint vertical laid-lines). The
   sidebar keeps a coarser grain (`--nb-grain-sidebar`) as a different "cover stock". Two
   graphite wire coils share `.nb-coil-wire`, coloured by **`--nb-binder`** (tokenised so a
   future Settings control can recolour the binding): **`SpiralBinding`** (fixed overlay on
@@ -204,6 +206,10 @@ fills the view and manages its own scroll under that floating toggle.
   finished turn is written into the cache optimistically then reconciled. Helpers:
   `integrations/threadQueries.ts` (keys, poll decider, `mintObjectId`), `integrations/threadMessages.ts`
   (DTO↔UIMessage mapping + the optimistic projection). Full design: `docs/chat-durability-plan.md`.
+- **Note-action cards** — `NotePreviewCard` renders `create_note`, `propose_note_edit`, and
+  `draft_note` tool parts. Apply/Discard/manual-retry outcomes are written back to the thread with
+  `POST /api/update-tool-transaction` and patched into the TanStack cache, so a refresh keeps the
+  card in its terminal state instead of returning to a spinner or pending buttons.
 
 Base URL (`BASE_URL`) is `VITE_API_DEV_URL` in dev, `VITE_API_PROD_URL` in prod build.
 

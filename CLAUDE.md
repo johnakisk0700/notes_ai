@@ -117,7 +117,10 @@ frontend (axios, Bearer token) ─► backend /api/* ─► Postgres (notes/remi
   (`experimental_throttle` coalesces token re-renders; `CustomMarkdown` is memoized so only
   the streaming message re-parses) and renders tool calls + reasoning (`ToolCallCard`/`ReasoningCard`;
   the three note-action tools render as a richer `NotePreviewCard` instead — saved note / before→after
-  with Apply·Discard / draft — and a live `draft_note` result auto-opens the editor via `NoteEditorContext`,
+  with Apply·Discard / draft. Tool outputs are hydrated into the finalized parts before Mongo
+  persistence, and Apply/Discard/manual-retry decisions are written back via
+  `POST /api/update-tool-transaction` as a tiny `transaction` marker/log keyed by `toolCallId`, so a
+  refresh re-renders the same terminal card state even if the click happened mid-stream. A live `draft_note` result auto-opens the editor via `NoteEditorContext`,
   gated to the streaming turn so reopening a thread doesn't re-pop it),
   plus a `ThinkingIndicator` while no answer text is streaming yet (`context/StreamChatContext.tsx`,
   `components/Chat/`).
@@ -169,7 +172,9 @@ frontend (axios, Bearer token) ─► backend /api/* ─► Postgres (notes/remi
   (`historyForModel`, `services/ai/message-history.ts`) — their persisted tool-call/reasoning parts
   round-trip from Mongo (Mixed) with schema-invalid fields (e.g. `providerExecuted: null`) and would make
   `streamText` reject the whole prompt (*"messages do not match the ModelMessage[] schema"*), wedging a
-  thread; the UI still renders the full persisted parts, only the model input is reduced.
+  thread. Durable note-action state is projected into deterministic text summaries (e.g. proposed
+  edit before→after + user applied/discarded, saved note, manual retry saved); the UI still renders
+  the full persisted parts, only the model input is reduced.
   `convertToModelMessages` also passes `ignoreIncompleteToolCalls`.
 
 ## Data stores (who owns what)

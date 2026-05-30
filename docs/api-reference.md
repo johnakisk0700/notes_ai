@@ -66,3 +66,4 @@ AI chat history, persisted in Mongo (`UserThread`). Written as a side effect of
 | GET 📄 | `/api/get-threads`    | `getThreads`   | Current user's threads (`{ id, title, inserted_at }`), newest first — sidebar list. |
 | GET    | `/api/get-thread`     | `getThread`    | `?threadId=` — one thread with its `messages` (owner only). |
 | POST   | `/api/delete-thread`  | `deleteThread` | `{ threadId }` — owner only. |
+| POST   | `/api/update-tool-transaction` | `updateToolTransaction` | `{ threadId, messageId, toolCallId, status, output? }` — owner-scoped persistence for note-action tool card outcomes (`applied`, `discarded`, `retry_saved`). Stores a message-level transaction log and overlays it on the assistant tool part so refresh shows the same card state and later model turns get a deterministic text summary instead of raw tool JSON. |

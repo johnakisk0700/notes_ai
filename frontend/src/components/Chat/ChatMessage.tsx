@@ -191,7 +191,7 @@ const AIMessage = ({
         }
         // Note-action tools (create/edit/draft) → rich note preview; the rest → tool chip.
         if (part.type.startsWith('tool-')) {
-          if (NOTE_ACTION_TOOLS.has(part.type)) return <NotePreviewCard key={key} part={part} />;
+          if (NOTE_ACTION_TOOLS.has(part.type)) return <NotePreviewCard key={key} part={part} messageId={message.id} />;
           return <ToolCallCard key={key} part={part} />;
         }
         // The model's reasoning (when the provider streams it) → quiet disclosure.

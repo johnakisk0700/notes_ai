@@ -56,6 +56,19 @@ function textFromParts(parts: UIMessage["parts"]): string {
     .join("");
 }
 
+type ToolOutputPart = UIMessage["parts"][number] & { toolCallId?: string; output?: unknown; state?: string };
+
+function hydrateToolOutputs(parts: UIMessage["parts"], outputs: Map<string, unknown>): UIMessage["parts"] {
+  if (outputs.size === 0) return parts;
+  return parts.map(part => {
+    const p = part as ToolOutputPart;
+    if (!p.type.startsWith("tool-") || !p.toolCallId || p.output !== undefined || !outputs.has(p.toolCallId)) {
+      return part;
+    }
+    return { ...p, state: "output-available", output: outputs.get(p.toolCallId) } as UIMessage["parts"][number];
+  });
+}
+
 // Approximate EUR/USD used only for the cost badge when the live rate can't be fetched — so a
 // Redis hiccup never aborts the turn and drops the answer (see the merge below).
 const FALLBACK_EUR_PER_USD = new Decimal("0.92");
@@ -238,6 +251,7 @@ export function streamNotesChat(opts: {
   // once we know there's a thread; the UI-stream onFinish/onError cancel it so a late
   // partial can't land after the finalize. Hoisted so both can reach it.
   let partial: ReturnType<typeof makePartialWriter> | null = null;
+  const toolOutputs = new Map<string, unknown>();
 
   const stream = createUIMessageStream({
     originalMessages: messages,
@@ -317,6 +331,8 @@ export function streamNotesChat(opts: {
         onStepFinish: step => {
           for (const r of step.toolResults ?? []) {
             const count = (r.output as { count?: number } | undefined)?.count;
+            const toolCallId = (r as { toolCallId?: string }).toolCallId;
+            if (toolCallId) toolOutputs.set(toolCallId, r.output);
             logger.info(`RAG · ${r.toolName}${typeof count === "number" ? ` → ${count} notes` : ""}`);
           }
         },
@@ -387,9 +403,10 @@ export function streamNotesChat(opts: {
       // existing placeholder. `persisted` never rejects (best-effort).
       if (persisted) await persisted;
       const status = resolveTurnStatus({ isAborted, finishReason });
+      const parts = hydrateToolOutputs(responseMessage.parts, toolOutputs);
       finalizeAssistant(threadId, userId, generationId, {
-        content: textFromParts(responseMessage.parts),
-        parts: responseMessage.parts,
+        content: textFromParts(parts),
+        parts,
         // model + cost, attached via messageMetadata above — persisted so the badge survives reload.
         metadata: responseMessage.metadata,
         status,

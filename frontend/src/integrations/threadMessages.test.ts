@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { deriveThreadTitle, mergeThreadNoRegress, optimisticThread, toUIMessage } from './threadMessages';
+import {
+  deriveThreadTitle,
+  mergeThreadNoRegress,
+  optimisticThread,
+  patchToolTransaction,
+  toUIMessage,
+} from './threadMessages';
 import type { ThreadDetail, ThreadMessageDTO, ThreadMessageStatus } from '@shared';
 import type { UIMessage } from 'ai';
 
@@ -130,5 +136,37 @@ describe('mergeThreadNoRegress', () => {
 
   it('returns fresh when there is no cache', () => {
     expect(mergeThreadNoRegress(undefined, thread('streaming', ''))).toEqual(thread('streaming', ''));
+  });
+});
+
+describe('patchToolTransaction', () => {
+  it('persists a tool transaction and output snapshot in the cached thread', () => {
+    const detail: ThreadDetail = {
+      id: 'thr',
+      title: 't',
+      inserted_at: 'iso',
+      messages: [
+        {
+          id: 'gen-1',
+          role: 'assistant',
+          content: '',
+          timestamp: 't',
+          parts: [{ type: 'tool-propose_note_edit', toolCallId: 'tool-1', state: 'input-available' }],
+        },
+      ],
+    };
+
+    const transaction = { status: 'applied' as const, updatedAt: '2026-05-30T00:00:00.000Z' };
+    const patched = patchToolTransaction(detail, 'gen-1', 'tool-1', transaction, { found: true });
+    const part = patched?.messages[0].parts?.[0] as Record<string, unknown>;
+
+    expect(part.transaction).toEqual(transaction);
+    expect(part.output).toEqual({ found: true });
+    expect(part.state).toBe('output-available');
+  });
+
+  it('returns the original thread when the tool part is not present', () => {
+    const detail: ThreadDetail = { id: 'thr', title: 't', inserted_at: 'iso', messages: [] };
+    expect(patchToolTransaction(detail, 'missing', 'tool-1', { status: 'discarded', updatedAt: 't' })).toBe(detail);
   });
 });

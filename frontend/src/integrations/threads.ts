@@ -1,4 +1,4 @@
-import type { ThreadDetail, ThreadSummary } from '@shared';
+import type { ThreadDetail, ThreadSummary, ThreadToolTransaction, ThreadToolTransactionStatus } from '@shared';
 import { api } from './api';
 
 // AI chat threads, persisted server-side (Mongo). The streamed answer itself
@@ -20,4 +20,15 @@ export async function fetchThread(threadId: string): Promise<ThreadDetail> {
 
 export async function deleteThread(threadId: string): Promise<void> {
   await api.post('delete-thread', { threadId });
+}
+
+export async function updateToolTransaction(input: {
+  threadId: string;
+  messageId: string;
+  toolCallId: string;
+  status: ThreadToolTransactionStatus;
+  output?: unknown;
+}): Promise<ThreadToolTransaction> {
+  const { data } = await api.post<{ transaction: ThreadToolTransaction }>('update-tool-transaction', input);
+  return data.transaction;
 }

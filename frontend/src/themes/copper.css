@@ -1,0 +1,74 @@
+/*
+   Theme: "copper" - muted copper ink on warm paper, with a low-glow dark mode.
+   See paper.css for how theme files work.
+*/
+
+html[data-theme='copper']:not(.dark) {
+  --background: oklch(0.96 0.012 64);
+  --foreground: oklch(0.31 0.022 50);
+  --card: oklch(0.982 0.008 64);
+  --card-foreground: oklch(0.31 0.022 50);
+  --popover: oklch(0.982 0.008 64);
+  --popover-foreground: oklch(0.31 0.022 50);
+  --primary: oklch(0.42 0.075 50);
+  --primary-foreground: oklch(0.982 0.008 70);
+  --secondary: oklch(0.92 0.012 64);
+  --secondary-foreground: oklch(0.33 0.022 50);
+  --muted: oklch(0.905 0.011 64);
+  --muted-foreground: oklch(0.5 0.018 50);
+  --accent: oklch(0.89 0.014 58);
+  --accent-foreground: oklch(0.33 0.022 50);
+  --highlight: oklch(0.9 0.11 92);
+  --border: oklch(0.86 0.012 64);
+  --input: oklch(0.895 0.012 64);
+  --ring: oklch(0.42 0.075 50);
+  --chart-1: oklch(0.42 0.075 50);
+  --chart-2: oklch(0.54 0.06 55);
+  --chart-3: oklch(0.6 0.03 70);
+  --chart-4: oklch(0.71 0.024 80);
+  --chart-5: oklch(0.8 0.018 90);
+  --sidebar: oklch(0.94 0.012 64);
+  --sidebar-foreground: oklch(0.31 0.022 50);
+  --sidebar-primary: oklch(0.42 0.075 50);
+  --sidebar-primary-foreground: oklch(0.982 0.008 70);
+  --sidebar-accent: oklch(0.89 0.014 58);
+  --sidebar-accent-foreground: oklch(0.33 0.022 50);
+  --sidebar-border: oklch(0.85 0.012 64);
+  --sidebar-ring: oklch(0.42 0.075 50);
+  --nb-grain: var(--nb-fiber);
+}
+
+html[data-theme='copper'].dark {
+  --background: oklch(0.19 0.012 52);
+  --foreground: oklch(0.9 0.01 78);
+  --card: oklch(0.225 0.014 52);
+  --card-foreground: oklch(0.9 0.01 78);
+  --popover: oklch(0.225 0.014 52);
+  --popover-foreground: oklch(0.9 0.01 78);
+  --primary: oklch(0.68 0.085 55);
+  --primary-foreground: oklch(0.18 0.024 52);
+  --secondary: oklch(0.285 0.014 52);
+  --secondary-foreground: oklch(0.9 0.01 78);
+  --muted: oklch(0.265 0.013 52);
+  --muted-foreground: oklch(0.64 0.014 70);
+  --accent: oklch(0.31 0.018 55);
+  --accent-foreground: oklch(0.9 0.01 78);
+  --highlight: oklch(0.86 0.1 92);
+  --border: oklch(0.305 0.014 52);
+  --input: oklch(0.285 0.014 52);
+  --ring: oklch(0.68 0.085 55);
+  --chart-1: oklch(0.68 0.085 55);
+  --chart-2: oklch(0.6 0.06 58);
+  --chart-3: oklch(0.52 0.028 70);
+  --chart-4: oklch(0.44 0.024 55);
+  --chart-5: oklch(0.36 0.02 52);
+  --sidebar: oklch(0.165 0.014 52);
+  --sidebar-foreground: oklch(0.9 0.01 78);
+  --sidebar-primary: oklch(0.68 0.085 55);
+  --sidebar-primary-foreground: oklch(0.18 0.024 52);
+  --sidebar-accent: oklch(0.29 0.018 55);
+  --sidebar-accent-foreground: oklch(0.9 0.01 78);
+  --sidebar-border: oklch(0.285 0.014 52);
+  --sidebar-ring: oklch(0.68 0.085 55);
+  --nb-grain: var(--nb-fiber);
+}

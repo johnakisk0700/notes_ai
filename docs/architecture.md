@@ -53,11 +53,18 @@ Vercel AI SDK** — it records the user turn and delegates to `streamNotesChat`
    generated locally (a new chat's id streams back immediately as a transient
    `data-thread` part, so the client routes to `/thread/:id`) and the user-message
    write runs in the background. The assistant turn is appended on stream finish,
-   after that write lands. Persistence is **best-effort** — it never blocks or fails
+   after that write lands. Tool outputs observed during `onStepFinish` are used to
+   hydrate finalized `tool-*` parts before persistence, so reloaded note-action cards
+   have their output snapshots. Persistence is **best-effort** — it never blocks or fails
    the streamed answer, and while Mongo is down it no-ops instantly (no buffering stall).
 
 Threads are read back via `GET /api/get-threads` (sidebar list) +
 `GET /api/get-thread?threadId=` (history); `POST /api/delete-thread` removes one.
+`POST /api/update-tool-transaction` records owner-scoped Apply/Discard/manual-retry
+state in a message-level log keyed by `toolCallId` and overlays it onto the note-action
+tool part on read. Future LLM calls still receive assistant history as
+plain text: `message-history.ts` drops raw tool/reasoning blobs and adds deterministic
+summaries like "a note edit was proposed from X to Y; the user applied it."
 The worker opens the Mongo connection in the background at startup
 (`connectToDatabase`, retry/backoff) and relies on the driver to auto-reconnect on
 drops — also best-effort.

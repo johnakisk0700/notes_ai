@@ -8,6 +8,9 @@ export interface Message {
   // Full AI SDK UIMessage parts (text + tool-call parts). Persisted verbatim so the
   // chat can re-render tool steps after a reload — see services/chat-threads.ts.
   parts?: unknown[];
+  // User/client outcomes for note-action tool cards, keyed by toolCallId. Kept separate
+  // from parts so Apply/Discard can be recorded even before the streaming turn finalizes.
+  toolTransactions?: unknown[];
   // AI SDK message metadata (e.g. { model, costEur, totalTokens }) — drives the per-answer badge.
   metadata?: unknown;
   // Assistant-turn lifecycle for poll-first durability: a placeholder is written
@@ -34,6 +37,11 @@ export const MessageSchema = new Schema({
   // Mixed: the parts shape is owned by the AI SDK; we store it as-is and hand it
   // straight back to the client on hydration.
   parts: {
+    type: [Schema.Types.Mixed],
+    default: undefined,
+  },
+  // Mixed transaction patches for rendered tool parts (apply/discard/manual retry).
+  toolTransactions: {
     type: [Schema.Types.Mixed],
     default: undefined,
   },

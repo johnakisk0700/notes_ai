@@ -1,5 +1,5 @@
 import type { UIMessage } from 'ai';
-import type { ThreadDetail, ThreadMessageDTO, ThreadMessageStatus } from '@shared';
+import type { ThreadDetail, ThreadMessageDTO, ThreadMessageStatus, ThreadToolTransaction } from '@shared';
 
 // Pure mapping between the persisted thread (DTO, the poll-first source of truth) and the AI
 // SDK UI messages the chat renders. Kept out of the provider so the subtle bits — the
@@ -93,4 +93,32 @@ export function mergeThreadNoRegress(cached: ThreadDetail | undefined, fresh: Th
     return { ...fresh, messages: [...fresh.messages.slice(0, -1), cachedLast] };
   }
   return fresh;
+}
+
+export function patchToolTransaction(
+  detail: ThreadDetail | undefined,
+  messageId: string,
+  toolCallId: string,
+  transaction: ThreadToolTransaction,
+  output?: unknown
+): ThreadDetail | undefined {
+  if (!detail) return detail;
+  let changed = false;
+  const messages = detail.messages.map(message => {
+    if (message.id !== messageId || !Array.isArray(message.parts)) return message;
+    const parts = message.parts.map(part => {
+      if (!part || typeof part !== 'object' || (part as { toolCallId?: string }).toolCallId !== toolCallId) {
+        return part;
+      }
+      changed = true;
+      return {
+        ...(part as Record<string, unknown>),
+        transaction,
+        ...(output !== undefined ? { output, state: 'output-available' } : {}),
+      };
+    });
+    return { ...message, parts };
+  });
+
+  return changed ? { ...detail, messages } : detail;
 }

@@ -11,6 +11,16 @@ export type ThreadMessageRole = "user" | "assistant" | "system";
 // placeholder as effective "error" at read time. Absent on legacy/user messages.
 export type ThreadMessageStatus = "streaming" | "complete" | "error";
 
+// User/client outcome for a note-action tool card persisted inside the tool part.
+// This is UI state, not model state; services/ai/message-history.ts projects it
+// into plain text before a later LLM call.
+export type ThreadToolTransactionStatus = "applied" | "discarded" | "retry_saved";
+
+export interface ThreadToolTransaction {
+  status: ThreadToolTransactionStatus;
+  updatedAt: string;
+}
+
 export interface ThreadMessageDTO {
   id: string;
   role: ThreadMessageRole;

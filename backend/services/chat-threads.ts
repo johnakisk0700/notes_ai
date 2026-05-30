@@ -5,12 +5,18 @@
 // (clients/mongoose_client.ts) a down Mongo makes writes reject instantly
 // (callers no-op) and reads return empty here, instead of stalling ~10s.
 import mongoose from "mongoose";
-import type { ThreadDetail, ThreadMessageStatus, ThreadSummary } from "@shared";
+import type { ThreadDetail, ThreadMessageStatus, ThreadSummary, ThreadToolTransaction } from "@shared";
 import { UserThread } from "model/mongo-db/UserThreads";
 import { logger } from "utils/logger";
 import { deleteChatImage, imageIdsFromMessages } from "services/chat-images";
 
 const TITLE_MAX = 50;
+
+interface ToolTransactionPatch {
+  toolCallId?: string;
+  transaction?: ThreadToolTransaction;
+  output?: unknown;
+}
 
 /** Whether the Mongo connection is currently usable (1 = connected). */
 function mongoReady(): boolean {
@@ -198,6 +204,71 @@ export async function failAssistant(threadId: string, userId: string, generation
   );
 }
 
+// Persist the user's decision on a note-action tool card (apply/discard/manual retry).
+// The message-level log handles clicks that happen before the streaming turn finalizes;
+// when the rendered tool part exists, we also denormalize the marker onto it. getThread
+// overlays the log either way, and message-history.ts turns it into deterministic text.
+export async function updateThreadToolTransaction(opts: {
+  threadId: string;
+  userId: string;
+  assistantMessageId: string;
+  toolCallId: string;
+  transaction: ThreadToolTransaction;
+  output?: unknown;
+}): Promise<boolean> {
+  const { threadId, userId, assistantMessageId, toolCallId, transaction, output } = opts;
+  if (!mongoose.isValidObjectId(threadId)) return false;
+
+  const messageFilter = { _id: threadId, user_id: userId, "messages.generationId": assistantMessageId };
+  const messageArrayFilter = { arrayFilters: [{ "m.generationId": assistantMessageId }] };
+  const patch = { toolCallId, transaction, ...(output !== undefined ? { output } : {}) };
+
+  // Transaction log first: this works even while the assistant turn is still streaming
+  // and the finalized tool `parts` have not been written yet.
+  const pull = await UserThread.updateOne(
+    messageFilter,
+    { $pull: { "messages.$[m].toolTransactions": { toolCallId } } },
+    messageArrayFilter
+  );
+  if ((pull.matchedCount ?? 0) === 0) return false;
+
+  await UserThread.updateOne(
+    messageFilter,
+    {
+      $push: { "messages.$[m].toolTransactions": patch },
+      $set: { "messages.$[m].updatedAt": Date.now() },
+    },
+    messageArrayFilter
+  );
+
+  const set: Record<string, unknown> = {
+    "messages.$[m].parts.$[p].transaction": transaction,
+  };
+  if (output !== undefined) {
+    set["messages.$[m].parts.$[p].output"] = output;
+    set["messages.$[m].parts.$[p].state"] = "output-available";
+  }
+
+  // Best-effort denormalization for stored parts. If the part does not exist yet,
+  // getThread overlays the transaction log when it hydrates the thread.
+  await UserThread.updateOne(
+    {
+      _id: threadId,
+      user_id: userId,
+      messages: {
+        $elemMatch: {
+          generationId: assistantMessageId,
+          parts: { $elemMatch: { toolCallId } },
+        },
+      },
+    },
+    { $set: set },
+    { arrayFilters: [{ "m.generationId": assistantMessageId }, { "p.toolCallId": toolCallId }] }
+  );
+
+  return true;
+}
+
 export async function listThreads(
   userId: string,
   opts?: { limit?: number; offset?: number }
@@ -234,7 +305,7 @@ export async function getThread(threadId: string, userId: string): Promise<Threa
       content: m.content ?? "",
       // Present for assistant turns (tool steps + text); absent for plain user text,
       // where the client falls back to rendering `content`.
-      parts: Array.isArray(m.parts) && m.parts.length ? m.parts : undefined,
+      parts: applyToolTransactions(m.parts, m.toolTransactions),
       // Model + cost for the answer badge (assistant turns only).
       metadata: m.metadata ?? undefined,
       // Lifecycle for poll-first durability, with the read-time staleness rule applied.
@@ -263,6 +334,31 @@ export function effectiveStatus(
 
 function msFromDate(value: unknown): number {
   return value instanceof Date ? value.getTime() : 0;
+}
+
+function applyToolTransactions(parts: unknown, patches: unknown): unknown[] | undefined {
+  if (!Array.isArray(parts) || parts.length === 0) return undefined;
+  if (!Array.isArray(patches) || patches.length === 0) return parts;
+
+  const byCallId = new Map(
+    (patches as ToolTransactionPatch[])
+      .filter(p => typeof p?.toolCallId === "string" && p.transaction)
+      .map(p => [p.toolCallId as string, p])
+  );
+  if (byCallId.size === 0) return parts;
+
+  return parts.map(part => {
+    if (!part || typeof part !== "object") return part;
+    const toolCallId = (part as { toolCallId?: unknown }).toolCallId;
+    if (typeof toolCallId !== "string") return part;
+    const patch = byCallId.get(toolCallId);
+    if (!patch) return part;
+    return {
+      ...(part as Record<string, unknown>),
+      transaction: patch.transaction,
+      ...(patch.output !== undefined ? { output: patch.output, state: "output-available" } : {}),
+    };
+  });
 }
 
 export async function deleteThread(threadId: string, userId: string): Promise<boolean> {

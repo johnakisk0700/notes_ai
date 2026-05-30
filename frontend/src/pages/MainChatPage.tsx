@@ -7,15 +7,74 @@ const QUESTION_OPTICAL_NUDGE_PX = 1;
 
 export const MainChatPage: React.FC = () => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const autoScrolledThreadRef = useRef<string | undefined>(undefined);
+  const skipInitialScrollThreadRef = useRef<string | undefined>(undefined);
   const [userMessageHeight, setUserMessageHeight] = useState<number>(0);
   const [initialViewportHeight, setInitialViewportHeight] = useState<number>(0);
 
-  const { messages, isStreaming, sendQuery, stopTextStream } = useStreamChat();
+  const {
+    messages,
+    isStreaming,
+    sendQuery,
+    stopTextStream,
+    threadId,
+    isThreadLoaded,
+    isViewingLiveStream,
+  } = useStreamChat();
 
   // Capture initial viewport height on mount
   useLayoutEffect(() => {
     setInitialViewportHeight(window.innerHeight);
   }, []);
+
+  // A newly opened historical thread should land at its latest message. Threads already being
+  // streamed on this screen keep the existing "question near the top" behavior.
+  useLayoutEffect(() => {
+    if (threadId && isViewingLiveStream) {
+      skipInitialScrollThreadRef.current = threadId;
+      return;
+    }
+    if (threadId !== skipInitialScrollThreadRef.current) {
+      skipInitialScrollThreadRef.current = undefined;
+    }
+  }, [threadId, isViewingLiveStream]);
+
+  useLayoutEffect(() => {
+    if (!threadId || !isThreadLoaded || isViewingLiveStream || messages.length === 0) return;
+    if (skipInitialScrollThreadRef.current === threadId || autoScrolledThreadRef.current === threadId) return;
+
+    const scroller = scrollContainerRef.current;
+    if (!scroller) return;
+
+    autoScrolledThreadRef.current = threadId;
+
+    const scrollToBottom = () => {
+      scroller.scrollTop = scroller.scrollHeight;
+    };
+
+    scrollToBottom();
+    const frame = window.requestAnimationFrame(scrollToBottom);
+    const content = scroller.firstElementChild;
+    const observer =
+      typeof ResizeObserver === 'undefined'
+        ? undefined
+        : new ResizeObserver(() => {
+            scrollToBottom();
+          });
+
+    if (observer) {
+      observer.observe(scroller);
+      if (content instanceof Element) observer.observe(content);
+    }
+
+    const timeout = window.setTimeout(() => observer?.disconnect(), 1_000);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timeout);
+      observer?.disconnect();
+    };
+  }, [threadId, isThreadLoaded, isViewingLiveStream, messages.length]);
 
   // Clean effect to handle height calculation
   useLayoutEffect(() => {

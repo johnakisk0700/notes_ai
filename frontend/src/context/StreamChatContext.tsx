@@ -43,6 +43,9 @@ interface StreamChatContextType {
   stopTextStream: () => void;
   messages: AppUIMessage[];
   isStreaming: boolean;
+  threadId?: string;
+  isThreadLoaded: boolean;
+  isViewingLiveStream: boolean;
   model: ChatModelId;
   setModel: (model: ChatModelId) => void;
   effort: ReasoningEffort;
@@ -206,6 +209,7 @@ export const StreamChatProvider = ({ children }: { children: ReactNode }) => {
   // missing (Mongo down) — fall back to the live messages.
   const showLiveOverlay = isStreaming && routeThreadId === streamingThreadId;
   const messages = showLiveOverlay ? liveMessages : (persistedMessages ?? liveMessages);
+  const isThreadLoaded = !!routeThreadId && threadQuery.data?.id === routeThreadId;
 
   // Reset / adopt on route change. New chat ("/") clears; switching to a different thread
   // clears the stale conversation until RQ seeds the new one; a thread we just created
@@ -334,6 +338,9 @@ export const StreamChatProvider = ({ children }: { children: ReactNode }) => {
     stopTextStream,
     messages,
     isStreaming,
+    threadId: routeThreadId,
+    isThreadLoaded,
+    isViewingLiveStream: showLiveOverlay,
     model,
     setModel,
     effort,

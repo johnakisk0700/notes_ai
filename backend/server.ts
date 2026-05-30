@@ -19,6 +19,7 @@ import { getCustomers } from "apis/customers/get-customers.js";
 import { getThreads } from "apis/threads/get-threads.js";
 import { getThread } from "apis/threads/get-thread.js";
 import { deleteThread } from "apis/threads/delete-thread.js";
+import { updateToolTransaction } from "apis/threads/update-tool-transaction.js";
 import { connectToDatabase } from "clients/mongoose_client";
 import { textToVoice } from "clients/text_to_voice";
 import cors from "cors";
@@ -141,6 +142,7 @@ if (cluster.isPrimary) {
   app.get("/api/get-threads", verifyJWT, queryMiddleware, asyncHandler(getThreads));
   app.get("/api/get-thread", verifyJWT, asyncHandler(getThread));
   app.post("/api/delete-thread", verifyJWT, asyncHandler(deleteThread));
+  app.post("/api/update-tool-transaction", verifyJWT, asyncHandler(updateToolTransaction));
 
   // always after routes //
   const PORT = process.env.APP_PORT;

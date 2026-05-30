@@ -1,8 +1,14 @@
 import { useNoteEditor } from '@/context/NoteEditorContext';
 import { useNotes } from '@/context/NotesContext';
+import { useStreamChat } from '@/context/StreamChatContext';
 import { api } from '@/integrations/api';
+import { patchToolTransaction } from '@/integrations/threadMessages';
+import { threadKeys } from '@/integrations/threadQueries';
+import { updateToolTransaction } from '@/integrations/threads';
 import { cn } from '@/lib/utils';
+import type { ThreadDetail, ThreadToolTransactionStatus } from '@shared';
 import type { Note } from '@shared/db/schema/notes';
+import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Check, FilePen, FilePlus2, Loader2, NotebookPen, RefreshCcw, SquarePen, X } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -21,6 +27,7 @@ interface ToolPart {
   input?: unknown;
   output?: unknown;
   errorText?: string;
+  transaction?: { status?: ThreadToolTransactionStatus; updatedAt?: string };
 }
 
 const PREVIEW_CHARS = 320;
@@ -80,6 +87,35 @@ function ErrorCard({ label, text }: { label: string; text?: string }) {
   );
 }
 
+function usePersistToolTransaction(messageId: string, part: ToolPart) {
+  const { threadId } = useStreamChat();
+  const queryClient = useQueryClient();
+
+  return async (status: ThreadToolTransactionStatus, output?: unknown) => {
+    if (!threadId || !part.toolCallId) return;
+    const optimistic = { status, updatedAt: new Date().toISOString() };
+    queryClient.setQueryData<ThreadDetail>(threadKeys.detail(threadId), prev =>
+      patchToolTransaction(prev, messageId, part.toolCallId!, optimistic, output)
+    );
+
+    try {
+      const transaction = await updateToolTransaction({
+        threadId,
+        messageId,
+        toolCallId: part.toolCallId,
+        status,
+        output,
+      });
+      queryClient.setQueryData<ThreadDetail>(threadKeys.detail(threadId), prev =>
+        patchToolTransaction(prev, messageId, part.toolCallId!, transaction, output)
+      );
+    } catch {
+      // The note action already succeeded. Keep the in-session state even if
+      // Mongo is briefly unavailable; the next thread fetch will reconcile.
+    }
+  };
+}
+
 // --- Mode 1: created & saved ---------------------------------------------------------
 interface CreatedOutput {
   saved?: boolean;
@@ -115,13 +151,14 @@ function SavedNoteShell({ note }: { note: SavedNote }) {
   );
 }
 
-function CreatedNoteCard({ part }: { part: ToolPart }) {
+function CreatedNoteCard({ part, messageId }: { part: ToolPart; messageId: string }) {
   const { fetchNotes } = useNotes();
   const out = resolveOutput<CreatedOutput>(part);
   // The original tool input carries the note text — used to re-attempt the save on retry.
   const input = part.input as { title?: string; content?: string } | undefined;
   const [retrying, setRetrying] = useState(false);
   const [retried, setRetried] = useState<SavedNote | null>(null);
+  const persistTransaction = usePersistToolTransaction(messageId, part);
 
   // Saved note, from the tool itself or from a successful manual retry.
   const saved: SavedNote | null =
@@ -142,9 +179,17 @@ function CreatedNoteCard({ part }: { part: ToolPart }) {
     setRetrying(true);
     try {
       const { data } = await api.post('/store-note', { noteText: input.content, title: input.title });
-      setRetried({ noteId: data?.id, title: input.title, content: input.content });
+      const saved = { noteId: data?.id, title: input.title, content: input.content };
+      setRetried(saved);
       toast.success('Η σημείωση αποθηκεύτηκε');
       fetchNotes();
+      void persistTransaction('retry_saved', {
+        saved: true,
+        noteId: saved.noteId,
+        title: saved.title,
+        content: saved.content,
+        date: data?.created_at,
+      });
     } catch {
       toast.error('Απέτυχε ξανά — δοκίμασε αργότερα');
     } finally {
@@ -177,13 +222,17 @@ interface EditOutput {
   remindAt?: string;
 }
 
-function EditProposalCard({ part }: { part: ToolPart }) {
+function EditProposalCard({ part, messageId }: { part: ToolPart; messageId: string }) {
   const id = part.toolCallId;
   const { fetchNotes } = useNotes();
   const out = resolveOutput<EditOutput>(part);
   const [status, setStatus] = useState<'idle' | 'applying' | 'applied' | 'discarded'>(
-    () => (id && editStatusCache.get(id)) || 'idle'
+    () =>
+      (part.transaction?.status === 'applied' || part.transaction?.status === 'discarded'
+        ? part.transaction.status
+        : id && editStatusCache.get(id)) || 'idle'
   );
+  const persistTransaction = usePersistToolTransaction(messageId, part);
 
   if (part.state === 'output-error' && !out) return <ErrorCard label="Επεξεργασία σημείωσης" text={part.errorText} />;
   if (!out) return <Running icon={<FilePen className="size-4" />} label="Ετοιμασία αλλαγής…" />;
@@ -205,6 +254,7 @@ function EditProposalCard({ part }: { part: ToolPart }) {
       setStatus('applied');
       toast.success('Η σημείωση ενημερώθηκε');
       fetchNotes();
+      void persistTransaction('applied', out);
     } catch {
       setStatus('idle');
       toast.error('Αποτυχία ενημέρωσης');
@@ -214,6 +264,7 @@ function EditProposalCard({ part }: { part: ToolPart }) {
   const discard = () => {
     if (id) editStatusCache.set(id, 'discarded');
     setStatus('discarded');
+    void persistTransaction('discarded', out);
   };
 
   return (
@@ -287,12 +338,12 @@ function DraftNoteCard({ part }: { part: ToolPart }) {
   );
 }
 
-export const NotePreviewCard = ({ part }: { part: ToolPart }) => {
+export const NotePreviewCard = ({ part, messageId }: { part: ToolPart; messageId: string }) => {
   switch (part.type) {
     case 'tool-create_note':
-      return <CreatedNoteCard part={part} />;
+      return <CreatedNoteCard part={part} messageId={messageId} />;
     case 'tool-propose_note_edit':
-      return <EditProposalCard part={part} />;
+      return <EditProposalCard part={part} messageId={messageId} />;
     case 'tool-draft_note':
       return <DraftNoteCard part={part} />;
     default:

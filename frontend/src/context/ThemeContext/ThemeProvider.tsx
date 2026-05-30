@@ -1,17 +1,53 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 
 type Theme = 'dark' | 'light' | 'system';
-export type Palette = 'classic' | 'paper' | 'stark' | 'warm';
+const PALETTE_VALUES = ['paper', 'classic', 'warm', 'sage', 'copper'] as const;
+export type Palette = (typeof PALETTE_VALUES)[number];
+type PaletteOption = {
+  value: Palette;
+  label: string;
+  swatch: {
+    surface: string;
+    primary: string;
+  };
+};
 
-// Registered palettes — shown in Settings. "classic" is the base look (warm ecru /
-// midnight) and carries NO data-theme attribute; the others map to the theme files
+// Registered palettes — shown in Settings. "classic" is the base CSS look
+// (warm ecru / midnight) and carries NO data-theme attribute; the others map to the theme files
 // @imported in index.css. Add one: create themes/<value>.css, @import it, append here.
-export const PALETTES: { value: Palette; label: string }[] = [
-  { value: 'classic', label: 'Classic (ecru)' },
-  { value: 'paper', label: 'Soft white' },
-  { value: 'stark', label: 'Stark white' },
-  { value: 'warm', label: 'Warm white' },
+export const PALETTES: PaletteOption[] = [
+  { value: 'paper', label: 'Graphite Paper', swatch: { surface: 'oklch(0.988 0 0)', primary: 'oklch(0.28 0 0)' } },
+  {
+    value: 'classic',
+    label: 'Midnight Ecru',
+    swatch: { surface: 'oklch(0.9647 0.0118 84.59)', primary: 'oklch(0.38 0.095 256)' },
+  },
+  {
+    value: 'warm',
+    label: 'Warm Linen',
+    swatch: { surface: 'oklch(0.978 0.006 84.59)', primary: 'oklch(0.38 0.07 256)' },
+  },
+  {
+    value: 'sage',
+    label: 'Sage Ledger',
+    swatch: { surface: 'oklch(0.962 0.012 132)', primary: 'oklch(0.36 0.065 150)' },
+  },
+  {
+    value: 'copper',
+    label: 'Copper Ink',
+    swatch: { surface: 'oklch(0.96 0.012 64)', primary: 'oklch(0.42 0.075 50)' },
+  },
 ];
+
+const isPalette = (value: string | null): value is Palette =>
+  value !== null && PALETTE_VALUES.includes(value as Palette);
+
+const readStoredPalette = (storageKey: string, fallback: Palette) => {
+  const stored = localStorage.getItem(storageKey);
+  if (isPalette(stored)) return stored;
+  if (stored) localStorage.removeItem(storageKey);
+  return fallback;
+};
 
 type ThemeProviderProps = {
   children: React.ReactNode;
@@ -31,7 +67,7 @@ type ThemeProviderState = {
 const initialState: ThemeProviderState = {
   theme: 'system',
   setTheme: () => null,
-  palette: 'classic',
+  palette: 'paper',
   setPalette: () => null,
 };
 
@@ -40,15 +76,13 @@ const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
 export function ThemeProvider({
   children,
   defaultTheme = 'system',
-  defaultPalette = 'classic',
+  defaultPalette = 'paper',
   storageKey = 'vite-ui-theme',
   paletteStorageKey = 'vite-ui-palette',
   ...props
 }: ThemeProviderProps) {
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem(storageKey) as Theme) || defaultTheme);
-  const [palette, setPalette] = useState<Palette>(
-    () => (localStorage.getItem(paletteStorageKey) as Palette) || defaultPalette
-  );
+  const [palette, setPalette] = useState<Palette>(() => readStoredPalette(paletteStorageKey, defaultPalette));
 
   // light/dark — toggles the .dark class on <html>
   useEffect(() => {

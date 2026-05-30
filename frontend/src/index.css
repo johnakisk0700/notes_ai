@@ -5,8 +5,9 @@
    under html[data-theme="<name>"]. Add a theme: drop a file in themes/, @import it
    here, and register its name in ThemeProvider's PALETTES. See docs/frontend.md → Theming. */
 @import './themes/paper.css';
-@import './themes/stark.css';
 @import './themes/warm.css';
+@import './themes/sage.css';
+@import './themes/copper.css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -40,7 +41,7 @@
   --nb-grain-sidebar: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='120'%20height='120'%3E%3Cfilter%20id='nbgs'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.85'%20numOctaves='2'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='saturate'%20values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR%20type='linear'%20slope='0.18'%20intercept='0.41'/%3E%3CfeFuncG%20type='linear'%20slope='0.18'%20intercept='0.41'/%3E%3CfeFuncB%20type='linear'%20slope='0.18'%20intercept='0.41'/%3E%3CfeFuncA%20type='linear'%20slope='0'%20intercept='1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23nbgs)'/%3E%3C/svg%3E");
   /* paper fibre — anisotropic turbulence stretched into faint vertical laid-lines;
      tone-neutral (centred on mid-grey) so it reads on white or black paper via
-     soft-light. The white themes opt in with --nb-grain: var(--nb-fiber). */
+     soft-light. Alternate palettes opt in with --nb-grain: var(--nb-fiber). */
   --nb-fiber: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='160'%20height='200'%3E%3Cfilter%20id='nbf'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.009%200.45'%20numOctaves='4'%20seed='11'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='saturate'%20values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR%20type='linear'%20slope='0.26'%20intercept='0.37'/%3E%3CfeFuncG%20type='linear'%20slope='0.26'%20intercept='0.37'/%3E%3CfeFuncB%20type='linear'%20slope='0.26'%20intercept='0.37'/%3E%3CfeFuncA%20type='linear'%20slope='0'%20intercept='1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23nbf)'/%3E%3C/svg%3E");
   --card: oklch(0.984 0.009 84.59);
   --card-foreground: oklch(0.32 0.025 264);
@@ -118,7 +119,7 @@
   --chart-3: oklch(0.545 0.015 264);
   --chart-4: oklch(0.46 0.015 264);
   --chart-5: oklch(0.37 0.015 264);
-  --sidebar: oklch(14.932% 0.01882 262.421);;
+  --sidebar: oklch(0.149 0.019 262.421);
   --sidebar-foreground: oklch(0.9 0.008 84.59);
   --sidebar-primary: oklch(0.705 0.105 256);
   --sidebar-primary-foreground: oklch(0.205 0.02 264);
