@@ -18,22 +18,17 @@ interface CostStore {
 // Extend Express Request type
 declare global {
   namespace Express {
+    // Only the helpers costMiddleware actually attaches to the request live here.
+    // The richer queries (getCostEntries / getRequestId) are read off the
+    // `costTracker` singleton directly, not off `req`.
     interface Request {
       requestId: string;
-      getCostEntries: () => CostEntry[];
       addCost: (data: {
         model?: string;
         inputCost?: number | Decimal | null;
         outputCost?: number | Decimal | null;
       }) => void;
       getTotalCost: () => Decimal;
-      getCostSummary: () => {
-        requestId: string | null;
-        totalCost: Decimal;
-        entries: CostEntry[];
-        entryCount: number;
-      };
-      getRequestId: () => string | null;
     }
   }
 }
@@ -104,20 +99,6 @@ export const costTracker = {
    */
   getCostEntries: (): CostEntry[] => {
     return costStorage.getStore()?.costEntries ?? [];
-  },
-
-  /**
-   * Gets a summary of the costs for the current request.
-   * @returns An object containing the request ID, total cost, and cost entries.
-   */
-  getCostSummary: () => {
-    const store = costStorage.getStore();
-    return {
-      requestId: store?.requestId ?? null,
-      totalCost: store?.totalCost ?? new Decimal(0),
-      entries: store?.costEntries ?? [],
-      entryCount: store?.costEntries?.length ?? 0,
-    };
   },
 
   /**

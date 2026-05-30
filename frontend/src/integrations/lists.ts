@@ -1,8 +1,8 @@
 import { api } from './api';
 
 // Editor "@mention" autocomplete sources. Backed by our Postgres `wines` /
-// `customers` tables (previously direct Supabase queries). Results are cached
-// in localStorage by the WineProvider / CustomerProvider.
+// `customers` tables. Results are cached in localStorage by the
+// WineProvider / CustomerProvider and merged into the editor's "@" menu.
 export async function fetchAllWines(): Promise<string[]> {
   const {
     data: { names },

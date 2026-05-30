@@ -9,7 +9,7 @@ import type { Reminder } from '@shared/db/schema/reminders';
 import { EditorContent } from '@tiptap/react';
 import { format } from 'date-fns';
 import { Bell, Loader2Icon, SaveIcon, Sparkles, Trash2Icon, X } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react'; // Removed useRef
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { BarLoader } from 'react-spinners';
 import { toast } from 'sonner';
 import { useCustomTiptap } from '../Common/TiptapEditor/TiptapEditor';
@@ -135,57 +135,44 @@ const EditorCore = () => {
     newTitle && setNoteTitle(newTitle);
   };
 
+  // Delete the in-flight streamed transcript (if any), but only when the cursor is
+  // still at its end — so the next chunk / final text replaces it cleanly without
+  // clobbering edits the user made elsewhere. Shared by the streaming + final handlers.
+  const removePendingStreamText = useCallback(() => {
+    if (!editor || !streamingTextRef.current || streamingPositionRef.current === null) return;
+    const startPos = streamingPositionRef.current;
+    const endPos = startPos + streamingTextRef.current.length;
+    if (editor.state.selection.from === endPos) {
+      editor.chain().setTextSelection({ from: startPos, to: endPos }).deleteSelection().run();
+    }
+  }, [editor]);
+
   const handleStreamingText = useCallback(
     (text: string) => {
-      // console.log(`Streaming chunk [${text}]`);
       if (!editor) return;
 
-      // Remove previous streaming text if it exists
-      if (streamingTextRef.current && streamingPositionRef.current !== null) {
-        const currentPos = editor.state.selection.from;
-        const startPos = streamingPositionRef.current;
-        const endPos = startPos + streamingTextRef.current.length;
-
-        // Only remove if cursor is at the end of the streaming text
-        if (currentPos === endPos) {
-          editor.chain().setTextSelection({ from: startPos, to: endPos }).deleteSelection().run();
-        }
-      }
+      removePendingStreamText();
 
       if (text) {
-        // Insert new streaming text
-        const currentPos = editor.state.selection.from;
-        streamingPositionRef.current = currentPos;
+        // Insert new streaming text and remember where it went.
+        streamingPositionRef.current = editor.state.selection.from;
         streamingTextRef.current = text;
-
         editor.chain().focus().insertContent(text).run();
       } else {
-        // Clear refs when streaming stops
+        // Clear refs when streaming stops.
         streamingTextRef.current = '';
         streamingPositionRef.current = null;
       }
     },
-    [editor]
+    [editor, removePendingStreamText]
   );
 
   const handleFinalText = useCallback(
     (text: string) => {
-      // console.log(`Final chunk [${text}]`);
       if (!editor) return;
 
-      // Remove streaming text if it exists
-      if (streamingTextRef.current && streamingPositionRef.current !== null) {
-        const currentPos = editor.state.selection.from;
-        const startPos = streamingPositionRef.current;
-        const endPos = startPos + streamingTextRef.current.length;
+      removePendingStreamText();
 
-        // Only remove if cursor is at the end of the streaming text
-        if (currentPos === endPos) {
-          editor.chain().setTextSelection({ from: startPos, to: endPos }).deleteSelection().run();
-        }
-      }
-
-      // Insert final text
       if (text) {
         editor
           .chain()
@@ -194,11 +181,10 @@ const EditorCore = () => {
           .run();
       }
 
-      // Clear refs
       streamingTextRef.current = '';
       streamingPositionRef.current = null;
     },
-    [editor]
+    [editor, removePendingStreamText]
   );
 
   const handleTranscriptUpdate = (text: string) => {

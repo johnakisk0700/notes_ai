@@ -51,14 +51,6 @@ export async function getLatestUsdToEurRate() {
   redis.set("conversion_rate", rate.toFixed(10).toString());
   redis.set("conversion_date", date.toString());
   logger.info(`Updated ECB Conversion Rates. New rate for USD->EUR: [${rate}]-[${date}]`);
-
-  // elevenLabs
-  const elevenRate = await setApiRate("elevenlabs_conversion", 0.00014);
-  logger.info(`ElevenLabs rate set to: [${elevenRate}]`);
-
-  // google voice - chirp
-  const googleRate = await setApiRate("googlevoice_neural_conversion", 0.00003);
-  logger.info(`Google Voice Neural rate set to: [${googleRate}]`);
 }
 
 export async function initializeECBRates() {
@@ -77,14 +69,6 @@ export async function initializeECBRates() {
     logger.info(`EUR to USD = [${rate.rate}] - Official Rate Date: ${rate.rateDate}`);
     redis.set("conversion_rate", rate.rate);
     redis.set("conversion_date", rate.rateDate);
-
-    // elevenLabs
-    const elevenRate = await setApiRate("elevenlabs_conversion", 0.00014);
-    logger.info(`ElevenLabs rate set to: [${elevenRate}]`);
-
-    // google voice - chirp
-    const googleRate = await setApiRate("googlevoice_chirp_conversion", 0.00003);
-    logger.info(`Google Voice Chirp rate set to: [${googleRate}]`);
   }
 }
 
@@ -100,28 +84,12 @@ export async function getEurPerUsd(): Promise<Decimal> {
 }
 
 /**
- * Converts a USD value to EUR with high precision.
+ * Converts a USD value to EUR with high precision, using the cached ECB rate
+ * (falling back to ~0.92 EUR/USD when uncached — see getEurPerUsd).
  * @param usdValue The amount in USD.
- * @param usdToEurRate The USD to EUR exchange rate (e.g. 0.92).
  * @returns EUR value rounded to 10 decimal places.
  */
 export async function usdToEur(usdValue: Decimal): Promise<Decimal> {
-  const eurToUsdRate = await redis.get("conversion_rate");
-  if (eurToUsdRate) {
-    const rate = new Decimal(eurToUsdRate);
-    const usdToEurRate = new Decimal(1).div(rate);
-    return usdValue.times(usdToEurRate).toDecimalPlaces(10, Decimal.ROUND_HALF_UP);
-  } else {
-    logger.error(
-      "Couldnt find conversion rate even though it was fine on startup? Anyways, I will use the default 1.25 for now..."
-    );
-    return usdValue.times(1.25).toDecimalPlaces(10, Decimal.ROUND_HALF_UP);
-  }
-}
-
-export async function setApiRate(redisKey, rate) {
-  const creatorRate = new Decimal(rate);
-  const creatorRateEur = await usdToEur(creatorRate);
-  await redis.set(redisKey, creatorRateEur.toFixed(10));
-  return creatorRateEur;
+  const eurPerUsd = await getEurPerUsd();
+  return usdValue.times(eurPerUsd).toDecimalPlaces(10, Decimal.ROUND_HALF_UP);
 }

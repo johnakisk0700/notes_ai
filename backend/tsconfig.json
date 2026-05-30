@@ -9,6 +9,7 @@
       "@shared/*": ["../shared/*"],
       "clients/*": ["./clients/*"],
       "apis/*": ["./apis/*"],
+      "repositories/*": ["./repositories/*"],
       "services/*": ["./services/*"],
       "utils/*": ["./utils/*"],
       "authentication/*": ["./authentication/*"],

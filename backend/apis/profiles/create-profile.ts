@@ -4,21 +4,16 @@ import { drizzlePg } from "clients/drizzle_postgres_client";
 export async function createProfile(req, res) {
   const { id, first_name, last_name, email } = req.body;
 
-  try {
-    await drizzlePg
-      .insert(profileTable)
-      .values({
-        id: id,
-        first_name: first_name,
-        last_name: last_name,
-        role: "user",
-        email: email,
-      })
-      .onConflictDoNothing();
+  await drizzlePg
+    .insert(profileTable)
+    .values({
+      id: id,
+      first_name: first_name,
+      last_name: last_name,
+      role: "user",
+      email: email,
+    })
+    .onConflictDoNothing();
 
-    res.status(200).json({ ok: true });
-  } catch (error) {
-    console.error("Error fetching user:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
+  res.status(200).json({ ok: true });
 }

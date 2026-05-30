@@ -2,11 +2,13 @@ import { drizzlePg } from "clients/drizzle_postgres_client";
 import { notesTable } from "@shared/db/schema/notes";
 import { remindersTable } from "@shared/db/schema/reminders";
 import { createAndSaveNoteEmbedding } from "services/embeddings";
+import { validateRequestBody } from "middleware/common/validation/requiredValidator";
 import { eq } from "drizzle-orm";
 import { AppError } from "middleware/common/AppError";
 
 // Errors throw and propagate to asyncHandler → errorHandler (the repo's convention).
 export const updateNote = async (req, res) => {
+  validateRequestBody(req.body, ["noteId", "content"]);
   const { content, noteId, remindAt, title } = req.body;
 
   let noteRecord;

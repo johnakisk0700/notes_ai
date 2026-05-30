@@ -1,5 +1,7 @@
 import suggestionConfiguration from '@/components/Common/TiptapEditor/suggestions';
 import { useUsersContext } from '@/context/UsersContext/UsersProvider';
+import { useWineContext } from '@/context/WineContext/WineProvider';
+import { useCustomerContext } from '@/context/CustomerProvider';
 import Mention from '@tiptap/extension-mention';
 import { Placeholder } from '@tiptap/extensions';
 import { Markdown } from '@tiptap/markdown';
@@ -11,10 +13,15 @@ import { useMemo } from 'react';
 
 export const useCustomTiptap = (onUpdate: (text: string) => void) => {
   const users = useUsersContext();
+  const wines = useWineContext();
+  const customers = useCustomerContext();
 
+  // The "@" menu autocompletes across all three lists: wine names, customer names,
+  // and app users (by identifier). Deduped so an overlap doesn't show twice.
   const suggestionList = useMemo(() => {
-    return users ? users.map(x => x.userIdentifier) : [];
-  }, [users]);
+    const userIdentifiers = users ? users.map(x => x.userIdentifier) : [];
+    return Array.from(new Set([...wines, ...customers, ...userIdentifiers].filter(Boolean)));
+  }, [wines, customers, users]);
 
   const fuse = useMemo(() => new Fuse(suggestionList, { threshold: 0.25 }), [suggestionList]);
 

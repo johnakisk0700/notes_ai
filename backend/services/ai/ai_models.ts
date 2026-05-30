@@ -10,6 +10,8 @@ export type ModelNames =
   | "o3-azure"
   | "o3-mini"
   | "o4-mini"
+  | "gpt-5.4-mini"
+  | "gpt-5.4-nano"
   | "gpt-4o-transcribe"
   | "gpt-4o-mini-transcribe"
   | "claude-sonnet-4-latest"
@@ -20,7 +22,12 @@ export type ModelNames =
   | "accounts/fireworks/models/qwen3-235b-a22b"
   // Agentic chat (AI SDK) models, reached OpenAI-compatibly via OpenRouter.
   | "qwen/qwen3.6-plus"
-  | "z-ai/glm-5.1";
+  | "qwen/qwen3.6-flash"
+  | "qwen/qwen3.5-flash-02-23"
+  | "qwen/qwen3-max"
+  | "qwen/qwen3-next-80b-a3b-instruct"
+  | "z-ai/glm-5.1"
+  | "z-ai/glm-4.7-flash";
 
 export interface ModelInfo {
   provider: "gpt" | "claude" | "fireworks-ai" | "deepseek" | "azure-openai" | "openrouter";
@@ -36,6 +43,18 @@ export const AI_MODELS: ModelsMap = {
     provider: "gpt",
     inputCost: new Decimal(0.00000025),
     outputCost: new Decimal(0.000002),
+  },
+  // GPT-5.4 mini — $0.75 / $4.50 per 1M tokens. (Verify slug/pricing on your OpenAI account.)
+  "gpt-5.4-mini": {
+    provider: "gpt",
+    inputCost: new Decimal(0.00000075),
+    outputCost: new Decimal(0.0000045),
+  },
+  // GPT-5.4 nano — $0.20 / $1.25 per 1M tokens. (Verify slug/pricing on your OpenAI account.)
+  "gpt-5.4-nano": {
+    provider: "gpt",
+    inputCost: new Decimal(0.0000002),
+    outputCost: new Decimal(0.00000125),
   },
   o3: {
     provider: "gpt",
@@ -115,16 +134,47 @@ export const AI_MODELS: ModelsMap = {
     outputCost: new Decimal(0),
   },
 
+  // OpenRouter pricing below verified against the live /api/v1/models API (2026-05-30).
   // Qwen3.6-Plus via OpenRouter — $0.325 / $1.95 per 1M tokens.
   "qwen/qwen3.6-plus": {
     provider: "openrouter",
     inputCost: new Decimal(0.000000325),
     outputCost: new Decimal(0.00000195),
   },
+  // Qwen3.6-Flash via OpenRouter — $0.1875 / $1.125 per 1M tokens.
+  "qwen/qwen3.6-flash": {
+    provider: "openrouter",
+    inputCost: new Decimal(0.0000001875),
+    outputCost: new Decimal(0.000001125),
+  },
+  // Qwen3.5-Flash via OpenRouter — $0.065 / $0.26 per 1M tokens.
+  "qwen/qwen3.5-flash-02-23": {
+    provider: "openrouter",
+    inputCost: new Decimal(0.000000065),
+    outputCost: new Decimal(0.00000026),
+  },
+  // Qwen3-Max via OpenRouter — $0.78 / $3.90 per 1M tokens.
+  "qwen/qwen3-max": {
+    provider: "openrouter",
+    inputCost: new Decimal(0.00000078),
+    outputCost: new Decimal(0.0000039),
+  },
+  // Qwen3-Next-80B-A3B-Instruct via OpenRouter — $0.09 / $1.10 per 1M tokens.
+  "qwen/qwen3-next-80b-a3b-instruct": {
+    provider: "openrouter",
+    inputCost: new Decimal(0.00000009),
+    outputCost: new Decimal(0.0000011),
+  },
   // GLM-5.1 via OpenRouter — $0.98 / $3.08 per 1M tokens.
   "z-ai/glm-5.1": {
     provider: "openrouter",
     inputCost: new Decimal(0.00000098),
     outputCost: new Decimal(0.00000308),
+  },
+  // GLM-4.7-Flash via OpenRouter — $0.06 / $0.40 per 1M tokens.
+  "z-ai/glm-4.7-flash": {
+    provider: "openrouter",
+    inputCost: new Decimal(0.00000006),
+    outputCost: new Decimal(0.0000004),
   },
 };

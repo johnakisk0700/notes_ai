@@ -6,7 +6,7 @@ export interface UserProfile {
   userIdentifier: string;
 }
 
-// Fetches all profiles from our backend (replaces the old direct Supabase query).
+// Fetches all profiles from our backend.
 export async function fetchAllUsers(): Promise<UserProfile[]> {
   const {
     data: { data: profiles },

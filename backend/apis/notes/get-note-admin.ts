@@ -1,8 +1,7 @@
-import { notesTable } from "@shared/db/schema/notes";
-import type { FullNote } from "@shared/dto/GetNoteDTO";
-import { drizzlePg } from "clients/drizzle_postgres_client";
-import { eq, and } from "drizzle-orm";
+import { notesRepo } from "repositories/notes";
 
+// Admin read: fetch any note by id, with no owner scoping (use notesRepo.findForUser
+// for the owner-scoped read).
 export async function getNoteAdmin(req, res) {
   const { noteId } = req.query;
 
@@ -10,12 +9,7 @@ export async function getNoteAdmin(req, res) {
     return res.status(400).json({ error: "noteId parameter is required" });
   }
 
-  const noteWithReminder: FullNote | undefined = await drizzlePg.query.notesTable.findFirst({
-    where: and(eq(notesTable.id, noteId)),
-    with: {
-      reminder: true, // This includes the related reminder
-    },
-  });
+  const noteWithReminder = await notesRepo.findAny(noteId);
 
   if (!noteWithReminder) {
     return res.status(404).json({ error: "Note not found" });

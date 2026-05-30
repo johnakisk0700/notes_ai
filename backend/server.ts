@@ -13,7 +13,6 @@ import { updateProfileName } from "apis/profiles/update-profile-name.js";
 import { getReminders } from "apis/reminders/get-reminders";
 import { getOpenAIEphemeralToken } from "apis/transcription/get-openai-ephemeral-token.js";
 import { getTranscription } from "apis/transcription/get-transcription.js";
-import { updateUser } from "apis/users/updateUser";
 import { deleteUser } from "apis/users/delete-user.js";
 import { getWines } from "apis/wines/get-wines.js";
 import { getCustomers } from "apis/customers/get-customers.js";
@@ -123,7 +122,6 @@ if (cluster.isPrimary) {
   app.get("/api/get-profiles", verifyJWT, queryMiddleware, asyncHandler(getProfiles));
   app.get("/api/get-profile", verifyJWT, asyncHandler(getProfile));
   app.get("/api/get-all-users-notes", verifyJWT, queryMiddleware, asyncHandler(getAllUsersNotes));
-  app.post("/api/update-user", verifyJWT, asyncHandler(updateUser));
   app.post("/api/delete-user", verifyJWT, asyncHandler(deleteUser));
   app.post("/api/update-profile-role", verifyJWT, asyncHandler(updateProfileRole));
   app.post("/api/update-profile-name", verifyJWT, asyncHandler(updateProfileName));

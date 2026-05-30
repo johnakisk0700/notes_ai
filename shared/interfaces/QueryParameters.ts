@@ -9,16 +9,6 @@ export interface SortCriterion {
 }
 
 /**
- * Represents the query parameters sent from the frontend.
- */
-export interface FrontendQueryParams {
-  sort?: string | string[]; // Can be single string or array: "field:direction" or ["field1:direction1", "field2:direction2"]
-  page?: string | number;
-  limit?: string | number;
-  [key: string]: any; // For other filters like 'include_note_content', 'due_only'
-}
-
-/**
  * Parsed pagination information, ready for Drizzle.
  */
 export interface ParsedPagination {

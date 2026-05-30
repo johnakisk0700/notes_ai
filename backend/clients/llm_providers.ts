@@ -9,6 +9,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { LanguageModel } from "ai";
 import type { ModelNames } from "services/ai/ai_models";
+import { AI_MODELS } from "services/ai/ai_models";
 import type { ChatModelId } from "@shared/ai/chatModels";
 
 const openaiProvider = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -25,8 +26,12 @@ export interface ResolvedChatModel {
 }
 
 export function resolveChatModel(preferred?: ChatModelId): ResolvedChatModel {
-  // No OpenRouter key → always OpenAI fallback, regardless of `preferred`.
-  if (!openrouterProvider || preferred === "gpt-5-mini") {
+  // OpenAI-direct models (provider "gpt") always go through the OpenAI provider.
+  if (preferred && AI_MODELS[preferred].provider === "gpt") {
+    return { model: openaiProvider(preferred), id: preferred };
+  }
+  // No OpenRouter key → OpenAI fallback so chat keeps working with zero new env.
+  if (!openrouterProvider) {
     return { model: openaiProvider("gpt-5-mini"), id: "gpt-5-mini" };
   }
   const id = preferred ?? "qwen/qwen3.6-plus";

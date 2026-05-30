@@ -4,7 +4,9 @@ import { remindersTable } from "@shared/db/schema/reminders";
 import { clerkClient } from "@clerk/express";
 import { drizzlePg } from "clients/drizzle_postgres_client";
 import { qdrantClient } from "clients/qdrant_client";
+import { notesRepo } from "repositories/notes";
 import { eq } from "drizzle-orm";
+import { logger } from "utils/logger";
 
 // Admin-only: delete a user from Clerk and purge their local data.
 export async function deleteUser(req, res) {
@@ -17,31 +19,28 @@ export async function deleteUser(req, res) {
     return res.status(400).json({ error: "userId is required" });
   }
 
-  try {
-    // Collect the user's note IDs so we can drop their Qdrant vectors.
-    const userNotes = await drizzlePg
-      .select({ id: notesTable.id })
-      .from(notesTable)
-      .where(eq(notesTable.userId, userId));
+  // Collect the user's note ids up front so we can drop their Qdrant vectors after the purge.
+  const noteIds = await notesRepo.idsForUser(userId);
 
-    await drizzlePg.transaction(async tx => {
-      await tx.delete(remindersTable).where(eq(remindersTable.userId, userId));
-      await tx.delete(notesTable).where(eq(notesTable.userId, userId));
-      await tx.delete(profileTable).where(eq(profileTable.id, userId));
-    });
+  await drizzlePg.transaction(async tx => {
+    await tx.delete(remindersTable).where(eq(remindersTable.userId, userId));
+    await tx.delete(notesTable).where(eq(notesTable.userId, userId));
+    await tx.delete(profileTable).where(eq(profileTable.id, userId));
+  });
 
-    if (userNotes.length > 0) {
-      await qdrantClient.delete("notes", {
-        points: userNotes.map(n => n.id),
-      });
+  // Remove the identity from Clerk (authoritative). Unexpected failures propagate to errorHandler.
+  await clerkClient.users.deleteUser(userId);
+
+  // Qdrant cleanup is best-effort: the authoritative Postgres + Clerk deletes already
+  // succeeded, so a Qdrant hiccup must not 500 the request. Orphaned vectors are harmless —
+  // search_notes validates every hit against Postgres, and reembed-notes prunes them.
+  if (noteIds.length > 0) {
+    try {
+      await qdrantClient.delete("notes", { points: noteIds });
+    } catch (err) {
+      logger.error(`Qdrant cleanup failed for deleted user ${userId} (vectors orphaned until reindex):`, err);
     }
-
-    // Finally remove the identity from Clerk.
-    await clerkClient.users.deleteUser(userId);
-
-    res.status(200).json({ message: "User deleted." });
-  } catch (error) {
-    console.error("Error deleting user:", error);
-    res.status(500).json({ error: "Failed to delete user" });
   }
+
+  res.status(200).json({ message: "User deleted." });
 }

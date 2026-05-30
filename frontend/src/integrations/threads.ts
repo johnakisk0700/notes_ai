@@ -2,8 +2,8 @@ import type { ThreadDetail, ThreadSummary } from '@shared';
 import { api } from './api';
 
 // AI chat threads, persisted server-side (Mongo). The streamed answer itself
-// goes through fetchApi (search-notes); these are the plain CRUD calls the
-// sidebar + history-loading use.
+// rides the Vercel AI SDK transport (see StreamChatContext); these are the
+// plain CRUD calls the sidebar + history-loading use.
 export async function fetchThreads(): Promise<ThreadSummary[]> {
   const {
     data: { data },

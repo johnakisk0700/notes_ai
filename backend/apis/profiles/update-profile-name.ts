@@ -15,20 +15,15 @@ export async function updateProfileName(req, res) {
     return res.status(400).json({ error: "first_name and last_name are required" });
   }
 
-  try {
-    const updated = await drizzlePg
-      .update(profileTable)
-      .set({ first_name, last_name, updated_at: new Date() })
-      .where(eq(profileTable.id, req.user.id))
-      .returning();
+  const updated = await drizzlePg
+    .update(profileTable)
+    .set({ first_name, last_name, updated_at: new Date() })
+    .where(eq(profileTable.id, req.user.id))
+    .returning();
 
-    if (updated.length === 0) {
-      return res.status(404).json({ error: "Profile not found" });
-    }
-
-    res.status(200).json(updated[0]);
-  } catch (error) {
-    console.error("Error updating profile name:", error);
-    res.status(500).json({ error: "Failed to update profile name" });
+  if (updated.length === 0) {
+    return res.status(404).json({ error: "Profile not found" });
   }
+
+  res.status(200).json(updated[0]);
 }

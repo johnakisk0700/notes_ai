@@ -2,7 +2,8 @@ import { drizzlePg } from "clients/drizzle_postgres_client";
 import { eq, count, inArray, lt, and } from "drizzle-orm";
 import { remindersTable } from "@shared/db/schema/reminders";
 import { notesTable } from "@shared/db/schema/notes";
-import { applyOrdering, applyPagination } from "utils/drizzleHelpers";
+import { notesRepo } from "repositories/notes";
+import { applyOrdering, applyPagination, buildPaginationResponse } from "utils/drizzleHelpers";
 import type { QueryParameters } from "@shared/interfaces/QueryParameters";
 
 export async function getReminders(req, res) {
@@ -10,26 +11,10 @@ export async function getReminders(req, res) {
   const { include_note_content, due_only } = req.query;
   const { sorting, pagination }: QueryParameters = req.queryParams;
 
-  // Get user's note IDs
-  const userNotesResult = await drizzlePg
-    .select({ id: notesTable.id })
-    .from(notesTable)
-    .where(eq(notesTable.userId, userId));
-
-  const userNoteIds = userNotesResult.map(note => note.id);
+  const userNoteIds = await notesRepo.idsForUser(userId);
 
   if (userNoteIds.length === 0) {
-    return res.status(200).json({
-      data: [],
-      pagination: {
-        page: pagination.page,
-        limit: pagination.limit,
-        totalCount: 0,
-        totalPages: 0,
-        hasNext: false,
-        hasPrev: false,
-      },
-    });
+    return res.status(200).json(buildPaginationResponse([], pagination, 0));
   }
 
   // Build WHERE conditions
@@ -97,15 +82,5 @@ export async function getReminders(req, res) {
         }))
       : result;
 
-  res.status(200).json({
-    data,
-    pagination: {
-      page: pagination.page,
-      limit: pagination.limit,
-      totalCount,
-      totalPages: pagination.fetchAll ? 1 : Math.ceil(totalCount / pagination.limit),
-      hasNext: !pagination.fetchAll && pagination.page * pagination.limit < totalCount,
-      hasPrev: pagination.page > 1,
-    },
-  });
+  res.status(200).json(buildPaginationResponse(data, pagination, totalCount));
 }

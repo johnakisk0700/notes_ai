@@ -28,16 +28,26 @@ Dev runs plain HTTP. In production the **native host nginx** terminates TLS for
 
 ## AI chat flow
 
-`POST /api/search-notes` (`apis/notes/search-relevant-notes.ts`):
+`POST /api/search-notes` (`apis/notes/search-relevant-notes.ts`) runs **agentic RAG on the
+Vercel AI SDK** — it records the user turn and delegates to `streamNotesChat`
+(`services/ai/agentic-rag.ts`):
 
-1. Embed the user query with `google/gemini-embedding-001` (via OpenRouter — `clients/embedding_client.ts`).
-2. Vector search the `notes` Qdrant collection, filtered to the requesting user
-   (and any selected users for admins).
-3. Inject the retrieved notes into a system/user prompt and **stream** the answer
-   back via `handleAiStream` (`services/ai/ai_chat.ts`). Chat answers and note-title
-   generation use `gpt-5-mini` (a reasoning model — `ai_chat.ts` omits `temperature`
-   and sets `reasoning.effort: "low"` for `o*`/`gpt-5*` ids); `ai_models.ts` +
-   `ai_chat.ts` also support Claude (Anthropic) and Fireworks (Llama/Qwen) providers.
+1. Run a streaming multi-step tool loop (`streamText` + `stopWhen: stepCountIs(MAX_STEPS)`).
+   The model is handed note-retrieval tools (`search_notes`, `filter_by_date`,
+   `list_recent_notes` — `services/ai/notes-tools.ts`, which read through
+   `repositories/notes.ts`), calls them, reads the results, and answers grounded in them. On
+   the final allowed step `prepareStep` drops the tools to force an answer.
+2. `search_notes` embeds the query with `google/gemini-embedding-001` (via OpenRouter —
+   `clients/embedding_client.ts`), ranks candidate ids in the `notes` Qdrant collection
+   (scoped to the requesting user, plus any selected users for admins), then reads the **live
+   rows from Postgres** (the read-time source of truth) and reranks them with Jina.
+3. The answer **streams** to the client as an AI SDK UI message stream (text + `tool-*` +
+   `reasoning` parts). The chat model is **user-selectable** (`shared/ai/chatModels.ts`):
+   default **Qwen3.6-Plus via OpenRouter** when `OPENROUTER_API_KEY` is set (other Qwen/GLM
+   on OpenRouter + GPT on OpenAI are offered), else `gpt-5-mini` (`clients/llm_providers.ts`).
+   Reasoning-effort is sent only to reasoning-capable models. Per-turn cost is computed from
+   usage and recorded. (Note-title generation is separate: `get-note-title` → `getAiChatResponse`
+   in `services/ai/ai_chat.ts`, always on `gpt-5-mini`.)
 4. The turn is persisted to a Mongo thread (`services/chat-threads.ts`, over the
    `UserThread`/`Message` models) **off the response path**: the thread id is
    generated locally (a new chat's id streams back immediately as a transient
@@ -97,8 +107,8 @@ Backend (`backend/.env`, see `.env.example`): `MODE`, `APP_PORT`, `OPENAI_API_KE
 `POSTGRES_URI`, `MONGODB_URI`, `REDIS_URL`, `QDRANT_HOST`/`QDRANT_PORT`, Clerk keys
 (`CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY`), plus optional Azure/Google voice keys.
 
-Frontend (`frontend/.env`): `VITE_API_DEV_URL`, `VITE_API_PROD_URL`,
-`VITE_CLERK_PUBLISHABLE_KEY`.
+Frontend build (Vite-inlined, read from the **root** `.env` — there is no
+`frontend/.env`): `VITE_API_DEV_URL`, `VITE_API_PROD_URL`, `VITE_CLERK_PUBLISHABLE_KEY`.
 
 Root (`.env`, read by docker compose + `deploy.ts` — see `.env.example`):
 `VITE_CLERK_PUBLISHABLE_KEY`, `VITE_API_DEV_URL`, `VITE_API_PROD_URL`, `BACKEND_TLS`.

@@ -3,10 +3,8 @@
   "type": "module",
   "dependencies": {
     "@ai-sdk/openai": "^3.0.65",
-    "@anthropic-ai/sdk": "^0.54.0",
     "@clerk/express": "^1.7.15",
     "@ffmpeg/ffmpeg": "^0.12.15",
-    "@fireworksai/sdk": "^0.24.7",
     "@google-cloud/speech": "^6.7.1",
     "@openrouter/ai-sdk-provider": "^2.9.0",
     "@qdrant/qdrant-js": "^1.14.1",

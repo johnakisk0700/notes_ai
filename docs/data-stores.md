@@ -27,7 +27,7 @@ for every table). Migrations live in `shared/drizzle/`:
 
 | Table        | Purpose                                                      | PK |
 | ------------ | ------------------------------------------------------------ | -- |
-| `profile`    | User profile + `role` (user/admin) + settings. **PK = Clerk user ID** (`text`). | id |
+| `profile`    | User profile + `role` (user/admin) + `settings` (jsonb, reserved for future per-user prefs — theme, model). **PK = Clerk user ID** (`text`). | id |
 | `notes`      | User notes (title, **Markdown** content). `user_id` = Clerk ID. | uuid |
 | `reminders`  | One reminder per note (`note_id` unique).                    | uuid |
 | `tefteri`    | Per-user cost ledger (totalCost) joined to profile.          | — |
@@ -48,17 +48,18 @@ service (`backend/scripts/qdrant-ensure.ts`, which waits for Qdrant then calls
 so `store-note` doesn't 500 on a fresh Qdrant volume. It's idempotent (create-on-404).
 
 > `backend/scripts/qdrant-init.ts`'s own `main()` is a **destructive reset** — it
-> drops + reseeds `polites` — so it's guarded by `import.meta.main` and only runs
-> when executed directly (`bun scripts/qdrant-init.ts`), never on startup.
+> drops `polites` and re-creates it empty (the reseed `migrate*` calls are currently
+> commented out) — so it's guarded by `import.meta.main` and only runs when executed
+> directly (`bun scripts/qdrant-init.ts`), never on startup.
 
 - `notes` — note embeddings (3072-dim, `gemini-embedding-001`); payload has `title`,
   `content`, `user_id`, `created_at`, `updated_at`. The embedded text is the note's
   title + content only — metadata stays in the payload, never in the vector. The
   **only collection queried at runtime** (per-user, in chat).
 - `beverages`, `polites`, `customers`, `sales` — domain collections (1536-dim ada-002; wine/customer
-  RAG). Provisioned by `qdrant-init.ts` but currently **dormant**: the seeding calls
-  in that script and the RAG query in `search-relevant-notes.ts` are commented out,
-  and wine/customer autocomplete is served from Postgres (`wines`/`customers`).
+  RAG). Provisioned by `qdrant-init.ts` but currently **dormant**: the seeding `migrate*`
+  calls in that script are commented out and the old wine/customer RAG query was removed,
+  so wine/customer autocomplete is served from Postgres (`wines`/`customers`) instead.
 
 Embedding model (notes): `google/gemini-embedding-001` — 3072-dim, served via OpenRouter
 (`backend/clients/embedding_client.ts`), shared by the index (write) and query paths so they
@@ -92,9 +93,9 @@ plain-text projection (user text / Lexi's answer); `parts` holds the full AI SDK
 cards; `metadata` (Mixed) carries the answer's `{ model, costEur, totalTokens }` for the per-answer
 badge. User turns store `content` only; the client falls back to it when `parts` is absent.
 
-> `ECBConversionRate` (a Mongo model) is **dead code** — USD→EUR rates moved to the
-> Postgres `ecb_conversion_rates` table + Redis. The model file lingers but nothing
-> reads or writes it.
+> Mongo holds **only** chat threads now — the unused `User` and `ECBConversionRate`
+> models were removed. USD→EUR rates live in the Postgres `ecb_conversion_rates`
+> table + Redis, not Mongo.
 
 ## Redis
 

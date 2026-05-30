@@ -10,3 +10,4 @@ export * from "./dto/ThreadDTO";
 export * from "./interfaces/QueryParameters";
 export * from "./interfaces/OpenAI";
 export * from "./interfaces/UserSettings";
+export * from "./ai/chatModels";

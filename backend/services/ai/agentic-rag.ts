@@ -13,7 +13,7 @@ import {
 } from "ai";
 import type { Request, Response } from "express";
 import { resolveChatModel } from "clients/llm_providers";
-import { DEFAULT_REASONING_EFFORT, type ChatModelId, type ReasoningEffort } from "@shared/ai/chatModels";
+import { DEFAULT_REASONING_EFFORT, supportsReasoning, type ChatModelId, type ReasoningEffort } from "@shared/ai/chatModels";
 import { appendMessage } from "services/chat-threads";
 import { logger } from "utils/logger";
 import { getEurPerUsd } from "utils/ecbConversionRates";
@@ -62,6 +62,9 @@ function reasoningProviderOptions(
   modelId: ChatModelId,
   effort: ReasoningEffort
 ): Parameters<typeof streamText>[0]["providerOptions"] {
+  // Non-reasoning models (e.g. Qwen3-Max, Qwen3-Next) reject/ignore a reasoning
+  // effort — only send it to models that advertise the capability.
+  if (!supportsReasoning(modelId)) return undefined;
   const provider = AI_MODELS[modelId].provider;
   if (provider === "gpt") return { openai: { reasoningEffort: effort } };
   if (provider === "openrouter") return { openrouter: { reasoning: { effort } } };

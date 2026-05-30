@@ -62,8 +62,9 @@ bun run db:push                # push schema directly (no migration file)
 bun scripts/qdrant-ensure.ts          # ensure Qdrant collections exist (idempotent, non-destructive).
                                       #   Runs AUTOMATICALLY on `docker compose up` via the one-shot
                                       #   `qdrant-init` service the backend waits on.
-bun scripts/qdrant-init.ts            # DESTRUCTIVE reset: drops + reseeds `polites`, then ensures
-                                      #   collections. Run by hand only (guarded by import.meta.main).
+bun scripts/qdrant-init.ts            # DESTRUCTIVE reset: drops `polites` then ensures collections
+                                      #   (the reseed `migrate*` calls are currently commented out).
+                                      #   Run by hand only (guarded by import.meta.main).
 bun scripts/seed-wines-customers.ts   # seed Postgres wines/customers (autocomplete) from data/*.json
 ```
 
@@ -77,7 +78,7 @@ See the `docker-compose.yml` header. Compose files: `docker-compose.yml` (base) 
 ```
 frontend (axios, Bearer token) ─► backend /api/* ─► Postgres (notes/reminders/profiles)
                                        │
-                                       ├─► OpenRouter (gemini-embedding-001 embeddings + Qwen3.6-Plus/GLM-5.1 agentic chat) + Jina (rerank)
+                                       ├─► OpenRouter (gemini-embedding-001 embeddings + selectable Qwen/GLM/GPT agentic chat) + Jina (rerank)
                                        ├─► Qdrant (vector search over note embeddings)
                                        └─► MongoDB (chat threads/messages)
 ```
@@ -94,7 +95,8 @@ frontend (axios, Bearer token) ─► backend /api/* ─► Postgres (notes/remi
   disconnects. The system prompt carries only persona + answer policy — the SDK injects each
   tool's name/description/schema, so the prompt does **not** re-describe them. Default model
   **Qwen3.6-Plus via OpenRouter** when `OPENROUTER_API_KEY` is set, else **gpt-5-mini** on
-  `OPENAI_API_KEY` (`clients/llm_providers.ts`). Streamed as an AI SDK UI message stream
+  `OPENAI_API_KEY` (`clients/llm_providers.ts`) — one of several user-selectable models
+  (`shared/ai/chatModels.ts`: Qwen/GLM via OpenRouter + GPT via OpenAI). Streamed as an AI SDK UI message stream
   (text + `tool-*` + `reasoning` parts); the client consumes it with `useChat`
   (`experimental_throttle` coalesces token re-renders; `CustomMarkdown` is memoized so only
   the streaming message re-parses) and renders tool calls + reasoning (`ToolCallCard`/`ReasoningCard`),
@@ -113,7 +115,9 @@ frontend (axios, Bearer token) ─► backend /api/* ─► Postgres (notes/remi
   `v2-base-multilingual`** and gated to the top few (`services/ai/rerank.ts`; set `JINA_API_KEY`
   to enable, else vector order). **Postgres is the read-time source of truth** — the tools return
   note text from Postgres and `search_notes` only ranks candidate ids in Qdrant, so a Qdrant↔Postgres
-  desync can't surface a deleted/stale note. Create/update embed **inside the save transaction**
+  desync can't surface a deleted/stale note. Note reads + the retrieval tools' user-scoped
+  queries go through `backend/repositories/notes.ts` (one home for the `userId` tenancy filter).
+  Create/update embed **inside the save transaction**
   (sync-or-fail — a failed embed rolls back the save, so the stores stay in lockstep; the client's
   localStorage draft means nothing is lost); `scripts/reembed-notes.ts`
   reconciles). Hybrid BM25 + chunking remain planned in `docs/rag-execution-plan.md`.
@@ -182,7 +186,7 @@ Sloppy code (unclear names, overlong functions, logic that needs a mental map to
 - **Path aliases** (one shared alias, no duplicates):
   - everywhere: `@shared` → `shared/index.ts` barrel, `@shared/*` → `shared/*`
     (e.g. `import { Note } from "@shared"` or `"@shared/db/schema/notes"`).
-  - backend (baseUrl): `clients/*`, `apis/*`, `services/*`, `utils/*`,
+  - backend (baseUrl): `clients/*`, `apis/*`, `repositories/*`, `services/*`, `utils/*`,
     `middleware/*`, `authentication/*`, `model/*`.
   - frontend: `@/*` → `src`.
   - See each workspace's `tsconfig.json` and `frontend/vite.config.ts`.

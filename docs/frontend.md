@@ -14,8 +14,8 @@ Single-page app served statically (nginx in prod, Vite dev server locally).
 | Icons          | `lucide-react`                                                    |
 | Routing        | `react-router` v7 (`BrowserRouter` + `<Routes>`)                  |
 | Auth           | Clerk (`@clerk/clerk-react`)                                      |
-| HTTP           | `axios` instance + a `fetch`-based helper for streaming           |
-| Editor         | TipTap 3 (note editor with `@mention` of users)                   |
+| HTTP           | `axios` instance (CRUD) + the Vercel AI SDK transport for the chat stream |
+| Editor         | TipTap 3 (note editor; `@mention` of wines + customers + users)   |
 | i18n           | `i18next` + `react-i18next` (el default, en)                      |
 | Misc           | `sonner` (toasts), `react-day-picker` (calendar), `cmdk`, `vaul`, `fuse.js`, `date-fns` |
 
@@ -45,7 +45,7 @@ pages/                One component per route
 components/
   ui/                 shadcn primitives (~25: button, dialog, sidebar, command,
                       drawer, calendar, popover, sheet, tabs, tooltip, sonner, …)
-  icons/              hand-rolled SVG components (OpenAI, Deepseek, Claude, chevrons…)
+  icons/              ProviderIcon (brand glyphs for the chat model selector)
   Common/             Header, PageRule, SpiralBinding, TopSpiralBinding, AudioRecorder, RealtimeAudioRecorder, TiptapEditor/
   Chat/               ChatMessage, StreamChat, CustomMarkdown
   Notes/              NoteComponent, NotesList, NoteEditor, NoteSearch
@@ -55,12 +55,12 @@ components/
 
 context/              React context providers (see "State / providers")
 hooks/                useNoteOperations, useRealtimeTranscriber, use-mobile,
-                      use-media-query, useFadeInOut, … (useChat.ts is empty/unused)
-integrations/         API layer: api.ts (axios + fetchApi), users.ts, lists.ts,
+                      use-media-query, useDebouncedLocalstorageSync, useGlobalAbortController
+integrations/         API layer: api.ts (axios), users.ts, lists.ts,
                       threads.ts (chat-thread CRUD)
 translations/         i18n.ts (init) + el.ts, en.ts
 lib/utils.ts          cn() — clsx + tailwind-merge
-utils/                getNowToLocalISOString, handleStreamProcessing
+utils/                getNowToLocalISOString
 assets/flags/         FlagGR, FlagUS
 ```
 
@@ -97,8 +97,8 @@ ThemeProvider (dark default, localStorage "vite-ui-theme")
    └ ClerkProvider (VITE_CLERK_PUBLISHABLE_KEY)
      └ AuthProvider          role/admin resolution on top of Clerk's useUser
        └ UsersProvider       user list (mentions, admin, user selector)
-         └ WineProvider      domain data (beverages — Qdrant "beverages")
-           └ CustomerProvider domain data (polites)
+         └ WineProvider      wine names for the editor @-mention (Postgres `wines`, cached)
+           └ CustomerProvider customer names for the editor @-mention (Postgres `customers`, cached)
              └ NotesProvider        notes list + CRUD state
                └ NoteEditorProvider open/close + active note id
                  └ SidebarProvider  shadcn sidebar open state
@@ -107,8 +107,8 @@ ThemeProvider (dark default, localStorage "vite-ui-theme")
 
 - `NoteEditor` is rendered once at the root (next to `<App/>`) and shown/hidden
   via `NoteEditorContext` — it's a global dialog, not a per-page component.
-- `WineProvider`/`CustomerProvider` back domain-specific features; they load data
-  unconditionally at app start.
+- `WineProvider`/`CustomerProvider` load the wine/customer name lists (from Postgres,
+  cached in localStorage) that feed the editor's `@`-mention menu alongside the user list.
 - `ThreadsProvider` (`context/ThreadsContext`) is **not** in the root tree above —
   it's mounted in `Layout`, so it only fetches the chat-thread list once
   authenticated. It backs the sidebar list and is refreshed when a new thread is created.
@@ -165,10 +165,12 @@ extends the rehype-sanitize default (GitHub) schema to additionally allow
 `mark`/`kbd`/`sub`/`sup` so Lexi can emit those tags as raw HTML. A fenced code block tagged `chart` (i.e. ` ```chart `)
 carrying a small JSON spec is routed to `components/Chat/NotebookChart.tsx`, a
 zero-dependency SVG bar / line / sparkline renderer (invalid or mid-stream JSON falls back
-to a plain code block, so a half-typed chart never throws). The Greek system prompt
-(`backend/utils/gptPromptGenerator.ts`) tells Lexi when to use tables/charts and documents
-the exact `chart` schema. The streaming status line is a calm fading mono whisper
-(`useFadeInOut` + `statusUpdate`), **not** an animated dot loader.
+to a plain code block, so a half-typed chart never throws). Note the `chart` schema is no
+longer described to the model — Lexi's current inline system prompt (`lexiSystemPrompt` in
+`backend/services/ai/agentic-rag.ts`) carries only persona + answer policy, and the SDK
+injects the tool schemas; re-add chart guidance there if the fence is still wanted. The
+pre-answer status is a calm rotating mono whisper (`components/Chat/ThinkingIndicator.tsx`,
+shown while no answer text has streamed yet), **not** an animated dot loader.
 The dated "Ask Lexi" introduction is a header-height first row inside the scrolling
 conversation, aligned with the floating sidebar toggle, so it clears above the viewport
 as messages begin; on narrow screens it keeps only the date.
@@ -178,22 +180,21 @@ sidebar collapses, the sheet goes flush-left so its toggle remains centred in th
 
 ## API integration (`integrations/api.ts`)
 
-Two HTTP paths, both attaching the Clerk session token as `Authorization: Bearer`:
+- **`api`** — an `axios` instance for normal CRUD. A request interceptor attaches the
+  Clerk session token (`window.Clerk.session.getToken()`, so it works from non-React
+  modules) as `Authorization: Bearer`.
+- **Chat stream** — `POST /api/search-notes` is consumed via the **Vercel AI SDK**:
+  `@ai-sdk/react`'s `useChat` with a `DefaultChatTransport` whose own `fetch` injects the
+  same Clerk token (`context/StreamChatContext.tsx`). There is no hand-rolled stream helper.
 
-- **`api`** — an `axios` instance. A request interceptor pulls the token from the
-  global `window.Clerk.session.getToken()` (works from non-React modules). Used for
-  normal CRUD.
-- **`fetchApi(path, opts)`** — a thin `fetch` wrapper used where a `ReadableStream`
-  response is needed (the streamed chat answer from `POST /api/search-notes`).
-  See `context/StreamChatContext.tsx` + `utils/handleStreamProcessing.ts`.
-
-Base URL is `VITE_API_DEV_URL` in dev, `VITE_API_PROD_URL` in prod build.
+Base URL (`BASE_URL`) is `VITE_API_DEV_URL` in dev, `VITE_API_PROD_URL` in prod build.
 
 ## TipTap editor
 
 The note editor (`components/Common/TiptapEditor/`, consumed by
 `components/Notes/NoteEditor.tsx` via `useCustomTiptap`) is a TipTap 3 **rich-text**
-editor with a formatting toolbar and a user `@mention` dropdown.
+editor with a formatting toolbar and an `@mention` dropdown (wine + customer + user names,
+merged and deduped — fuzzy-matched with `fuse.js`).
 
 - Extensions: **`StarterKit`** (`@tiptap/starter-kit` — Document/Paragraph/Text plus
   bold, italic, strike, code, headings, lists, blockquote), **`Markdown`**
@@ -235,8 +236,9 @@ editor with a formatting toolbar and a user `@mention` dropdown.
   auto-removes dead imports (`eslint-plugin-unused-imports`) and rewrites to
   `import type` (`@typescript-eslint/consistent-type-imports`); `bun run format`
   runs Prettier (`.prettierrc`). The react-hooks v7 React-Compiler rules
-  (`set-state-in-effect`, `use-memo`) are set to **warn** — pervasive and not
-  auto-fixable; remaining hard errors are mostly pre-existing `no-explicit-any`.
+  (`set-state-in-effect`, `use-memo`) are set to **warn**, as is `no-explicit-any` —
+  pervasive and not auto-fixable, so warnings don't fail `bun run lint`. (A few genuine
+  errors remain — React-Compiler rule violations in `Mermaid.tsx` / `StreamChatContext.tsx`.)
 - **No raw `console.*` in shipped code** — frontend logs reach the prod browser console
   (unlike the backend's pino patch). Debug logs are dropped; error logs worth keeping are
   gated behind `if (import.meta.env.DEV)`.

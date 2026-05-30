@@ -21,7 +21,7 @@ export const notesTable = pgTable(
     // Composite index for user-specific date-ordered queries (creation date)
     index("idx_notes_user_created_desc").on(table.userId, table.created_at.desc()),
 
-    // Composite index for user-specific date-ordered queries (update date) - ADDED
+    // Composite index for user-specific date-ordered queries (update date)
     index("idx_notes_user_updated_desc").on(table.userId, table.updated_at.desc()),
 
     // Composite index for user-specific title searches
@@ -34,12 +34,6 @@ export const notesTable = pgTable(
       "gin",
       sql`to_tsvector('english', coalesce(${table.title}, '') || ' ' || ${table.content})`
     ),
-
-    // The following global indexes might be less critical if most queries are user-specific.
-    // Consider their usage patterns before removing.
-    // index("idx_notes_created_at").on(table.created_at), // Potentially covered by idx_notes_user_created_desc for user queries
-    // index("idx_notes_updated_at").on(table.updated_at), // Potentially covered by idx_notes_user_updated_desc for user queries
-    // index("idx_notes_title").on(table.title), // Potentially covered by idx_notes_user_title for user queries
   ]
 );
 

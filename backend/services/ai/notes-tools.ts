@@ -2,17 +2,16 @@
 // per-request and hard-scoped to the caller's user id(s) — the model never supplies a
 // user id, preserving tenancy.
 //
-// Postgres is the source of truth: every tool returns note title/content straight from PG.
-// search_notes uses Qdrant ONLY to rank candidate ids by meaning, then reads the live rows
-// from PG (dropping ids that no longer exist there) — so a Qdrant/PG desync can never
-// surface a deleted note or stale text. It then reranks and returns the relevance-gated few.
+// Postgres is the source of truth: every tool returns note title/content straight from PG
+// (via notesRepo). search_notes uses Qdrant ONLY to rank candidate ids by meaning, then
+// reads the live rows from PG (dropping ids that no longer exist there) — so a Qdrant/PG
+// desync can never surface a deleted note or stale text. It then reranks and returns the
+// relevance-gated few.
 import { tool } from "ai";
 import { z } from "zod";
 import { embedText } from "clients/embedding_client";
 import { qdrantClient } from "clients/qdrant_client";
-import { drizzlePg } from "clients/drizzle_postgres_client";
-import { notesTable } from "@shared/db/schema/notes";
-import { and, desc, gte, inArray, lte } from "drizzle-orm";
+import { notesRepo, type NoteRow } from "repositories/notes";
 import { cleanNoteText } from "utils/noteText";
 import { rerank } from "./rerank.js";
 
@@ -34,21 +33,6 @@ interface NoteHit {
   date: string;
   snippet: string;
 }
-
-// A Postgres note row as the tools select it — the one shape every tool maps from.
-interface NoteRow {
-  id: string;
-  title: string | null;
-  content: string | null;
-  created_at: Date | string | null;
-}
-
-const NOTE_COLUMNS = {
-  id: notesTable.id,
-  title: notesTable.title,
-  content: notesTable.content,
-  created_at: notesTable.created_at,
-};
 
 function clip(text: string, max: number): string {
   return text.length > max ? text.slice(0, max) + "…" : text;
@@ -106,10 +90,7 @@ export function buildNoteTools({ userIds }: { userIds: string[] }) {
         // 2) Postgres is the source of truth: pull live rows for those ids (scoped to the
         //    user), dropping any id missing from PG. A deleted note whose vector lingers is
         //    silently filtered out, and the text we rerank/show is always current.
-        const rows: NoteRow[] = await drizzlePg
-          .select(NOTE_COLUMNS)
-          .from(notesTable)
-          .where(and(inArray(notesTable.id, ids), inArray(notesTable.userId, userIds)));
+        const rows = await notesRepo.candidatesByIds(userIds, ids);
         const byId = new Map(rows.map(r => [String(r.id), r]));
         const candidates = ids
           .map(id => byId.get(id))
@@ -140,15 +121,7 @@ export function buildNoteTools({ userIds }: { userIds: string[] }) {
         limit: z.number().int().min(1).max(50).optional().describe("Max notes (default 20)."),
       }),
       execute: async ({ from, to, limit }): Promise<{ count: number; notes: NoteHit[] }> => {
-        const conds = [inArray(notesTable.userId, userIds)];
-        if (from) conds.push(gte(notesTable.created_at, new Date(from)));
-        if (to) conds.push(lte(notesTable.created_at, new Date(to)));
-        const rows: NoteRow[] = await drizzlePg
-          .select(NOTE_COLUMNS)
-          .from(notesTable)
-          .where(and(...conds))
-          .orderBy(desc(notesTable.created_at))
-          .limit(limit ?? 20);
+        const rows = await notesRepo.byDateRange(userIds, { from, to, limit: limit ?? 20 });
         return { count: rows.length, notes: rows.map(toNoteHit) };
       },
     }),
@@ -161,12 +134,7 @@ export function buildNoteTools({ userIds }: { userIds: string[] }) {
         limit: z.number().int().min(1).max(30).optional().describe("How many notes (default 10)."),
       }),
       execute: async ({ limit }): Promise<{ count: number; notes: NoteHit[] }> => {
-        const rows: NoteRow[] = await drizzlePg
-          .select(NOTE_COLUMNS)
-          .from(notesTable)
-          .where(inArray(notesTable.userId, userIds))
-          .orderBy(desc(notesTable.created_at))
-          .limit(limit ?? 10);
+        const rows = await notesRepo.recent(userIds, limit ?? 10);
         return { count: rows.length, notes: rows.map(toNoteHit) };
       },
     }),

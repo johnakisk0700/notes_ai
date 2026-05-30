@@ -10,7 +10,8 @@ Postgres, keyed by the Clerk user ID.
   `VITE_CLERK_PUBLISHABLE_KEY`.
 - Token injection: `src/integrations/api.ts` reads the active Clerk session token
   (`window.Clerk.session.getToken()`) and sets `Authorization: Bearer <token>` on
-  every axios request. The same is done in the raw-`fetch` helper `fetchApi`.
+  every axios request. The chat-stream transport (`DefaultChatTransport` in
+  `context/StreamChatContext.tsx`) injects the same token on its `fetch`.
 - Route guards: `ProtectedRoute` redirects unauthenticated users to sign-in, and
   redirects signed-in users with **no name in Clerk** to `/onboarding` (see below);
   `AdminGuard` checks `isAdmin`. Both read from the app `AuthProvider`, which wraps
@@ -58,7 +59,8 @@ Clerk API fetch. So no auth path can end up without a profile.
 ## Required config
 
 - Backend `.env`: `CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY`.
-- Frontend `.env`: `VITE_CLERK_PUBLISHABLE_KEY`.
+- Root `.env` (inlined into the frontend build by docker compose / `deploy.ts` — there is
+  no `frontend/.env`): `VITE_CLERK_PUBLISHABLE_KEY`.
 - Clerk dashboard: enable **Google** under _User & Authentication → Social Connections_
   (and email/password name fields under _Personal information_). Dev uses Clerk's shared
   OAuth credentials; production needs your own Google OAuth client configured in Clerk.
