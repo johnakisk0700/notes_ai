@@ -15,6 +15,7 @@ import { notesRepo, type NoteRow } from "repositories/notes";
 import { cleanNoteText } from "utils/noteText";
 import { rerank } from "./rerank.js";
 import { createNote } from "services/notes-write";
+import { chatImageExists } from "services/chat-images";
 
 // Retrieval tuning (env-overridable). CANDIDATE_K is the pool fed to the reranker;
 // FINAL_K is how many survive to the model; RERANK_MIN_SCORE drops weak matches.
@@ -27,6 +28,11 @@ const MIN_COSINE = process.env.NOTES_MIN_COSINE ? Number(process.env.NOTES_MIN_C
 
 const SNIPPET_CHARS = 800; // shown to the model
 const RERANK_CHARS = 2000; // sent to the reranker (more signal)
+
+// `notes.id` is a Postgres uuid, so querying it with a non-uuid string throws ("invalid
+// input syntax for type uuid"). The model is told to take ids from search results, but it
+// can still pass a bad one — validate before hitting the DB so a tool call never throws.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface NoteHit {
   noteId: string;
@@ -140,6 +146,24 @@ export function buildNoteTools({ userIds, userId }: { userIds: string[]; userId:
       },
     }),
 
+    // Re-examine an OLDER attached image. The most-recent image is already inlined for the
+    // model; older ones appear as "[εικόνα <id> …]" placeholders. Calling this makes the
+    // server re-inject that image as a user message on the next step (images aren't honored
+    // on tool-result messages over OpenRouter's OpenAI-compatible transport — see
+    // services/ai/agentic-rag.ts), so the tool itself only acknowledges the request.
+    view_image: tool({
+      description:
+        "Δες ξανά μια εικόνα που έστειλε νωρίτερα ο χρήστης. Χρησιμοποίησέ το ΜΟΝΟ για εικόνες που εμφανίζονται " +
+        "ως placeholder «[εικόνα <id> …]» στη συνομιλία — η πιο πρόσφατη εικόνα είναι ήδη ορατή. Δώσε το id από το " +
+        "placeholder· η εικόνα θα εμφανιστεί ώστε να μπορείς να την περιγράψεις ή να απαντήσεις γι' αυτήν.",
+      inputSchema: z.object({
+        imageId: z.string().describe("Το id της εικόνας, όπως φαίνεται στο placeholder «[εικόνα <id> …]»."),
+      }),
+      execute: async ({ imageId }): Promise<{ found: boolean; imageId: string }> => {
+        return { found: await chatImageExists(userId, imageId), imageId };
+      },
+    }),
+
     // --- Write / action tools ---------------------------------------------------------
     // Unlike the read tools (scoped to `userIds`, which may be a broader read set), writes
     // target the single authoritative logged-in user `userId`. The model never supplies an
@@ -155,15 +179,21 @@ export function buildNoteTools({ userIds, userId }: { userIds: string[]; userId:
         title: z.string().describe("A short title in the user's language."),
         content: z.string().describe("The note body as Markdown, in the user's language."),
       }),
+      // Never throw: a thrown execute can abort the tool stream and leave the UI card stuck
+      // on a spinner. On failure return a typed error result the card can render instead.
       execute: async ({ title, content }) => {
-        const note = await createNote({ userId, title, content });
-        return {
-          saved: true as const,
-          noteId: note.id,
-          title: note.title ?? title,
-          content: note.content,
-          date: isoOrEmpty(note.created_at),
-        };
+        try {
+          const note = await createNote({ userId, title, content });
+          return {
+            saved: true as const,
+            noteId: note.id,
+            title: note.title ?? title,
+            content: note.content,
+            date: isoOrEmpty(note.created_at),
+          };
+        } catch (err) {
+          return { saved: false as const, error: err instanceof Error ? err.message : "Save failed." };
+        }
       },
     }),
 
@@ -178,19 +208,26 @@ export function buildNoteTools({ userIds, userId }: { userIds: string[]; userId:
         title: z.string().optional().describe("New title, if it should change. Omit to keep the current title."),
         newContent: z.string().describe("The FULL new note body as Markdown (the complete note after edits)."),
       }),
+      // Never throw (a bad/non-uuid noteId would otherwise crash the query and freeze the
+      // card on a spinner): validate the id, guard the DB read, and return found:false instead.
       execute: async ({ noteId, title, newContent }) => {
-        const current = await notesRepo.findForUser(noteId, userId);
-        if (!current) return { found: false as const, noteId };
-        return {
-          found: true as const,
-          noteId,
-          title: title ?? current.title ?? "",
-          before: current.content ?? "",
-          after: newContent,
-          // Carry the existing reminder so Apply can preserve it (a content-only update that
-          // dropped remindAt would wipe the reminder — see apis/notes/update-note).
-          remindAt: current.reminder?.remindAt ? new Date(current.reminder.remindAt).toISOString() : "",
-        };
+        if (!UUID_RE.test(noteId)) return { found: false as const, noteId };
+        try {
+          const current = await notesRepo.findForUser(noteId, userId);
+          if (!current) return { found: false as const, noteId };
+          return {
+            found: true as const,
+            noteId,
+            title: title ?? current.title ?? "",
+            before: current.content ?? "",
+            after: newContent,
+            // Carry the existing reminder so Apply can preserve it (a content-only update that
+            // dropped remindAt would wipe the reminder — see apis/notes/update-note).
+            remindAt: current.reminder?.remindAt ? new Date(current.reminder.remindAt).toISOString() : "",
+          };
+        } catch {
+          return { found: false as const, noteId };
+        }
       },
     }),
 

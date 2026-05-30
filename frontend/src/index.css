@@ -612,28 +612,13 @@ div:has(> .tiptap) {
   background-blend-mode: soft-light;
 }
 
-/* ── Ruled paper (ambient notebook texture) ───────────────────────────────────
-   Faint horizontal ruling + a single left margin line. background-attachment:
-   local so the ruling scrolls with the content like real paper. Low-contrast on
-   purpose; tune via --nb-rule / --nb-margin. */
-.nb-paper {
-  --nb-rule: color-mix(in srgb, var(--foreground) 4%, transparent);
-  background-image:
-    repeating-linear-gradient(
-      to bottom,
-      transparent 0,
-      transparent 27px,
-      var(--nb-rule) 27px,
-      var(--nb-rule) 28px
-    ),
-    linear-gradient(to right, transparent 0, transparent 2.25rem, var(--nb-margin) 2.25rem, var(--nb-margin) calc(2.25rem + 1px), transparent calc(2.25rem + 1px));
-  background-attachment: local;
-}
-
-/* The notebook's faint left-margin line as a standalone rule, drawn from the element's
-   left edge at the same 2.25rem offset as .nb-paper. The opaque masthead — the floating
-   title and the sticky search — carries this so the margin line runs unbroken to the top
-   instead of being clipped where their background hides the scrolling paper underneath. */
+/* ── Notebook margin line ──────────────────────────────────────────────────────
+   A single faint left-margin rule at a fixed 2.25rem offset — the page is line-less
+   paper (no horizontal ruling), so writing never has to align to a baseline grid.
+   Carried by the paper surfaces (.nb-paper) and the opaque masthead (.nb-margin-rule)
+   alike, so the line runs unbroken to the top instead of being clipped where the
+   masthead's background hides the paper underneath. Low-contrast; tune via --nb-margin. */
+.nb-paper,
 .nb-margin-rule {
   background-image: linear-gradient(
     to right,

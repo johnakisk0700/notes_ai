@@ -1,6 +1,7 @@
 import { useStreamChat } from '@/context/StreamChatContext';
 import type { AppUIMessage } from '@/context/StreamChatContext';
-import { Check, CopyIcon, EditIcon, RefreshCcw, X } from 'lucide-react';
+import { useAuthedImageUrl } from '@/integrations/useAuthedImageUrl';
+import { Check, CopyIcon, EditIcon, ImageOff, RefreshCcw, X } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../ui/button';
 import { CustomMarkdown } from './CustomMarkdown';
@@ -33,6 +34,38 @@ function textOf(message: AppUIMessage): string {
     .map(p => p.text)
     .join('');
 }
+
+type ImageFilePart = { type: 'file'; url: string; mediaType: string; filename?: string };
+
+/** Image file parts attached to a (user) message. */
+function imagePartsOf(message: AppUIMessage): ImageFilePart[] {
+  return message.parts.filter(
+    (p): p is ImageFilePart =>
+      p.type === 'file' &&
+      typeof (p as { mediaType?: string }).mediaType === 'string' &&
+      (p as { mediaType: string }).mediaType.startsWith('image/')
+  );
+}
+
+// A user's attached image. The bytes are behind a bearer-gated route, so fetch them via
+// the authed hook (an <img> tag can't send the token) and show a skeleton / broken state.
+const ChatImageThumb = ({ url, alt }: { url: string; alt?: string }) => {
+  const { src, loading, error } = useAuthedImageUrl(url);
+  if (error)
+    return (
+      <div className="flex size-24 items-center justify-center rounded-md border border-border bg-muted/40 text-muted-foreground">
+        <ImageOff className="size-5" />
+      </div>
+    );
+  if (loading || !src) return <div className="size-24 animate-pulse rounded-md border border-border bg-muted/40" />;
+  return (
+    <img
+      src={src}
+      alt={alt ?? 'attachment'}
+      className="max-h-48 max-w-[16rem] rounded-md border border-border object-cover"
+    />
+  );
+};
 
 interface AnswerMeta {
   model?: string;
@@ -86,17 +119,35 @@ const UserMessage = ({ message }: { message: AppUIMessage }) => {
       </div>
     );
 
+  const images = imagePartsOf(message);
+
   // A soft ink wash keeps the question distinct without turning it into a
-  // heavy chat bubble; UI sans contrasts with Lexi's serif reply.
+  // heavy chat bubble; UI sans contrasts with Lexi's serif reply. Attached images
+  // sit above the text (or stand alone for an image-only turn).
   return (
-    <div className="group flex w-fit max-w-[85%] items-start gap-1 self-end" id={message.id}>
-      <UserMessageActions setEditMode={setEditMode} />
-      <div
-        data-chat-user-content
-        className="whitespace-pre-wrap rounded-md border-primary/80 bg-primary/60 py-1 pl-3 pr-3 text-sm font-medium leading-5 text-foreground/95"
-      >
-        {content}
-      </div>
+    <div className="group flex w-full flex-col items-end gap-1.5" id={message.id}>
+      {images.length > 0 ? (
+        <div className="flex max-w-[85%] flex-wrap justify-end gap-1.5">
+          {images.map((p, i) => (
+            <ChatImageThumb key={i} url={p.url} alt={p.filename} />
+          ))}
+        </div>
+      ) : null}
+      {content ? (
+        <div className="flex w-fit max-w-[85%] items-start gap-1 self-end">
+          <UserMessageActions setEditMode={setEditMode} />
+          <div
+            data-chat-user-content
+            className="whitespace-pre-wrap rounded-md border-primary/80 bg-primary/60 py-1 pl-3 pr-3 text-sm font-medium leading-5 text-foreground/95"
+          >
+            {content}
+          </div>
+        </div>
+      ) : (
+        <div className="flex self-end">
+          <UserMessageActions setEditMode={setEditMode} />
+        </div>
+      )}
     </div>
   );
 };
@@ -113,21 +164,24 @@ const AIMessage = ({
   return (
     <div style={style} id={message.id}>
       {message.parts.map((part, i) => {
+        // Stable key per part: tool parts keep their card instance (and its local state)
+        // across re-renders even if earlier parts grow/shift; others fall back to index.
+        const key = (part as { toolCallId?: string }).toolCallId ?? `${part.type}-${i}`;
         if (part.type === 'text') {
           return (
-            <div key={i} className="chat-md max-w-none">
+            <div key={key} className="chat-md max-w-none">
               <CustomMarkdown>{part.text}</CustomMarkdown>
             </div>
           );
         }
         // Note-action tools (create/edit/draft) → rich note preview; the rest → tool chip.
         if (part.type.startsWith('tool-')) {
-          if (NOTE_ACTION_TOOLS.has(part.type)) return <NotePreviewCard key={i} part={part} />;
-          return <ToolCallCard key={i} part={part} />;
+          if (NOTE_ACTION_TOOLS.has(part.type)) return <NotePreviewCard key={key} part={part} />;
+          return <ToolCallCard key={key} part={part} />;
         }
         // The model's reasoning (when the provider streams it) → quiet disclosure.
         if (part.type === 'reasoning') {
-          return <ReasoningCard key={i} part={part} />;
+          return <ReasoningCard key={key} part={part} />;
         }
         return null;
       })}

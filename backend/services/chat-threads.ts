@@ -8,6 +8,7 @@ import mongoose from "mongoose";
 import type { ThreadDetail, ThreadMessageRole, ThreadSummary } from "@shared";
 import { UserThread } from "model/mongo-db/UserThreads";
 import { logger } from "utils/logger";
+import { deleteChatImage, imageIdsFromMessages } from "services/chat-images";
 
 const TITLE_MAX = 50;
 
@@ -34,16 +35,18 @@ export function deriveThreadTitle(firstMessage: string): string {
  * always targets an existing doc. `persisted` never rejects (the writer logs and
  * swallows) — all thread persistence is best-effort.
  */
-export function recordUserTurn(opts: { threadId?: string; userId: string; text: string }): {
+export function recordUserTurn(opts: { threadId?: string; userId: string; text: string; parts?: unknown[] }): {
   threadId: string;
   isNew: boolean;
   persisted: Promise<void>;
 } {
-  const { userId, text } = opts;
+  const { userId, text, parts } = opts;
   const existingId = opts.threadId && mongoose.isValidObjectId(opts.threadId) ? opts.threadId : undefined;
 
   if (existingId) {
-    const persisted = appendMessage(existingId, userId, { role: "user", content: text }).catch(err =>
+    // `parts` carries the user turn's full UIMessage parts (e.g. an attached image
+    // reference) so the thread re-renders the thumbnail after a reload; omitted for plain text.
+    const persisted = appendMessage(existingId, userId, { role: "user", content: text, parts }).catch(err =>
       logger.error("Thread persistence (user message) failed:", err)
     );
     return { threadId: existingId, isNew: false, persisted };
@@ -56,7 +59,7 @@ export function recordUserTurn(opts: { threadId?: string; userId: string; text: 
     _id: id,
     user_id: userId,
     title: deriveThreadTitle(text),
-    messages: [{ role: "user", content: text, timestamp: new Date() }],
+    messages: [{ role: "user", content: text, parts, timestamp: new Date() }],
   })
     .then(() => undefined)
     .catch(err => logger.error("Thread persistence (new thread) failed:", err));
@@ -123,8 +126,21 @@ export async function getThread(threadId: string, userId: string): Promise<Threa
 
 export async function deleteThread(threadId: string, userId: string): Promise<boolean> {
   if (!mongoose.isValidObjectId(threadId)) return false;
+  // Read the doc first so we can unlink its attached image files once it's gone
+  // (best-effort — image cleanup must never block thread deletion).
+  let imageIds: string[] = [];
+  try {
+    const doc = await UserThread.findOne({ _id: threadId, user_id: userId }).lean();
+    if (doc) imageIds = imageIdsFromMessages((doc.messages ?? []) as Array<{ parts?: unknown }>);
+  } catch (err) {
+    logger.error("Thread image cleanup (read) failed:", err);
+  }
   const res = await UserThread.deleteOne({ _id: threadId, user_id: userId });
-  return (res.deletedCount ?? 0) > 0;
+  const deleted = (res.deletedCount ?? 0) > 0;
+  if (deleted && imageIds.length) {
+    await Promise.all(imageIds.map(id => deleteChatImage(userId, id)));
+  }
+  return deleted;
 }
 
 function toSummary(doc: any): ThreadSummary {

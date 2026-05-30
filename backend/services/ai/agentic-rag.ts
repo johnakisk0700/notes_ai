@@ -9,12 +9,14 @@ import {
   pipeUIMessageStreamToResponse,
   stepCountIs,
   streamText,
+  type ModelMessage,
   type UIMessage,
 } from "ai";
 import type { Request, Response } from "express";
 import { resolveChatModel } from "clients/llm_providers";
 import { DEFAULT_REASONING_EFFORT, supportsReasoning, type ChatModelId, type ReasoningEffort } from "@shared/ai/chatModels";
 import { appendMessage } from "services/chat-threads";
+import { chatImageIdFromUrl, loadChatImage } from "services/chat-images";
 import { logger } from "utils/logger";
 import { getEurPerUsd } from "utils/ecbConversionRates";
 import { calculateCompletionCost, completionCostEur } from "./ai_utils.js";
@@ -26,6 +28,11 @@ import { buildNoteTools } from "./notes-tools.js";
 // read tool results and answer; a normal turn uses 2–3 (search → [search] → answer) and
 // rarely reaches 5. On the final step we drop tools (prepareStep) to force an answer.
 const MAX_STEPS = 5;
+
+// Hard ceiling on a single turn's wall-clock. A backstop: even if the model provider or a
+// tool wedges past the per-client timeouts, the turn still aborts, the stream ends, and
+// onFinish (persistence) runs — the client is never left hanging on an open response.
+const TURN_DEADLINE_MS = 60_000;
 
 interface UsageLike {
   inputTokens?: number;
@@ -57,6 +64,9 @@ function lexiSystemPrompt(now: string): string {
     "- propose_note_edit: όταν θέλει να διορθώσεις/προσθέσεις/αλλάξεις μια ΥΠΑΡΧΟΥΣΑ σημείωση — βρες την πρώτα με αναζήτηση, μετά πρότεινε την αλλαγή (ο χρήστης την εφαρμόζει ή την ακυρώνει).",
     "- draft_note: όταν θέλει να γράψει ο ΙΔΙΟΣ τη σημείωση — ετοιμάζεις προσχέδιο και ανοίγει στον editor του για να το συμπληρώσει και να το αποθηκεύσει.",
     "- Το περιεχόμενο των σημειώσεων γράψ' το σε καθαρό Markdown, στη γλώσσα του χρήστη. Μετά την ενέργεια, πες με μία σύντομη πρόταση τι έκανες.",
+    "- Αν μια ενέργεια αποτύχει (π.χ. το create_note επιστρέψει saved:false), δοκίμασε ΜΙΑ ακόμη φορά· αν αποτύχει ξανά, πες το ευγενικά στον χρήστη — μην το επαναλαμβάνεις ασταμάτητα.",
+    "",
+    "- Ο χρήστης μπορεί να επισυνάψει εικόνα. Η πιο πρόσφατη εικόνα είναι ήδη ορατή σε σένα. Παλιότερες εικόνες εμφανίζονται ως «[εικόνα <id> …]» — αν χρειαστεί να δεις ξανά μία τέτοια, κάλεσε το view_image με το id της.",
     "",
     "- Απάντησε στη γλώσσα του χρήστη (κυρίως Ελληνικά), με σύντομο και καθαρό markdown και μέτρια emoji.",
   ].join("\n");
@@ -76,6 +86,62 @@ function reasoningProviderOptions(
   if (provider === "gpt") return { openai: { reasoningEffort: effort } };
   if (provider === "openrouter") return { openrouter: { reasoning: { effort } } };
   return undefined;
+}
+
+// A model-message content part (loosely typed — the SDK's union varies by role).
+type ContentPart = { type: string; data?: unknown; image?: unknown; text?: string; mediaType?: string };
+
+// Resolve attached chat images for the model. convertToModelMessages turns a UI file part
+// into a `file` part whose `data` is our `/api/chat-image/<id>` url — but a provider can't
+// fetch that bearer-gated url. So we inline the MOST-RECENT image's bytes (the one under
+// active discussion) and turn OLDER images into id placeholders the model can re-request
+// via view_image (see prepareStep below). Returns a shallow copy; never mutates the input.
+async function inlineChatImages(messages: ModelMessage[], userId: string): Promise<ModelMessage[]> {
+  const refs: Array<{ mi: number; pi: number; id: string }> = [];
+  messages.forEach((m, mi) => {
+    if (!Array.isArray(m.content)) return;
+    (m.content as ContentPart[]).forEach((p, pi) => {
+      // convertToModelMessages maps a UI file part to a `file` part with `data: <url>`; match
+      // an `image` part too in case a version inlines the url there — either way, never let a
+      // chat-image url reach the provider (it can't fetch our bearer-gated route).
+      const ref = typeof p.data === "string" ? p.data : typeof p.image === "string" ? p.image : undefined;
+      if ((p?.type === "file" || p?.type === "image") && ref) {
+        const id = chatImageIdFromUrl(ref);
+        if (id) refs.push({ mi, pi, id });
+      }
+    });
+  });
+  if (refs.length === 0) return messages;
+
+  const out = messages.map(m => (Array.isArray(m.content) ? { ...m, content: [...(m.content as ContentPart[])] } : m));
+  const activeIdx = refs.length - 1; // most-recent reference = the active image
+  for (let i = 0; i < refs.length; i++) {
+    const { mi, pi, id } = refs[i];
+    const content = (out[mi] as { content: ContentPart[] }).content;
+    if (i === activeIdx) {
+      const img = await loadChatImage(userId, id);
+      content[pi] = img
+        ? { type: "image", image: img.base64, mediaType: img.mediaType }
+        : { type: "text", text: "[εικόνα μη διαθέσιμη]" };
+    } else {
+      content[pi] = { type: "text", text: `[εικόνα ${id} — κάλεσε view_image με αυτό το id για να τη δεις]` };
+    }
+  }
+  return out as ModelMessage[];
+}
+
+// Flatten the tool calls across all completed steps (to detect view_image re-looks).
+function stepToolCalls(steps: unknown): Array<{ toolName: string; input?: unknown; args?: unknown }> {
+  if (!Array.isArray(steps)) return [];
+  return steps.flatMap(s => {
+    const calls = (s as { toolCalls?: unknown }).toolCalls;
+    return Array.isArray(calls) ? (calls as Array<{ toolName: string; input?: unknown; args?: unknown }>) : [];
+  });
+}
+
+function imageIdOfCall(call: { input?: unknown; args?: unknown }): string | null {
+  const src = (call.input ?? call.args) as { imageId?: unknown } | undefined;
+  return typeof src?.imageId === "string" ? src.imageId : null;
 }
 
 export function streamNotesChat(opts: {
@@ -98,6 +164,11 @@ export function streamNotesChat(opts: {
   const { model, id: modelId } = resolveChatModel(selectedModel);
   const tools = buildNoteTools({ userIds, userId });
 
+  // Per-turn deadline (see TURN_DEADLINE_MS). Aborts streamText if the turn overruns; the
+  // timer is cleared the moment the UI stream settles (onFinish/onError), below.
+  const turnAbort = new AbortController();
+  const turnTimer = setTimeout(() => turnAbort.abort(), TURN_DEADLINE_MS);
+
   const stream = createUIMessageStream({
     originalMessages: messages,
     execute: async ({ writer }) => {
@@ -107,15 +178,42 @@ export function streamNotesChat(opts: {
       }
 
       const modelMessages = await convertToModelMessages(messages);
+      // Inline the active image's bytes (the provider can't fetch our authed url) and turn
+      // older images into id placeholders the model can re-request via view_image.
+      const preparedMessages = await inlineChatImages(modelMessages, userId);
+      // Images the model re-requested via view_image — loaded once and re-injected as USER
+      // messages each step (images aren't honored on tool messages over this provider).
+      const viewedImages = new Map<string, { base64: string; mediaType: string }>();
       const result = streamText({
         model,
+        abortSignal: turnAbort.signal,
         system: lexiSystemPrompt(now),
-        messages: modelMessages,
+        messages: preparedMessages,
         tools,
         stopWhen: stepCountIs(MAX_STEPS),
-        // On the final allowed step, drop tools so the model must produce an answer
-        // instead of ending the turn on another tool call. ({} = no override.)
-        prepareStep: ({ stepNumber }) => (stepNumber >= MAX_STEPS - 1 ? { toolChoice: "none" } : {}),
+        // Before each step: (1) re-inject any image the model asked to see again as a user
+        // message; (2) on the final allowed step, drop tools so it must produce an answer.
+        prepareStep: async ({ stepNumber, steps, messages: stepMessages }) => {
+          for (const call of stepToolCalls(steps)) {
+            if (call.toolName !== "view_image") continue;
+            const id = imageIdOfCall(call);
+            if (id && !viewedImages.has(id)) {
+              const img = await loadChatImage(userId, id);
+              if (img) viewedImages.set(id, img);
+            }
+          }
+          const injected: ModelMessage[] = [...viewedImages.entries()].map(([id, img]) => ({
+            role: "user",
+            content: [
+              { type: "image", image: img.base64, mediaType: img.mediaType },
+              { type: "text", text: `(η εικόνα ${id} που ζήτησες)` },
+            ],
+          }));
+          const step: { messages?: ModelMessage[]; toolChoice?: "none" } = {};
+          if (injected.length) step.messages = [...(stepMessages as ModelMessage[]), ...injected];
+          if (stepNumber >= MAX_STEPS - 1) step.toolChoice = "none";
+          return step;
+        },
         providerOptions: reasoningProviderOptions(modelId, effort ?? DEFAULT_REASONING_EFFORT),
         // Per-step observability: log each tool result and how many notes it returned.
         onStepFinish: step => {
@@ -175,6 +273,7 @@ export function streamNotesChat(opts: {
     // Persist the whole assistant turn — text + tool-call parts — so the thread
     // re-renders tool steps after a reload. Best-effort (never fails the answer).
     onFinish: async ({ responseMessage }) => {
+      clearTimeout(turnTimer); // turn settled — cancel the deadline
       if (!threadId || !responseMessage) return;
       // Wait for the user-turn write (thread create / user-message append) to land first,
       // so this push targets an existing doc. `persisted` never rejects (best-effort).
@@ -188,6 +287,7 @@ export function streamNotesChat(opts: {
       }).catch(err => logger.error("Thread persistence (assistant message) failed:", err));
     },
     onError: err => {
+      clearTimeout(turnTimer);
       logger.error("Agentic chat stream error:", err);
       return err instanceof Error ? err.message : String(err);
     },

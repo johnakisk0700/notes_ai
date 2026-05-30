@@ -1,5 +1,5 @@
 import { useChat } from '@ai-sdk/react';
-import { DefaultChatTransport, type UIMessage } from 'ai';
+import { DefaultChatTransport, type FileUIPart, type UIMessage } from 'ai';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { BASE_URL, getClerkToken } from '@/integrations/api';
@@ -16,11 +16,25 @@ import {
 } from '@shared/ai/chatModels';
 
 // The chat now rides the AI SDK UI message stream: messages carry typed `parts`
-// (text + `tool-<name>` tool calls), so the UI can show the agent's tool use.
+// (text + `tool-<name>` tool calls + `file` image attachments), so the UI can show the
+// agent's tool use and the user's uploaded images.
 export type AppUIMessage = UIMessage;
 
+/** An uploaded chat image, ready to attach to the next message as a file part. */
+export interface ChatImageAttachment {
+  id: string;
+  url: string;
+  mediaType: string;
+  filename?: string;
+}
+
 interface StreamChatContextType {
-  sendQuery: (query: string, setQuery?: (value: string) => void, selectedUsers?: string[]) => Promise<void>;
+  sendQuery: (
+    query: string,
+    setQuery?: (value: string) => void,
+    selectedUsers?: string[],
+    image?: ChatImageAttachment | null
+  ) => Promise<void>;
   retryMessage: (messageId: string) => void;
   editMessage: (messageId: string, newText: string) => void;
   stopTextStream: () => void;
@@ -40,6 +54,11 @@ function textOf(message: AppUIMessage): string {
     .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
     .map(p => p.text)
     .join('');
+}
+
+/** A message's file parts (image attachments) — preserved when retrying/editing a turn. */
+function filesOf(message: AppUIMessage): FileUIPart[] {
+  return message.parts.filter((p): p is FileUIPart => p.type === 'file');
 }
 
 export const StreamChatProvider = ({ children }: { children: ReactNode }) => {
@@ -171,11 +190,20 @@ export const StreamChatProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [routeThreadId, setMessages]);
 
-  const sendQuery = async (query: string, setQuery?: (value: string) => void, selectedUsers?: string[]) => {
-    if (!query.trim() || isStreaming) return;
+  const sendQuery = async (
+    query: string,
+    setQuery?: (value: string) => void,
+    selectedUsers?: string[],
+    image?: ChatImageAttachment | null
+  ) => {
+    const text = query.trim();
+    if ((!text && !image) || isStreaming) return;
     selectedUsersRef.current = selectedUsers ?? [];
     setQuery?.('');
-    await sendMessage({ text: query.trim() });
+    const files: FileUIPart[] | undefined = image
+      ? [{ type: 'file', url: image.url, mediaType: image.mediaType, filename: image.filename }]
+      : undefined;
+    await sendMessage({ text, files });
   };
 
   const stopTextStream = () => {
@@ -189,16 +217,18 @@ export const StreamChatProvider = ({ children }: { children: ReactNode }) => {
     const prevUser = messages[idx - 1];
     if (prevUser.role !== 'user') return;
     const text = textOf(prevUser);
+    const files = filesOf(prevUser); // keep the image attachment on retry
     setMessages(messages.slice(0, idx - 1));
-    void sendMessage({ text });
+    void sendMessage({ text, files: files.length ? files : undefined });
   };
 
   // Replace a user message with edited text and re-run from there.
   const editMessage = (messageId: string, newText: string) => {
     const idx = messages.findIndex(m => m.id === messageId);
     if (idx < 0) return;
+    const files = filesOf(messages[idx]); // keep the image attachment on edit
     setMessages(messages.slice(0, idx));
-    void sendMessage({ text: newText });
+    void sendMessage({ text: newText, files: files.length ? files : undefined });
   };
 
   const value: StreamChatContextType = {

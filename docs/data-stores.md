@@ -91,7 +91,9 @@ Each `Message` stores `{ role, content?, parts?, metadata?, timestamp }`: `conte
 plain-text projection (user text / Lexi's answer); `parts` holds the full AI SDK UIMessage parts
 (text + tool-call parts, Mixed) for assistant turns, so reloaded threads re-render the tool
 cards; `metadata` (Mixed) carries the answer's `{ model, costEur, totalTokens }` for the per-answer
-badge. User turns store `content` only; the client falls back to it when `parts` is absent.
+badge. User turns store `content` only — **except** when they attach an image, where `parts` also
+carries the `{ type:"file", url:"/api/chat-image/<id>" }` reference so the thumbnail re-renders on
+reload; the client falls back to `content` when `parts` is absent.
 
 > Mongo holds **only** chat threads now — the unused `User` and `ECBConversionRate`
 > models were removed. USD→EUR rates live in the Postgres `ecb_conversion_rates`
@@ -101,3 +103,16 @@ badge. User turns store `content` only; the client falls back to it when `parts`
 
 Client: `backend/clients/redis_client.ts` (Bun's `RedisClient`). Runtime cache —
 includes the live ECB USD→EUR rate (`conversion_rate`), used by AI cost conversion.
+
+## Disk (chat image attachments)
+
+Service: `backend/services/chat-images.ts`. Chat images uploaded in the composer are stored as raw
+files on disk — one file per image at `data/chat-images/<userId>/<id>` (crypto-random `id`;
+magic-byte–validated raster only: PNG/JPEG/WebP/GIF, SVG rejected; ≤8MB). The chat carries only a
+`/api/chat-image/<id>` reference on the user message's file part (in Mongo) — the bytes never go in
+Mongo. Written/read via `POST /api/chat-image` / `GET /api/chat-image/:id`, both owner-scoped by
+`req.user.id` (the user dir is derived from the authenticated id, never a client value; the id is
+regex-validated and the resolved path asserted to stay inside the user's dir). The dir is mounted into
+the backend container in `docker-compose.yml` (base), so it persists on the host `./data` backing
+alongside the DBs; files are unlinked when their thread is deleted. The chat loop inlines the active
+image's bytes for the model and re-injects older ones on demand via the `view_image` tool — see CLAUDE.md.

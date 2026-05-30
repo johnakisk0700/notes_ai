@@ -50,6 +50,12 @@ services:
       QDRANT_PORT: 6333
     ports:
       - "127.0.0.1:5100:5100"
+    volumes:
+      # Chat image attachments persist on the host data/ dir (like the DB binds) so they
+      # survive container restarts + redeploys. The app's cwd is /app/backend, so it writes
+      # to ../data/chat-images → /app/data/chat-images (see backend/services/chat-images.ts).
+      # Dev's override.yml adds the source bind mounts; Compose merges these by target path.
+      - ./data/chat-images:/app/data/chat-images
     depends_on:
       # Wait for migrations to finish before the API starts, so a fresh Postgres
       # volume has its tables before the first request hits verifyJWT (which reads

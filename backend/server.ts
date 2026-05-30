@@ -34,6 +34,8 @@ import { cpus } from "node:os";
 import { getLatestUsdToEurRate } from "utils/ecbConversionRates.js";
 import { logger } from "utils/logger.js";
 import searchRelevantNotes from "./apis/notes/search-relevant-notes.js";
+import uploadChatImage from "./apis/notes/upload-chat-image.js";
+import getChatImage from "./apis/notes/get-chat-image.js";
 import { storeNote } from "./apis/notes/store-note.js";
 import { verifyJWT } from "./authentication/verifyJWT.js";
 import { errorHandler } from "./middleware/common/errorHandler.js";
@@ -110,6 +112,10 @@ if (cluster.isPrimary) {
   app.post("/api/get-note-title", verifyJWT, asyncHandler(getNoteTitle));
   app.post("/api/delete-note", verifyJWT, asyncHandler(deleteNote));
   app.post("/api/update-note", verifyJWT, asyncHandler(updateNote));
+
+  // Chat image attachments (stored on disk; chat messages carry a reference)
+  app.post("/api/chat-image", verifyJWT, asyncHandler(uploadChatImage));
+  app.get("/api/chat-image/:id", verifyJWT, asyncHandler(getChatImage));
 
   // Transcription
   app.post("/api/get-transcription", verifyJWT, asyncHandler(getTranscription));

@@ -104,3 +104,5 @@ answer **streams** token-by-token (proves nginx isn't buffering `/api/`).
 - Logs: `ssh … 'cd /home/notes-assistant && docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f backend'`
 - Re-run `bun deploy.ts eu` (idempotent) to roll forward; the previous image lingers until pruned.
 - DB backups: snapshot `/home/notes-assistant/data/` + `/home/notes-assistant/qdrant_data/`.
+  The `data/` snapshot already includes chat image attachments (`data/chat-images/`), which are
+  served by the backend and excluded from the deploy rsync via `.rsyncignore`.

@@ -20,6 +20,11 @@ const MAX_INPUT_CHARS = 6000;
 const client = new OpenAI({
   apiKey: process.env.OPENROUTER_API_KEY,
   baseURL: "https://openrouter.ai/api/v1",
+  // Bound the call: the SDK default is a 10-MINUTE timeout with 2 retries, so a wedged
+  // embedding would hang a note save (inside its transaction) or a search for many minutes —
+  // a spinner that never resolves. Fail fast instead; the caller surfaces a failed state.
+  timeout: 12_000,
+  maxRetries: 1,
 });
 
 export async function embedText(text: string): Promise<number[]> {

@@ -19,6 +19,8 @@ List endpoints (marked 📄) also run `queryMiddleware` → accept `page`, `limi
 | POST   | `/api/delete-note`       | `deleteNote`         | `{ noteId }`; deletes note+reminder (tx) and Qdrant point. Owner, or any note for admins. |
 | POST   | `/api/get-note-title`    | `getNoteTitle`       | `{ content }` → GPT-generated title. |
 | POST   | `/api/search-notes`      | `searchRelevantNotes`| `{ messages, threadId?, selectedUsers?, model?, effort?, now? }` (AI SDK UI message stream) → **streamed** agentic answer (text + `tool-*` parts). Model selectable (default Qwen3.6-Plus via OpenRouter, else gpt-5-mini). |
+| POST   | `/api/chat-image`        | `uploadChatImage`    | `{ image: { content: <base64> }, mediaType }` → `{ id, mediaType, url }`. Stores a chat-image attachment on disk (raster only, magic-byte validated, ≤8MB). |
+| GET    | `/api/chat-image/:id`    | `getChatImage`       | Streams the owner's stored image (inline, `nosniff`); 404 if missing/not owned. Backs the composer preview + message thumbnails (fetched with the bearer via `useAuthedImageUrl`). |
 | GET    | `/api/get-all-users-notes` | `getAllUsersNotes` | All users' notes (admin). Returns a bare `{ notes }` (no pagination envelope). |
 | GET 📄 | `/api/get-reminders`     | `getReminders`       | Current user's reminders. |
 

@@ -1,4 +1,6 @@
 audios/
+# DB data + chat image attachments (data/chat-images) live here — keep excluded so the
+# deploy rsync (--delete-after) never syncs or deletes user data on the VM.
 data/
 qdrant_data/
 dist/

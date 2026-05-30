@@ -38,13 +38,18 @@ bun deploy.ts eu     # full deploy   (bun deploy.ts backend = backend-only, no S
 # (bun --watch has no polling mode); Vite polls via server.watch.usePolling. Set
 # WATCH_POLLING=false in .env if you run from the WSL2/Linux filesystem.
 
+# Tests — from repo root, runs both workspaces (backend: `bun test`; frontend: Vitest):
+bun run test
+
 # Backend (from backend/)
 bun --watch run server.ts      # dev, hot reload
 bun run build                  # bundle to dist/server.js
+bun run test                   # bun:test (Jest-compatible, native tsconfig-path + .js resolution)
 
 # Frontend (from frontend/)
 bun run dev                    # Vite dev server (http://localhost:5173)
 bun run build                  # production build
+bun run test                   # Vitest (config in vitest.config.ts, node env)
 bun run lint                   # ESLint (flat config)
 bun run lint:fix               # ESLint --fix: auto-removes dead imports, fixes `import type`
 bun run format                 # Prettier write (.prettierrc)
@@ -94,7 +99,13 @@ frontend (axios, Bearer token) ─► backend /api/* ─► Postgres (notes/remi
   `services/notes-write.ts` save+embed transaction (the same path `/store-note` uses); `propose_note_edit`
   returns a before→after that the user Applies (→ `/update-note`, forwarding the existing `remindAt` so a
   content edit can't wipe a reminder) or discards — it does **not** write; `draft_note` persists nothing and
-  just hands a draft to the client, which auto-opens it pre-filled in the note editor. The loop is capped at `MAX_STEPS` (runaway guard —
+  just hands a draft to the client, which auto-opens it pre-filled in the note editor. Failure
+  handling is **structural, not model-trusted**: a note tool's `execute` never throws — it returns a
+  typed `{saved:false}`/`{found:false}` the card renders as a terminal *failed* state with a
+  deterministic **Retry** (re-hits `/store-note`; safe because a failed create rolls back); external
+  calls are time-bounded (`embedding_client` 12s / `qdrant_client` 10s — the OpenAI SDK default is 10
+  MINUTES) and the whole turn has a 60s `AbortController` backstop (`TURN_DEADLINE_MS`), so a wedged
+  embed/Qdrant/provider can't leave the card spinning or the response open. The loop is capped at `MAX_STEPS` (runaway guard —
   the SDK default is a single step; the last step drops tools via `prepareStep` to force an
   answer), and `result.consumeStream()` keeps the turn persisting even if the client
   disconnects. The system prompt carries only persona + answer policy — the SDK injects each
@@ -129,6 +140,19 @@ frontend (axios, Bearer token) ─► backend /api/* ─► Postgres (notes/remi
   (sync-or-fail — a failed embed rolls back the save, so the stores stay in lockstep; the client's
   localStorage draft means nothing is lost); `scripts/reembed-notes.ts`
   reconciles). Hybrid BM25 + chunking remain planned in `docs/rag-execution-plan.md`.
+- **Image attachments (pay-per-look):** the composer uploads an image — click the picker, **paste**
+  a screenshot, or **drag-drop** a file (all share `uploadImageFile` in `MainTextarea.tsx`) — to
+  `POST /api/chat-image`
+  (base64-in-JSON; stored on disk under `data/chat-images/<userId>/<id>`, magic-byte validated,
+  served back owner-scoped by `GET /api/chat-image/:id`), and the user message carries only a
+  `/api/chat-image/<id>` file-part **reference** (persisted in Mongo, rendered via the authed
+  `useAuthedImageUrl` blob fetch since an `<img>` can't send the bearer). A provider can't fetch that
+  bearer-gated url, so `agentic-rag.ts` inlines the **most-recent** image's bytes as a model
+  `ImagePart` before the call and turns older images into `[εικόνα <id>]` placeholders; the model
+  re-examines one via the **`view_image`** tool, which makes the server re-inject those bytes as a
+  **user** message in `prepareStep` (images aren't honored on `role:"tool"` messages over OpenRouter's
+  OpenAI-compatible transport). Upload is gated on `modelHasVision` (`shared/ai/chatModels.ts`); image
+  files are unlinked when their thread is deleted. See `backend/services/chat-images.ts`.
 
 ## Data stores (who owns what)
 
@@ -144,6 +168,10 @@ frontend (axios, Bearer token) ─► backend /api/* ─► Postgres (notes/remi
   worker startup and written by the chat flow (see below). Best-effort: if Mongo is
   down the API still serves, persistence just no-ops.
 - **Redis** — runtime cache (includes the live ECB conversion rate).
+- **Disk** (`data/chat-images/<userId>/<id>`) — chat image attachment bytes, referenced by a
+  `/api/chat-image/<id>` file part on the user's Mongo message. One file per image (crypto-random id,
+  magic-byte–validated raster). Mounted into the backend container in `docker-compose.yml` (base) so it
+  rides the `./data` backing; unlinked on thread delete. See `backend/services/chat-images.ts`.
 
 The Postgres source of truth is `shared/db/schema/` only (the old pre-Drizzle
 `backend/model/postgresql/*.sql` and custom migration runner have been removed).

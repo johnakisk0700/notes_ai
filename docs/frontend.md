@@ -129,9 +129,9 @@ CSS variables, `lucide` icons, aliases `@/components`, `@/lib/utils`, `@/compone
   exactly **one** deliberate second tone, `--highlight` (amber), used as a
   highlighter swipe (`<mark>` in chat) and the reminder flag — nothing else
   introduces colour (the `--chart-*` ramp is ink + graphite tints, no rainbow).
-  Ambient skeuomorphic touches: **`.nb-paper`** (faint ruled lines + a left
-  margin line; `background-attachment: local` so the ruling scrolls with the
-  page) on the chat/notes scroll surfaces; a **paper grain** (`--nb-grain` /
+  Ambient skeuomorphic touches: **`.nb-paper`** (a single faint left margin
+  line — line-less paper, no horizontal ruling, so nothing has to sit on a
+  baseline grid) on the chat/notes scroll surfaces; a **paper grain** (`--nb-grain` /
   `--nb-grain-sidebar` — desaturated SVG fractal noise blended `soft-light` into
   the `.nb-page` background and the sidebar only; the sidebar uses a coarser grain
   as a different "cover stock", and nothing else — chrome, text, the note dialog —

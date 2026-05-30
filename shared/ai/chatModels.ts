@@ -131,3 +131,8 @@ export function isReasoningEffort(value: unknown): value is ReasoningEffort {
 export function supportsReasoning(id: ChatModelId): boolean {
   return CHAT_MODELS.find(m => m.id === id)?.capabilities.includes("reasoning") ?? false;
 }
+
+/** Whether the model can see image input — gates chat image upload in the composer. */
+export function modelHasVision(id: ChatModelId): boolean {
+  return CHAT_MODELS.find(m => m.id === id)?.capabilities.includes("vision") ?? false;
+}

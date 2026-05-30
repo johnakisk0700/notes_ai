@@ -3,16 +3,20 @@ import { useNotes } from '@/context/NotesContext';
 import { api } from '@/integrations/api';
 import { cn } from '@/lib/utils';
 import type { Note } from '@shared/db/schema/notes';
-import { AlertTriangle, Check, FilePen, FilePlus2, Loader2, NotebookPen, SquarePen, X } from 'lucide-react';
+import { AlertTriangle, Check, FilePen, FilePlus2, Loader2, NotebookPen, RefreshCcw, SquarePen, X } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '../ui/button';
+import { editStatusCache, resolveOutput } from './notePreviewCache';
 
 // The note-action tools (create_note / propose_note_edit / draft_note) render as a richer
 // "note preview" card instead of the generic ToolCallCard: each shows the note and a footer
 // action that matches its mode (open the saved note / apply an edit / open in the editor).
+// resolveOutput/editStatusCache (notePreviewCache.ts) keep a card from regressing to a
+// spinner once it has rendered — see that file.
 interface ToolPart {
   type: string; // tool-create_note | tool-propose_note_edit | tool-draft_note
+  toolCallId?: string;
   state?: string; // input-streaming | input-available | output-available | output-error
   input?: unknown;
   output?: unknown;
@@ -82,26 +86,81 @@ interface CreatedOutput {
   noteId?: string;
   title?: string;
   content?: string;
+  error?: string;
 }
 
-function CreatedNoteCard({ part }: { part: ToolPart }) {
+interface SavedNote {
+  noteId?: string;
+  title?: string;
+  content?: string;
+}
+
+// The success face of a created note — shared by the tool's own success and a manual retry.
+function SavedNoteShell({ note }: { note: SavedNote }) {
   const { openEditor } = useNoteEditor();
-  const out = part.output as CreatedOutput | undefined;
-
-  if (part.state === 'output-error') return <ErrorCard label="Αποθήκευση σημείωσης" text={part.errorText} />;
-  if (!out?.saved) return <Running icon={<FilePlus2 className="size-4" />} label="Αποθήκευση σημείωσης…" />;
-
   return (
-    <Shell icon={<Check className="size-4 text-emerald-600" />} label="Αποθηκεύτηκε" title={out.title}>
-      {out.content ? <Body text={out.content} /> : null}
+    <Shell icon={<Check className="size-4 text-emerald-600" />} label="Αποθηκεύτηκε" title={note.title}>
+      {note.content ? <Body text={note.content} /> : null}
       <div className="flex justify-end gap-1.5 px-3 pb-2">
         <Button
           variant="outline"
           size="sm"
-          onClick={() => out.noteId && openEditor({ id: out.noteId } as unknown as Note)}
+          onClick={() => note.noteId && openEditor({ id: note.noteId } as unknown as Note)}
         >
           <SquarePen className="size-3.5" />
           Άνοιγμα
+        </Button>
+      </div>
+    </Shell>
+  );
+}
+
+function CreatedNoteCard({ part }: { part: ToolPart }) {
+  const { fetchNotes } = useNotes();
+  const out = resolveOutput<CreatedOutput>(part);
+  // The original tool input carries the note text — used to re-attempt the save on retry.
+  const input = part.input as { title?: string; content?: string } | undefined;
+  const [retrying, setRetrying] = useState(false);
+  const [retried, setRetried] = useState<SavedNote | null>(null);
+
+  // Saved note, from the tool itself or from a successful manual retry.
+  const saved: SavedNote | null =
+    retried ?? (out?.saved ? { noteId: out.noteId, title: out.title, content: out.content } : null);
+  if (saved) return <SavedNoteShell note={saved} />;
+
+  // Failed = the tool reported saved:false, or the call errored with no usable output.
+  const failed = out?.saved === false || (part.state === 'output-error' && !out);
+  if (!failed) return <Running icon={<FilePlus2 className="size-4" />} label="Αποθήκευση σημείωσης…" />;
+
+  // Deterministic retry: re-hit the create endpoint directly (no model). Safe to repeat —
+  // a failed create rolls back its transaction, so this can't leave a duplicate/orphan.
+  const retry = async () => {
+    if (!input?.content) {
+      toast.error('Λείπει το περιεχόμενο για επανάληψη');
+      return;
+    }
+    setRetrying(true);
+    try {
+      const { data } = await api.post('/store-note', { noteText: input.content, title: input.title });
+      setRetried({ noteId: data?.id, title: input.title, content: input.content });
+      toast.success('Η σημείωση αποθηκεύτηκε');
+      fetchNotes();
+    } catch {
+      toast.error('Απέτυχε ξανά — δοκίμασε αργότερα');
+    } finally {
+      setRetrying(false);
+    }
+  };
+
+  return (
+    <Shell icon={<AlertTriangle className="size-4 text-destructive" />} label="Αποτυχία αποθήκευσης" title={input?.title}>
+      <p className="px-3 pt-2 text-xs text-destructive">
+        {out?.error || part.errorText || 'Η σημείωση δεν αποθηκεύτηκε.'}
+      </p>
+      <div className="flex justify-end gap-1.5 px-3 pb-2 pt-1.5">
+        <Button variant="outline" size="sm" disabled={retrying || !input?.content} onClick={retry}>
+          {retrying ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCcw className="size-3.5" />}
+          Δοκίμασε ξανά
         </Button>
       </div>
     </Shell>
@@ -119,11 +178,14 @@ interface EditOutput {
 }
 
 function EditProposalCard({ part }: { part: ToolPart }) {
+  const id = part.toolCallId;
   const { fetchNotes } = useNotes();
-  const [status, setStatus] = useState<'idle' | 'applying' | 'applied' | 'discarded'>('idle');
-  const out = part.output as EditOutput | undefined;
+  const out = resolveOutput<EditOutput>(part);
+  const [status, setStatus] = useState<'idle' | 'applying' | 'applied' | 'discarded'>(
+    () => (id && editStatusCache.get(id)) || 'idle'
+  );
 
-  if (part.state === 'output-error') return <ErrorCard label="Επεξεργασία σημείωσης" text={part.errorText} />;
+  if (part.state === 'output-error' && !out) return <ErrorCard label="Επεξεργασία σημείωσης" text={part.errorText} />;
   if (!out) return <Running icon={<FilePen className="size-4" />} label="Ετοιμασία αλλαγής…" />;
   if (out.found === false)
     return <ErrorCard label="Επεξεργασία σημείωσης" text="Η σημείωση δεν βρέθηκε." />;
@@ -139,6 +201,7 @@ function EditProposalCard({ part }: { part: ToolPart }) {
         title: out.title,
         remindAt: out.remindAt || '',
       });
+      if (id) editStatusCache.set(id, 'applied');
       setStatus('applied');
       toast.success('Η σημείωση ενημερώθηκε');
       fetchNotes();
@@ -146,6 +209,11 @@ function EditProposalCard({ part }: { part: ToolPart }) {
       setStatus('idle');
       toast.error('Αποτυχία ενημέρωσης');
     }
+  };
+
+  const discard = () => {
+    if (id) editStatusCache.set(id, 'discarded');
+    setStatus('discarded');
   };
 
   return (
@@ -173,7 +241,7 @@ function EditProposalCard({ part }: { part: ToolPart }) {
           <span className="text-xs text-muted-foreground">Ακυρώθηκε</span>
         ) : (
           <>
-            <Button variant="ghost" size="sm" disabled={status === 'applying'} onClick={() => setStatus('discarded')}>
+            <Button variant="ghost" size="sm" disabled={status === 'applying'} onClick={discard}>
               <X className="size-3.5" />
               Ακύρωση
             </Button>
@@ -197,9 +265,9 @@ interface DraftOutput {
 
 function DraftNoteCard({ part }: { part: ToolPart }) {
   const { openWithDraft } = useNoteEditor();
-  const out = part.output as DraftOutput | undefined;
+  const out = resolveOutput<DraftOutput>(part);
 
-  if (part.state === 'output-error') return <ErrorCard label="Πρόχειρη σημείωση" text={part.errorText} />;
+  if (part.state === 'output-error' && !out) return <ErrorCard label="Πρόχειρη σημείωση" text={part.errorText} />;
   if (!out?.openedInEditor) return <Running icon={<NotebookPen className="size-4" />} label="Ετοιμασία προσχεδίου…" />;
 
   return (
