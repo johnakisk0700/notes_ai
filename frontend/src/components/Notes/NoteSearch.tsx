@@ -1,10 +1,9 @@
 import { useNotes } from '@/context/NotesContext';
 import { type ComponentProps } from 'react';
 import { Input } from '../ui/input';
+import { cn } from '@/lib/utils';
 
-interface NoteSearchProps {}
-
-export const NoteSearch = ({ ...props }: NoteSearchProps & ComponentProps<typeof Input>) => {
+export const NoteSearch = ({ className, ...props }: ComponentProps<typeof Input>) => {
   const { handleChangeSearch, searchQuery } = useNotes();
   return (
     <Input
@@ -12,7 +11,9 @@ export const NoteSearch = ({ ...props }: NoteSearchProps & ComponentProps<typeof
       placeholder="Search through your notes"
       onChange={e => handleChangeSearch(e.target.value)}
       value={searchQuery}
-      className="h-10"
+      // Transparent so it blends into the frosted search bar / paper, instead of painting the
+      // Input's default dark fill (dark:bg-input/30) as a separate block on the page.
+      className={cn('h-10 bg-transparent dark:bg-transparent', className)}
       {...props}
     />
   );

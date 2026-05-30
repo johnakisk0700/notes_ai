@@ -21,22 +21,19 @@ const NotesList: React.FC = () => {
       toast.error(t('failed_deletion') + 'note.');
     }
   };
+
   return (
-    <div className="flex w-full shrink-0 flex-col pb-24 pt-14">
-      {/* Search sticks just under the floating title masthead (h-14). A frosted layer
-          (semi-transparent paper + backdrop-blur) BLURS the notes scrolling up behind it
-          instead of hiding them behind a solid dark block; the notebook margin line continues
-          across it. Tune the mask via the bg opacity / blur strength. */}
-      <div className="nb-margin-rule sticky top-14 z-10 backdrop-blur-md">
-        <div className="mx-auto w-full max-w-7xl px-3 pt-2 pb-2 md:px-1 md:pl-11">
-          <NoteSearch className="h-9 bg-background dark:bg-background" />
-        </div>
+    <div className="flex w-full flex-col">
+      {/* Search sticks just below the floating toggle (top-14) as notes scroll under it. The strip
+          uses the same paper fill (.nb-paper-bg) so it masks the notes without reading as a separate
+          block; z-10 keeps it above the cards that follow it in the DOM. */}
+      <div className="nb-paper-bg sticky top-14 z-10 mb-3 -mx-4 px-4 py-2 md:-mx-6 md:px-6">
+        <NoteSearch />
       </div>
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-2 px-3 md:px-1 md:pl-11">
+      <div className="flex w-full flex-col gap-2">
         {filteredNotes?.map(note => (
           <NoteComponent key={note.id} note={note} handleDelete={handleDelete} />
         ))}
-        <div className="my-20"></div>
       </div>
     </div>
   );

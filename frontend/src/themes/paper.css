@@ -1,0 +1,78 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   Theme: "paper" — soft white / near-black, fully neutral.
+
+   ── How theme files work (this is the canonical example) ────────────────────
+   A theme is a self-contained extension of the base tokens in index.css. It only
+   re-declares the custom properties it wants to change; anything it leaves out
+   (e.g. --highlight, --destructive, --chart-*) falls back to the base :root/.dark.
+
+   Two blocks, one per mode. The selectors are deliberately more specific than the
+   base (:root / .dark are specificity 0,1,0; these are 0,2,1), so a theme always
+   wins regardless of @import order, and the :not(.dark) / .dark pair is mutually
+   exclusive so light values never leak into dark mode.
+
+     html[data-theme="<name>"]:not(.dark) { … light … }
+     html[data-theme="<name>"].dark       { … dark  … }
+
+   To add a theme: copy this file, rename, retune the tokens, then (1) @import it in
+   index.css and (2) register its name in ThemeProvider's PALETTES. That's it.
+   ──────────────────────────────────────────────────────────────────────── */
+
+html[data-theme='paper']:not(.dark) {
+  --background: oklch(0.988 0 0); /* soft white — a hair off pure, no glare */
+  --foreground: oklch(0.23 0 0); /* near-black ink */
+  --card: oklch(1 0 0); /* pure-white card lifts a touch off the paper */
+  --card-foreground: oklch(0.23 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.23 0 0);
+  /* monochrome: the ink accent is charcoal, so the binder is the only hue */
+  --primary: oklch(0.28 0 0);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.965 0 0);
+  --secondary-foreground: oklch(0.27 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.47 0 0);
+  --accent: oklch(0.955 0 0);
+  --accent-foreground: oklch(0.27 0 0);
+  --border: oklch(0.905 0 0);
+  --input: oklch(0.925 0 0);
+  --ring: oklch(0.28 0 0);
+  --sidebar: oklch(0.978 0 0);
+  --sidebar-foreground: oklch(0.23 0 0);
+  --sidebar-primary: oklch(0.28 0 0);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.95 0 0);
+  --sidebar-accent-foreground: oklch(0.27 0 0);
+  --sidebar-border: oklch(0.9 0 0);
+  --sidebar-ring: oklch(0.28 0 0);
+  --nb-grain: var(--nb-fiber); /* fiber tooth instead of the warm fractal grain */
+}
+
+html[data-theme='paper'].dark {
+  --background: oklch(0.165 0 0); /* near-black — softer than pure, no halation */
+  --foreground: oklch(0.92 0 0);
+  --card: oklch(0.2 0 0);
+  --card-foreground: oklch(0.92 0 0);
+  --popover: oklch(0.2 0 0);
+  --popover-foreground: oklch(0.92 0 0);
+  --primary: oklch(0.9 0 0);
+  --primary-foreground: oklch(0.2 0 0);
+  --secondary: oklch(0.25 0 0);
+  --secondary-foreground: oklch(0.92 0 0);
+  --muted: oklch(0.23 0 0);
+  --muted-foreground: oklch(0.64 0 0);
+  --accent: oklch(0.28 0 0);
+  --accent-foreground: oklch(0.92 0 0);
+  --border: oklch(0.28 0 0);
+  --input: oklch(0.26 0 0);
+  --ring: oklch(0.85 0 0);
+  --sidebar: oklch(0.14 0 0);
+  --sidebar-foreground: oklch(0.9 0 0);
+  --sidebar-primary: oklch(0.9 0 0);
+  --sidebar-primary-foreground: oklch(0.2 0 0);
+  --sidebar-accent: oklch(0.26 0 0);
+  --sidebar-accent-foreground: oklch(0.9 0 0);
+  --sidebar-border: oklch(0.26 0 0);
+  --sidebar-ring: oklch(0.85 0 0);
+  --nb-grain: var(--nb-fiber);
+}

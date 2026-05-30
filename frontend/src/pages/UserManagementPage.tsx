@@ -11,6 +11,7 @@ import { ShieldUser, Trash, UserIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { Page } from '@/components/Common/Page';
 
 interface UserProfile {
   profile: Profile;
@@ -109,7 +110,7 @@ export const UserManagementPage = () => {
   }
 
   return (
-    <div className="h-[calc(100%-3.5rem)] pb-8 overflow-auto">
+    <Page width="wide">
       <Table>
         <TableCaption>{t('user_management')}</TableCaption>
         <TableHeader>
@@ -195,6 +196,6 @@ export const UserManagementPage = () => {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </Page>
   );
 };

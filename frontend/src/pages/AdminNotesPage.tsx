@@ -9,6 +9,7 @@ import type { Tefteri } from '@shared/db/schema/tefteri';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { Page } from '@/components/Common/Page';
 
 interface GroupedNotes {
   [key: string]: Note[];
@@ -89,7 +90,7 @@ const AdminNotes: React.FC = () => {
   };
 
   return (
-    <div className="h-[100dvh] w-full overflow-y-scroll hide-scrollbar">
+    <Page width="full">
       {Object.entries(groupedNotes).map(([userIdentifier, notes]) => (
         <AdminNotesList key={userIdentifier} userIdentifier={userIdentifier} notes={notes} onDelete={setNoteToDelete} />
       ))}
@@ -110,7 +111,7 @@ const AdminNotes: React.FC = () => {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </Page>
   );
 };
 

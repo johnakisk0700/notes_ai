@@ -1,0 +1,63 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   Theme: "warm" — near-white paper with a whisper of warmth, fountain-pen ink
+   kept as the accent. A gentle bridge from the classic ecru toward white.
+   See paper.css for how theme files work.
+   ──────────────────────────────────────────────────────────────────────── */
+
+html[data-theme='warm']:not(.dark) {
+  --background: oklch(0.985 0.006 84.59); /* faint warm white */
+  --foreground: oklch(0.25 0.012 264); /* near-black, faintly cool */
+  --card: oklch(0.995 0.004 84.59);
+  --card-foreground: oklch(0.25 0.012 264);
+  --popover: oklch(0.995 0.004 84.59);
+  --popover-foreground: oklch(0.25 0.012 264);
+  --primary: oklch(0.4 0.09 256); /* fountain-pen ink kept as the accent */
+  --primary-foreground: oklch(0.99 0.005 84.59);
+  --secondary: oklch(0.95 0.008 84.59);
+  --secondary-foreground: oklch(0.28 0.012 264);
+  --muted: oklch(0.955 0.008 84.59);
+  --muted-foreground: oklch(0.48 0.01 264);
+  --accent: oklch(0.94 0.01 84.59);
+  --accent-foreground: oklch(0.28 0.012 264);
+  --border: oklch(0.9 0.008 84.59);
+  --input: oklch(0.92 0.008 84.59);
+  --ring: oklch(0.4 0.09 256);
+  --sidebar: oklch(0.965 0.008 84.59);
+  --sidebar-foreground: oklch(0.25 0.012 264);
+  --sidebar-primary: oklch(0.4 0.09 256);
+  --sidebar-primary-foreground: oklch(0.99 0.005 84.59);
+  --sidebar-accent: oklch(0.93 0.01 84.59);
+  --sidebar-accent-foreground: oklch(0.28 0.012 264);
+  --sidebar-border: oklch(0.9 0.008 84.59);
+  --sidebar-ring: oklch(0.4 0.09 256);
+  --nb-grain: var(--nb-fiber);
+}
+
+html[data-theme='warm'].dark {
+  --background: oklch(0.17 0.01 264);
+  --foreground: oklch(0.91 0.008 84.59);
+  --card: oklch(0.205 0.012 264);
+  --card-foreground: oklch(0.91 0.008 84.59);
+  --popover: oklch(0.205 0.012 264);
+  --popover-foreground: oklch(0.91 0.008 84.59);
+  --primary: oklch(0.72 0.1 256);
+  --primary-foreground: oklch(0.18 0.02 264);
+  --secondary: oklch(0.26 0.012 264);
+  --secondary-foreground: oklch(0.91 0.008 84.59);
+  --muted: oklch(0.24 0.01 264);
+  --muted-foreground: oklch(0.64 0.012 264);
+  --accent: oklch(0.29 0.013 264);
+  --accent-foreground: oklch(0.91 0.008 84.59);
+  --border: oklch(0.29 0.012 264);
+  --input: oklch(0.26 0.012 264);
+  --ring: oklch(0.72 0.1 256);
+  --sidebar: oklch(0.15 0.01 264);
+  --sidebar-foreground: oklch(0.9 0.008 84.59);
+  --sidebar-primary: oklch(0.72 0.1 256);
+  --sidebar-primary-foreground: oklch(0.18 0.02 264);
+  --sidebar-accent: oklch(0.27 0.013 264);
+  --sidebar-accent-foreground: oklch(0.9 0.008 84.59);
+  --sidebar-border: oklch(0.27 0.012 264);
+  --sidebar-ring: oklch(0.72 0.1 256);
+  --nb-grain: var(--nb-fiber);
+}

@@ -7,7 +7,8 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FlagGR } from '@/assets/flags/FlagGR';
 import { FlagUK } from '@/assets/flags/FlagUS';
-import { PageRule } from '@/components/Common/PageRule';
+import { PALETTES, useTheme } from '@/context/ThemeContext/ThemeProvider';
+import { Page } from '@/components/Common/Page';
 
 const langs = [
   {
@@ -26,13 +27,18 @@ export const SettingsPage = () => {
   const { t } = useTranslation();
 
   return (
-    <div className="h-full w-full overflow-y-scroll hide-scrollbar max-w-5xl mx-auto px-1">
-      <PageRule label={t('settings_header')} />
-      <div className="flex justify-between items-center">
-        <p className="text-sm">{t('select_lang')}</p>
-        <LanguageSelector />
+    <Page width="prose" title={t('settings_header')}>
+      <div className="flex flex-col gap-3">
+        <div className="flex justify-between items-center">
+          <p className="text-sm">{t('select_lang')}</p>
+          <LanguageSelector />
+        </div>
+        <div className="flex justify-between items-center">
+          <p className="text-sm">{t('select_theme')}</p>
+          <ThemeSelector />
+        </div>
       </div>
-    </div>
+    </Page>
   );
 };
 
@@ -71,6 +77,45 @@ const LanguageSelector = () => {
                   {lang.flag}
                   {lang.label}
                   <CheckIcon className={cn('mr-2 h-4 w-4', value === lang.value ? 'opacity-100' : 'opacity-0')} />
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+};
+
+const ThemeSelector = () => {
+  const { t } = useTranslation();
+  const { palette, setPalette } = useTheme();
+  const [open, setOpen] = useState(false);
+  const current = PALETTES.find(p => p.value === palette);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" role="combobox" aria-expanded={open} className="w-[200px] justify-between">
+          {current?.label ?? t('select_theme')}
+          <ChevronsUpDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[200px] p-0">
+        <Command>
+          <CommandList>
+            <CommandGroup>
+              {PALETTES.map(p => (
+                <CommandItem
+                  key={p.value}
+                  value={p.value}
+                  onSelect={() => {
+                    setPalette(p.value);
+                    setOpen(false);
+                  }}
+                >
+                  {p.label}
+                  <CheckIcon className={cn('ml-auto h-4 w-4', palette === p.value ? 'opacity-100' : 'opacity-0')} />
                 </CommandItem>
               ))}
             </CommandGroup>

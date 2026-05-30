@@ -95,8 +95,8 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="gap-0 p-2 md:pr-4">
-        {/* Title row sized so its center matches the main header's open/close
-            toggle; the controls line up across the sidebar/page edge. */}
+        {/* Title row roughly level with the floating sidebar toggle, so the controls
+            sit at a similar height across the sidebar/page edge. */}
         <div className="mb-2 flex h-10 items-center justify-between px-1">
           <div className="font-serif text-xl tracking-tight">Mneme</div>
           <Button variant="ghost" size="icon" className="size-7 text-muted-foreground" asChild>

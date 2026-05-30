@@ -1,10 +1,12 @@
 import NotesList from '@/components/Notes/NotesList';
-import { cn } from '@/lib/utils';
+import { Page } from '@/components/Common/Page';
+import { useTranslation } from 'react-i18next';
 
 export const NotesPage = () => {
+  const { t } = useTranslation();
   return (
-    <div className={cn('nb-paper h-full w-full overflow-y-scroll hide-scrollbar')}>
+    <Page width="full" title={t('personal_notes')}>
       <NotesList />
-    </div>
+    </Page>
   );
 };

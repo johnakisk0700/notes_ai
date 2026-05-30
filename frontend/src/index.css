@@ -1,6 +1,13 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
+/* Theme palettes — each is a self-contained extension that overrides the base tokens
+   under html[data-theme="<name>"]. Add a theme: drop a file in themes/, @import it
+   here, and register its name in ThemeProvider's PALETTES. See docs/frontend.md → Theming. */
+@import './themes/paper.css';
+@import './themes/stark.css';
+@import './themes/warm.css';
+
 @custom-variant dark (&:is(.dark *));
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -18,9 +25,9 @@
   /* warm paper */
   --background: oklch(0.9647 0.0118 84.59);
   --foreground: oklch(0.32 0.025 264);
-  /* notebook left-margin rule — shared by the ruled paper and the masthead that
-     continues it across the top; nulled on mobile where the page is full-bleed */
-  --nb-margin: color-mix(in srgb, var(--foreground) 6%, transparent);
+  /* spiral binder wire colour — graphite by default (ink mixed toward the paper).
+     Tokenised so a future user setting can recolour the binding via one property. */
+  --nb-binder: color-mix(in srgb, var(--foreground) 25%, var(--background));
   /* paper grain — desaturated fractal noise, CONTRAST-COMPRESSED and centred on
      mid-grey (feComponentTransfer: small slope, intercept ≈ (1-slope)/2) with
      forced-opaque alpha, then blended (soft-light) into the page + sidebar
@@ -31,6 +38,10 @@
      is finer and fainter (a quieter, different "cover stock"). */
   --nb-grain: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='140'%20height='140'%3E%3Cfilter%20id='nbg'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.6'%20numOctaves='3'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='saturate'%20values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR%20type='linear'%20slope='0.3'%20intercept='0.34'/%3E%3CfeFuncG%20type='linear'%20slope='0.3'%20intercept='0.34'/%3E%3CfeFuncB%20type='linear'%20slope='0.3'%20intercept='0.34'/%3E%3CfeFuncA%20type='linear'%20slope='0'%20intercept='1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23nbg)'/%3E%3C/svg%3E");
   --nb-grain-sidebar: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='120'%20height='120'%3E%3Cfilter%20id='nbgs'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.85'%20numOctaves='2'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='saturate'%20values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR%20type='linear'%20slope='0.18'%20intercept='0.41'/%3E%3CfeFuncG%20type='linear'%20slope='0.18'%20intercept='0.41'/%3E%3CfeFuncB%20type='linear'%20slope='0.18'%20intercept='0.41'/%3E%3CfeFuncA%20type='linear'%20slope='0'%20intercept='1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23nbgs)'/%3E%3C/svg%3E");
+  /* paper fibre — anisotropic turbulence stretched into faint vertical laid-lines;
+     tone-neutral (centred on mid-grey) so it reads on white or black paper via
+     soft-light. The white themes opt in with --nb-grain: var(--nb-fiber). */
+  --nb-fiber: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='160'%20height='200'%3E%3Cfilter%20id='nbf'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.009%200.45'%20numOctaves='4'%20seed='11'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='saturate'%20values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR%20type='linear'%20slope='0.26'%20intercept='0.37'/%3E%3CfeFuncG%20type='linear'%20slope='0.26'%20intercept='0.37'/%3E%3CfeFuncB%20type='linear'%20slope='0.26'%20intercept='0.37'/%3E%3CfeFuncA%20type='linear'%20slope='0'%20intercept='1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23nbf)'/%3E%3C/svg%3E");
   --card: oklch(0.984 0.009 84.59);
   --card-foreground: oklch(0.32 0.025 264);
   --popover: oklch(0.984 0.009 84.59);
@@ -589,12 +600,32 @@ div:has(> .tiptap) {
 .dark .nb-page {
   box-shadow: -4px 0 10px -4px rgb(0 0 0 / 0.42);
 }
+
+/* A strip of the SAME paper as .nb-page (its --background + the per-theme grain/fibre), minus the
+   sheet's shadow/positioning — for opaque elements that must read as part of the paper rather than a
+   separate block, e.g. the sticky notes search masking notes scrolling under it. A flat tinted fill
+   (bg-background/80) looked like a separate dark rectangle on the textured paper; this matches it. */
+.nb-paper-bg {
+  background-color: var(--background);
+  background-image: var(--nb-grain);
+  background-size: 140px;
+  background-blend-mode: soft-light;
+}
+
+/* ── Notepad — paper grain on the top sheet ───────────────────────────────────
+   Stacked-page shadows are applied via inline style on the element (inline
+   styles beat Tailwind's shadow-lg utility). This class only adds the grain. */
+.nb-notepad {
+  background-image: var(--nb-grain);
+  background-size: 140px;
+  background-blend-mode: soft-light;
+}
+
 .nb-coil-wire {
   fill: none;
-  /* opaque muted graphite — ink mixed toward the background (not transparent),
-     so the wire is a solid soft grey instead of going see-through */
-  stroke: color-mix(in srgb, var(--foreground) 25%, var(--background));
-  stroke-width: 1.6;
+  /* the binder wire colour — graphite by default, recolourable via --nb-binder */
+  stroke: var(--nb-binder);
+  stroke-width: 2;
   stroke-linecap: round;
 }
 .nb-coil-hole {
@@ -612,31 +643,9 @@ div:has(> .tiptap) {
   background-blend-mode: soft-light;
 }
 
-/* ── Notebook margin line ──────────────────────────────────────────────────────
-   A single faint left-margin rule at a fixed 2.25rem offset — the page is line-less
-   paper (no horizontal ruling), so writing never has to align to a baseline grid.
-   Carried by the paper surfaces (.nb-paper) and the opaque masthead (.nb-margin-rule)
-   alike, so the line runs unbroken to the top instead of being clipped where the
-   masthead's background hides the paper underneath. Low-contrast; tune via --nb-margin. */
-.nb-paper,
-.nb-margin-rule {
-  background-image: linear-gradient(
-    to right,
-    transparent 0,
-    transparent 2.25rem,
-    var(--nb-margin) 2.25rem,
-    var(--nb-margin) calc(2.25rem + 1px),
-    transparent calc(2.25rem + 1px)
-  );
-}
-
-/* Mobile: the page goes full-bleed (no margin indent on search/notes), so drop the
-   margin line everywhere — both .nb-paper and .nb-margin-rule read --nb-margin from here. */
-@media (max-width: 767px) {
-  :root {
-    --nb-margin: transparent;
-  }
-}
+/* The page is line-less paper now — no horizontal ruling and no left margin line.
+   .nb-paper / .nb-margin-rule remain as semantic hooks on the writing surfaces; the
+   paper texture itself comes from .nb-page (--nb-grain) behind them. */
 
 a.active {
   background-color: color-mix(in srgb, var(--color-primary) 15%, transparent);

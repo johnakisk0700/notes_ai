@@ -46,8 +46,25 @@ export const NoteEditor = () => {
         aria-description="Note editing content and tools."
         showCloseButton={false}
         onPressClose={() => closeEditor()}
-        className="bg-card min-h-[100dvh] min-w-[100dvw] lg:min-h-[75dvh] lg:min-w-[60dvw] max-h-[100dvh] max-w-[100dvw] overflow-visible rounded-none p-0 shadow-xl transition-none lg:rounded-b-xl lg:rounded-t-none"
+        className="bg-transparent h-[100dvh] min-w-[100dvw] lg:h-[80dvh] lg:min-w-[60dvw] max-h-[100dvh] max-w-[100dvw] overflow-visible rounded-none border-none p-0 shadow-xl transition-none lg:rounded-b-2xl lg:rounded-t-none"
       >
+        {/* Stacked pages — a uniform little stack of paper peeking out behind the top sheet
+            toward the LEFT, so the editor reads as the top sheet of a steno pad. Every leaf
+            shares ONE colour (card lifted ~10% toward white — neutral, no hue smudge — so the
+            stack stays visible on dark themes without reading as multi-toned) and the same
+            even step; the plain dark shadow between them is what reads as separate leaves.
+            z-0 keeps them under the opaque sheet (z-[1]). Desktop only. */}
+        <div className="pointer-events-none absolute inset-0 z-0 hidden rounded-[inherit] lg:block" style={{ backgroundColor: 'color-mix(in srgb, var(--card) 90%, #fff)', transform: 'translate(-20px, 12px)', boxShadow: '-2px 3px 6px -1px rgba(0, 0, 0, 0.16)' }} aria-hidden />
+        <div className="pointer-events-none absolute inset-0 z-0 hidden rounded-[inherit] lg:block" style={{ backgroundColor: 'color-mix(in srgb, var(--card) 90%, #fff)', transform: 'translate(-15px, 9px)', boxShadow: '-2px 3px 6px -1px rgba(0, 0, 0, 0.16)' }} aria-hidden />
+        <div className="pointer-events-none absolute inset-0 z-0 hidden rounded-[inherit] lg:block" style={{ backgroundColor: 'color-mix(in srgb, var(--card) 90%, #fff)', transform: 'translate(-10px, 6px)', boxShadow: '-2px 3px 6px -1px rgba(0, 0, 0, 0.16)' }} aria-hidden />
+        <div className="pointer-events-none absolute inset-0 z-0 hidden rounded-[inherit] lg:block" style={{ backgroundColor: 'color-mix(in srgb, var(--card) 90%, #fff)', transform: 'translate(-5px, 3px)', boxShadow: '-2px 3px 6px -1px rgba(0, 0, 0, 0.16)' }} aria-hidden />
+
+        {/* The top sheet — the page you write on. Opaque card + paper grain; the stack
+            shows only where this sheet doesn't cover it. Carries the background the dialog
+            itself no longer paints, so it must sit above the stack (z-[1]) and below the
+            content (z-10). Present on every breakpoint (mobile is just this full-bleed sheet). */}
+        <div className="nb-notepad bg-card pointer-events-none absolute inset-0 z-[1] rounded-[inherit]" style={{ boxShadow: '-3px 4px 9px -3px rgba(0, 0, 0, 0.22)' }} aria-hidden />
+
         {/* The coil that binds the sheet at its top edge — turns the dialog into a steno pad.
             Only on lg+, where the dialog is a floating sheet; below that it's fullscreen and the
             coil would sit half-clipped against the screen edge (the seam coil hides on mobile too). */}
@@ -254,13 +271,13 @@ const EditorCore = () => {
 
   if (!editor) {
     return (
-      <div className="flex h-full items-center justify-center p-6 text-sm text-muted-foreground">Loading editor…</div>
+      <div className="relative z-10 flex h-full items-center justify-center p-6 text-sm text-muted-foreground">Loading editor…</div>
     );
   }
 
   const isReminderSet = selectedDate && selectedTime;
   return (
-    <div className="relative grid grid-rows-[auto_auto_auto_1fr] gap-3 p-4 pt-6 max-h-[100dvh]" tabIndex={0}>
+    <div className="relative z-10 grid h-full min-h-0 grid-rows-[auto_auto_auto_1fr] gap-3 p-4 pt-6 lg:pt-10" tabIndex={0}>
       {/* Header — reminder controls on the left, primary actions on the right */}
       <DialogHeader>
         <DialogTitle hidden={true}>Note Editor</DialogTitle>
@@ -372,7 +389,7 @@ const EditorCore = () => {
       <NoteToolbar editor={editor} disabled={editorUnavailable} />
 
       {/* Editor surface — ruled paper, so writing sits on notebook lines */}
-      <div className="nb-paper relative max-h-full max-w-full overflow-hidden rounded-lg bg-background/40 text-sm text-foreground/90">
+      <div className="nb-paper relative min-h-0 overflow-hidden rounded-lg bg-background/40 text-sm text-foreground/90">
         <RealtimeAudioRecorder
           onStreamingText={handleStreamingText}
           onFinalText={handleFinalText}
