@@ -14,6 +14,14 @@ export default tseslint.config(
     languageOptions: {
       ecmaVersion: 2020,
       globals: globals.browser,
+      // Pin the root dir per-workspace. Without this, the `tseslint.configs.*`
+      // getters register this config's dir as a *candidate* tsconfigRootDir in a
+      // module-level set; when one ESLint process loads multiple workspace configs
+      // (e.g. the IDE linting the whole monorepo), the set holds >1 candidate and
+      // parsing throws "multiple candidate TSConfigRootDirs are present".
+      parserOptions: {
+        tsconfigRootDir: import.meta.dirname,
+      },
     },
     plugins: {
       'react-hooks': reactHooks,

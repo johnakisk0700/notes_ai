@@ -16,6 +16,12 @@ export default tseslint.config(
       ecmaVersion: 2022,
       sourceType: "module",
       globals: globals.node,
+      // Pin the root dir per-workspace so the `tseslint.configs.*` getters don't
+      // register competing candidate tsconfigRootDirs when one ESLint process
+      // loads several workspace configs (e.g. the IDE linting the whole monorepo).
+      parserOptions: {
+        tsconfigRootDir: import.meta.dirname,
+      },
     },
     plugins: {
       "unused-imports": unusedImports,
