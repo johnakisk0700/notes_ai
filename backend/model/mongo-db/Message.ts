@@ -10,6 +10,14 @@ export interface Message {
   parts?: unknown[];
   // AI SDK message metadata (e.g. { model, costEur, totalTokens }) — drives the per-answer badge.
   metadata?: unknown;
+  // Assistant-turn lifecycle for poll-first durability: a placeholder is written
+  // "streaming" at generation start, grows its `content`, then finalizes "complete"/"error".
+  // Correlated to the live stream by `generationId` (client-minted, also the assistant
+  // message's DTO id). `updatedAt` is a heartbeat (bumped on every partial write) the
+  // read path uses to age out an abandoned "streaming" placeholder. See chat-threads.ts.
+  status?: "streaming" | "complete" | "error";
+  generationId?: string;
+  updatedAt?: number;
   timestamp: number;
 }
 
@@ -32,6 +40,22 @@ export const MessageSchema = new Schema({
   // Mixed: AI SDK message metadata (model + cost), stored and returned as-is.
   metadata: {
     type: Schema.Types.Mixed,
+    default: undefined,
+  },
+  // Assistant-turn lifecycle (poll-first durability). See the Message interface above.
+  status: {
+    type: String,
+    enum: ["streaming", "complete", "error"],
+    default: undefined,
+  },
+  // Client-minted id correlating the persisted placeholder to the live stream + DTO id.
+  generationId: {
+    type: String,
+    default: undefined,
+  },
+  // Heartbeat for read-time staleness of a "streaming" placeholder (ms epoch).
+  updatedAt: {
+    type: Number,
     default: undefined,
   },
   timestamp: {

@@ -4,6 +4,13 @@
 
 export type ThreadMessageRole = "user" | "assistant" | "system";
 
+// Lifecycle of an assistant turn under the poll-first durability model. A turn is
+// persisted as a placeholder ("streaming") at generation start, grows its text, then
+// finalizes ("complete") or fails ("error"). "error" also covers a turn the server
+// abandoned (worker crash / deadline): getThread serves a long-stuck "streaming"
+// placeholder as effective "error" at read time. Absent on legacy/user messages.
+export type ThreadMessageStatus = "streaming" | "complete" | "error";
+
 export interface ThreadMessageDTO {
   id: string;
   role: ThreadMessageRole;
@@ -14,6 +21,9 @@ export interface ThreadMessageDTO {
   parts?: unknown[];
   // AI SDK message metadata (e.g. { model, costEur, totalTokens }) — drives the answer badge.
   metadata?: unknown;
+  // Assistant-turn lifecycle (see ThreadMessageStatus). Drives the client's poll-while-
+  // streaming + "interrupted" affordance. Absent ⇒ treat as a finished message.
+  status?: ThreadMessageStatus;
   timestamp: string;
 }
 

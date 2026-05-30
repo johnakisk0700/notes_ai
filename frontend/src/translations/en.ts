@@ -75,6 +75,7 @@ const enContent = {
   language_select: 'Language Select',
   no_framework_found: 'No framework found.',
   select_language: 'Language',
+  select_theme: 'Theme',
   ask_anything: 'Ask anything...',
   select_lang: 'Select Language',
   // Collapsible label for the model's reasoning disclosure (see ReasoningCard).
@@ -94,6 +95,8 @@ const enContent = {
     'Lexi is sipping her coffee',
     'Lexi is lost in thought',
   ],
+  // Shown under an assistant turn whose generation was cut short (lost connection / timeout).
+  chat_interrupted: 'Answer interrupted — tap retry to continue.',
 };
 
 export const enTranslation = { ...enErrors, ...enSuccesses, ...enMenu, ...enContent };

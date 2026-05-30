@@ -4,6 +4,7 @@
 // grounding. Streamed to the client as an AI SDK UI message stream (text + tool parts),
 // with a transient `data-thread` part carrying a freshly-created thread id.
 import {
+  consumeStream,
   convertToModelMessages,
   createUIMessageStream,
   pipeUIMessageStreamToResponse,
@@ -14,8 +15,16 @@ import {
 } from "ai";
 import type { Request, Response } from "express";
 import { resolveChatModel } from "clients/llm_providers";
-import { DEFAULT_REASONING_EFFORT, supportsReasoning, type ChatModelId, type ReasoningEffort } from "@shared/ai/chatModels";
-import { appendMessage } from "services/chat-threads";
+import {
+  DEFAULT_REASONING_EFFORT,
+  supportsReasoning,
+  type ChatModelId,
+  type ReasoningEffort,
+} from "@shared/ai/chatModels";
+import Decimal from "decimal.js";
+import { failAssistant, finalizeAssistant, updateAssistantPartial } from "services/chat-threads";
+import { resolveTurnStatus } from "./turn-status.js";
+import { historyForModel } from "./message-history.js";
 import { chatImageIdFromUrl, loadChatImage } from "services/chat-images";
 import { logger } from "utils/logger";
 import { getEurPerUsd } from "utils/ecbConversionRates";
@@ -46,6 +55,10 @@ function textFromParts(parts: UIMessage["parts"]): string {
     .map(p => p.text)
     .join("");
 }
+
+// Approximate EUR/USD used only for the cost badge when the live rate can't be fetched — so a
+// Redis hiccup never aborts the turn and drops the answer (see the merge below).
+const FALLBACK_EUR_PER_USD = new Decimal("0.92");
 
 // The tools' names, descriptions and parameter schemas are sent to the model by the
 // SDK (from notes-tools.ts), so the prompt does NOT re-describe them — it carries only
@@ -144,6 +157,43 @@ function imageIdOfCall(call: { input?: unknown; args?: unknown }): string | null
   return typeof src?.imageId === "string" ? src.imageId : null;
 }
 
+// Min gap between partial-text writes to the streaming placeholder. Coalesces token-rate
+// updates into ~1 Mongo write/1.5s so a fast stream doesn't rewrite the embedded message
+// on every token (write amplification), while keeping poll-first catch-up reasonably live.
+const PARTIAL_THROTTLE_MS = 1500;
+
+// A throttled, fire-and-forget writer for the streaming answer's cumulative text. onChunk
+// must not await Mongo (it backpressures token streaming), so we keep the latest text and
+// flush at most once per PARTIAL_THROTTLE_MS. Waits on `persisted` (the placeholder's
+// create) so the first write can't race ahead of the doc. `cancel()` stops a pending flush
+// once the turn settles, so a late partial can't land after the finalize.
+function makePartialWriter(threadId: string, userId: string, generationId: string, persisted?: Promise<void>) {
+  let latest = "";
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let lastWrite = 0;
+  const flush = () => {
+    timer = null;
+    lastWrite = Date.now();
+    const text = latest;
+    (persisted ?? Promise.resolve())
+      .then(() => updateAssistantPartial(threadId, userId, generationId, text))
+      .catch(err => logger.error("RAG partial persist failed:", err));
+  };
+  return {
+    push(text: string): void {
+      latest = text;
+      if (timer) return;
+      timer = setTimeout(flush, Math.max(0, PARTIAL_THROTTLE_MS - (Date.now() - lastWrite)));
+    },
+    cancel(): void {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    },
+  };
+}
+
 export function streamNotesChat(opts: {
   req: Request;
   res: Response;
@@ -153,14 +203,29 @@ export function streamNotesChat(opts: {
   now: string;
   threadId?: string;
   newThreadId?: string;
-  // The in-flight user-turn write (thread create / user-message append). The assistant
-  // turn awaits it before persisting, so its push always targets an existing doc.
+  // Client-minted id for this assistant turn. Correlates the live stream to the persisted
+  // placeholder (created by recordUserTurn) for the throttled partial writes + the finalize.
+  generationId: string;
+  // The in-flight user-turn + placeholder write. The finalize awaits it so it targets an
+  // existing placeholder.
   persisted?: Promise<void>;
   model?: ChatModelId;
   effort?: ReasoningEffort;
 }): void {
-  const { req, res, messages, userIds, userId, now, threadId, newThreadId, persisted, model: selectedModel, effort } =
-    opts;
+  const {
+    req,
+    res,
+    messages,
+    userIds,
+    userId,
+    now,
+    threadId,
+    newThreadId,
+    generationId,
+    persisted,
+    model: selectedModel,
+    effort,
+  } = opts;
   const { model, id: modelId } = resolveChatModel(selectedModel);
   const tools = buildNoteTools({ userIds, userId });
 
@@ -168,6 +233,11 @@ export function streamNotesChat(opts: {
   // timer is cleared the moment the UI stream settles (onFinish/onError), below.
   const turnAbort = new AbortController();
   const turnTimer = setTimeout(() => turnAbort.abort(), TURN_DEADLINE_MS);
+
+  // The throttled partial-text writer for this turn's placeholder. Created in `execute`
+  // once we know there's a thread; the UI-stream onFinish/onError cancel it so a late
+  // partial can't land after the finalize. Hoisted so both can reach it.
+  let partial: ReturnType<typeof makePartialWriter> | null = null;
 
   const stream = createUIMessageStream({
     originalMessages: messages,
@@ -177,10 +247,24 @@ export function streamNotesChat(opts: {
         writer.write({ type: "data-thread", data: { id: newThreadId }, transient: true });
       }
 
-      const modelMessages = await convertToModelMessages(messages);
+      // historyForModel reduces prior assistant turns to their text answer — their persisted
+      // tool/reasoning/step parts are fragile to round-trip and make streamText reject the whole
+      // prompt ("messages do not match the ModelMessage[] schema"), which is what wedged a thread
+      // after an interrupted turn. `ignoreIncompleteToolCalls` is a belt-and-suspenders. See
+      // message-history.ts.
+      const modelMessages = await convertToModelMessages(historyForModel(messages), {
+        ignoreIncompleteToolCalls: true,
+      });
       // Inline the active image's bytes (the provider can't fetch our authed url) and turn
       // older images into id placeholders the model can re-request via view_image.
       const preparedMessages = await inlineChatImages(modelMessages, userId);
+
+      // Persist the streaming answer text to its placeholder, throttled (poll-first live
+      // catch-up). Only when there's a thread to target. `answerText` is the cumulative text
+      // onChunk accumulates and the writer flushes.
+      partial = threadId ? makePartialWriter(threadId, userId, generationId, persisted) : null;
+      let answerText = "";
+
       // Images the model re-requested via view_image — loaded once and re-injected as USER
       // messages each step (images aren't honored on tool messages over this provider).
       const viewedImages = new Map<string, { base64: string; mediaType: string }>();
@@ -191,6 +275,20 @@ export function streamNotesChat(opts: {
         messages: preparedMessages,
         tools,
         stopWhen: stepCountIs(MAX_STEPS),
+        // Accumulate the answer text and throttle a fire-and-forget partial write. The delta
+        // chunk is 'text-delta' with the text on `.text` (verified vs the installed ai@6 type
+        // defs). NEVER await inside onChunk — it backpressures token streaming.
+        onChunk: ({ chunk }) => {
+          if (chunk.type === "text-delta") {
+            answerText += chunk.text;
+            partial?.push(answerText);
+          }
+        },
+        // streamText.onFinish does NOT fire on abort (the TURN_DEADLINE_MS deadline); just
+        // stop the partial writer here. The UI-stream onFinish below does the error finalize
+        // (it has isAborted + the partial responseMessage); read-time staleness is the
+        // ultimate backstop if neither runs (worker crash).
+        onAbort: () => partial?.cancel(),
         // Before each step: (1) re-inject any image the model asked to see again as a user
         // message; (2) on the final allowed step, drop tools so it must produce an answer.
         prepareStep: async ({ stepNumber, steps, messages: stepMessages }) => {
@@ -247,9 +345,17 @@ export function streamNotesChat(opts: {
       // (cost + persistence) still runs to completion.
       result.consumeStream();
 
-      // Pre-fetch the rate once so cost can be derived synchronously in the (sync)
-      // message-metadata callback below.
-      const eurPerUsd = await getEurPerUsd();
+      // Pre-fetch the rate so cost can be derived synchronously in the (sync) message-metadata
+      // callback below. A rate-fetch failure (Redis down / malformed cache) must NEVER abort the
+      // turn — that would reject `execute` before `writer.merge` and drop a generated answer — so
+      // fall back to an approximate rate; only the cost badge is slightly off.
+      let eurPerUsd: Decimal;
+      try {
+        eurPerUsd = await getEurPerUsd();
+      } catch (err) {
+        logger.error("ECB rate fetch failed; using fallback for the cost badge:", err);
+        eurPerUsd = FALLBACK_EUR_PER_USD;
+      }
       writer.merge(
         result.toUIMessageStream({
           // Forward the model's reasoning parts to the UI (when the provider returns them).
@@ -270,28 +376,41 @@ export function streamNotesChat(opts: {
         })
       );
     },
-    // Persist the whole assistant turn — text + tool-call parts — so the thread
-    // re-renders tool steps after a reload. Best-effort (never fails the answer).
-    onFinish: async ({ responseMessage }) => {
+    // Finalize the assistant placeholder — full text + tool-call parts + cost metadata, or an
+    // error status on abort/error — so the thread re-renders after a reload and the poll-first
+    // client stops polling. Best-effort (never fails the answer).
+    onFinish: async ({ responseMessage, isAborted, finishReason }) => {
       clearTimeout(turnTimer); // turn settled — cancel the deadline
+      partial?.cancel();
       if (!threadId || !responseMessage) return;
-      // Wait for the user-turn write (thread create / user-message append) to land first,
-      // so this push targets an existing doc. `persisted` never rejects (best-effort).
+      // Wait for the user-turn + placeholder write to land first, so the finalize targets an
+      // existing placeholder. `persisted` never rejects (best-effort).
       if (persisted) await persisted;
-      appendMessage(threadId, userId, {
-        role: "assistant",
+      const status = resolveTurnStatus({ isAborted, finishReason });
+      finalizeAssistant(threadId, userId, generationId, {
         content: textFromParts(responseMessage.parts),
         parts: responseMessage.parts,
         // model + cost, attached via messageMetadata above — persisted so the badge survives reload.
         metadata: responseMessage.metadata,
-      }).catch(err => logger.error("Thread persistence (assistant message) failed:", err));
+        status,
+      }).catch(err => logger.error("Thread persistence (assistant finalize) failed:", err));
     },
     onError: err => {
       clearTimeout(turnTimer);
+      partial?.cancel();
       logger.error("Agentic chat stream error:", err);
+      // Mark the placeholder errored (status-only, keeps any partial text) so the client stops
+      // polling and shows an interrupted state instead of spinning to the staleness cutoff.
+      if (threadId) {
+        failAssistant(threadId, userId, generationId).catch(e =>
+          logger.error("Thread persistence (assistant error) failed:", e)
+        );
+      }
       return err instanceof Error ? err.message : String(err);
     },
   });
 
-  pipeUIMessageStreamToResponse({ response: res, stream });
+  // Pass consumeSseStream so the UI-stream onFinish fires (with isAborted) even when the turn
+  // aborts / the client disconnects — without it that callback is skipped on abort.
+  pipeUIMessageStreamToResponse({ response: res, stream, consumeSseStream: consumeStream });
 }

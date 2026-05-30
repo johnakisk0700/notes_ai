@@ -3,6 +3,7 @@ import type { AppUIMessage } from '@/context/StreamChatContext';
 import { useAuthedImageUrl } from '@/integrations/useAuthedImageUrl';
 import { Check, CopyIcon, EditIcon, ImageOff, RefreshCcw, X } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../ui/button';
 import { CustomMarkdown } from './CustomMarkdown';
 import { NotePreviewCard } from './NotePreviewCard';
@@ -70,6 +71,9 @@ const ChatImageThumb = ({ url, alt }: { url: string; alt?: string }) => {
 interface AnswerMeta {
   model?: string;
   costEur?: number;
+  // Lifecycle of a turn caught via polling (poll-first durability), folded into metadata when
+  // the message comes from the persisted thread. Absent on a live-streaming message.
+  status?: 'streaming' | 'complete' | 'error';
 }
 
 /** "qwen3.6-plus · €0.0018" from the message metadata, or null if unavailable. */
@@ -79,6 +83,11 @@ function answerBadge(metadata: unknown): string | null {
   const model = m.model.includes('/') ? m.model.split('/').pop()! : m.model;
   const cost = typeof m.costEur === 'number' ? ` · €${m.costEur.toFixed(4)}` : '';
   return `${model}${cost}`;
+}
+
+/** Turn lifecycle from the message metadata (poll-first durability), or undefined. */
+function statusOf(metadata: unknown): AnswerMeta['status'] {
+  return (metadata as AnswerMeta | undefined)?.status;
 }
 
 export const ChatMessage = ({ message, style, thinking }: ChatMessageProps) => {
@@ -161,6 +170,12 @@ const AIMessage = ({
   style?: React.CSSProperties;
   thinking?: boolean;
 }) => {
+  const { t } = useTranslation();
+  // A turn caught mid-generation via polling (no live stream): keep the indicator going.
+  // One that was cut short (lost connection / timeout) shows an interrupted note + retry.
+  const status = statusOf(message.metadata);
+  const streaming = thinking || status === 'streaming';
+  const interrupted = !streaming && status === 'error';
   return (
     <div style={style} id={message.id}>
       {message.parts.map((part, i) => {
@@ -185,11 +200,15 @@ const AIMessage = ({
         }
         return null;
       })}
-      {/* While still thinking there's nothing to copy/retry yet — show the indicator instead. */}
-      {thinking ? (
+      {/* Still generating (live, or caught mid-generation by a poll) → indicator. Otherwise the
+          copy/retry actions, prefixed by an interrupted note when the turn was cut short. */}
+      {streaming ? (
         <ThinkingIndicator />
       ) : (
-        <AiMessageActions content={textOf(message)} messageId={message.id} metadata={message.metadata} />
+        <>
+          {interrupted ? <p className="mt-1.5 text-xs text-muted-foreground/70">{t('chat_interrupted')}</p> : null}
+          <AiMessageActions content={textOf(message)} messageId={message.id} metadata={message.metadata} />
+        </>
       )}
     </div>
   );

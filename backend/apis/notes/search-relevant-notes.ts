@@ -4,6 +4,7 @@
 // here; the streamed answer + cost are handled in services/ai/agentic-rag.ts.
 import type { Request, Response } from "express";
 import type { UIMessage } from "ai";
+import mongoose from "mongoose";
 import { recordUserTurn } from "services/chat-threads";
 import { streamNotesChat } from "services/ai/agentic-rag";
 import { isChatModelId, isReasoningEffort } from "@shared/ai/chatModels";
@@ -12,14 +13,25 @@ interface SearchNotesBody {
   messages?: UIMessage[];
   selectedUsers?: string[];
   now?: string;
-  // Existing thread to append to. Omitted for a new chat's first message, in which case
-  // the server creates one and streams its id back via a `data-thread` part.
+  // The thread to write to — client-minted for a new chat (so it can poll for the answer
+  // before the first byte arrives), or an existing thread id. Omitted only by an old client,
+  // in which case the server mints one and echoes it via a `data-thread` part.
   threadId?: string;
+  // Client-minted id (24-hex) for the assistant turn this message starts. Correlates the
+  // live stream to the persisted placeholder so the answer survives a dropped connection.
+  // Server mints a fallback when missing/invalid.
+  generationId?: string;
+  // Edit/retry only: keep just the first N persisted messages before appending this turn, so the
+  // discarded tail is durably removed (not merely hidden client-side). Validated as a non-negative
+  // integer below; ignored otherwise.
+  truncateToCount?: number;
   // Chat model the user picked in the UI; validated against the allowlist below.
   model?: string;
   // Reasoning effort (low/medium/high); validated below.
   effort?: string;
 }
+
+const OBJECT_ID_RE = /^[a-f0-9]{24}$/i;
 
 /** The text of the latest user message in an AI SDK UI message list. */
 function lastUserText(messages: UIMessage[]): string {
@@ -49,27 +61,54 @@ function lastUserPartsWithFile(messages: UIMessage[]): UIMessage["parts"] | unde
 }
 
 async function searchRelevantNotes(req: Request, res: Response) {
-  const { messages = [], selectedUsers, now, threadId, model: rawModel, effort: rawEffort }: SearchNotesBody = req.body;
+  const {
+    messages = [],
+    selectedUsers,
+    now,
+    threadId,
+    generationId: rawGenerationId,
+    truncateToCount: rawTruncate,
+    model: rawModel,
+    effort: rawEffort,
+  }: SearchNotesBody = req.body;
   const model = isChatModelId(rawModel) ? rawModel : undefined;
   const effort = isReasoningEffort(rawEffort) ? rawEffort : undefined;
   const userId = req.user.id;
   const userIds = selectedUsers && selectedUsers.length ? [userId, ...selectedUsers] : [userId];
 
+  // The assistant turn's id, correlating the live stream to its persisted placeholder.
+  // Client-minted so it can poll before the first byte; server mints a fallback otherwise.
+  const generationId =
+    typeof rawGenerationId === "string" && OBJECT_ID_RE.test(rawGenerationId)
+      ? rawGenerationId
+      : String(new mongoose.Types.ObjectId());
+
+  // Edit/retry truncation point — only honor a sane non-negative integer.
+  const truncateToCount =
+    typeof rawTruncate === "number" && Number.isInteger(rawTruncate) && rawTruncate >= 0 ? rawTruncate : undefined;
+
   const userText = lastUserText(messages);
   const userParts = lastUserPartsWithFile(messages);
 
-  // Record the user's turn off the response path: the thread id is generated locally
-  // (so a new chat's id streams back immediately) and the write runs in the background,
-  // so a slow or down Mongo never delays the first token. `persisted` lets the assistant
-  // turn wait for this write to land before appending to the thread. An image-only turn has
-  // no text but still has parts, so fire on either — else it would skip thread creation.
+  // Record the user's turn + the assistant placeholder off the response path: the thread id
+  // is client-supplied (so the client can poll right away) and the write runs in the
+  // background, so a slow or down Mongo never delays the first token. `persisted` lets the
+  // finalize wait for this write to land. An image-only turn has no text but still has parts,
+  // so fire on either — else it would skip thread/placeholder creation.
   let activeThreadId = typeof threadId === "string" && threadId ? threadId : undefined;
   let newThreadId: string | undefined;
   let persisted: Promise<void> | undefined;
   if (userText || userParts) {
-    const turn = recordUserTurn({ threadId: activeThreadId, userId, text: userText, parts: userParts });
+    const turn = recordUserTurn({
+      threadId: activeThreadId,
+      userId,
+      text: userText,
+      parts: userParts,
+      generationId,
+      truncateToCount,
+    });
     activeThreadId = turn.threadId;
-    if (turn.isNew) newThreadId = turn.threadId;
+    if (turn.serverMinted) newThreadId = turn.threadId;
     persisted = turn.persisted;
   }
 
@@ -82,6 +121,7 @@ async function searchRelevantNotes(req: Request, res: Response) {
     now: now ?? new Date().toISOString(),
     threadId: activeThreadId,
     newThreadId,
+    generationId,
     persisted,
     model,
     effort,

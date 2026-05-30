@@ -75,6 +75,7 @@ const elContent = {
   language_select: 'Επιλογή Γλώσσας',
   no_framework_found: 'Δεν βρέθηκε framework.',
   select_language: 'Γλώσσα',
+  select_theme: 'Θέμα',
   ask_anything: 'Ρώτα οτιδήποτε...',
   select_lang: 'Επιλογή γλώσσας',
   // Collapsible label for the model's reasoning disclosure (see ReasoningCard).
@@ -94,6 +95,8 @@ const elContent = {
     'Η Λέξι ρουφάει μια γουλιά καφέ',
     'Η Λέξι συλλογιέται βαθιά',
   ],
+  // Shown under an assistant turn whose generation was cut short (lost connection / timeout).
+  chat_interrupted: 'Η απάντηση διακόπηκε — πάτησε επανάληψη για να συνεχίσει.',
 };
 
 export const elTranslation = { ...elErrors, ...elSuccesses, ...elMenu, ...elContent };

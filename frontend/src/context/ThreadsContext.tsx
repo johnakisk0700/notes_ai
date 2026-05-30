@@ -1,6 +1,8 @@
 import { fetchThreads, deleteThread as apiDeleteThread } from '@/integrations/threads';
+import { threadKeys } from '@/integrations/threadQueries';
 import type { ThreadSummary } from '@shared';
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { createContext, useCallback, useContext, type ReactNode } from 'react';
 
 interface ThreadsContextType {
   threads: ThreadSummary[];
@@ -10,28 +12,38 @@ interface ThreadsContextType {
 
 const ThreadsContext = createContext<ThreadsContextType | undefined>(undefined);
 
-// Holds the current user's chat thread list for the sidebar. Mounted inside the
-// authed Layout, so it only fetches once a session token is available.
+// Holds the current user's chat thread list for the sidebar, backed by the shared TanStack
+// Query cache (key ['threads']). Mounted inside the authed Layout, so it only fetches once a
+// session token is available. The chat flow invalidates ['threads'] when a turn finishes, so a
+// newly-created thread appears without a manual refresh.
 export function ThreadsProvider({ children }: { children: ReactNode }) {
-  const [threads, setThreads] = useState<ThreadSummary[]>([]);
+  const queryClient = useQueryClient();
+
+  const { data: threads = [] } = useQuery({
+    queryKey: threadKeys.list,
+    queryFn: fetchThreads,
+  });
 
   const refresh = useCallback(async () => {
-    try {
-      setThreads(await fetchThreads());
-    } catch (error) {
-      // Sidebar simply shows no threads if the list can't be loaded.
-      if (import.meta.env.DEV) console.error('Failed to load chat threads:', error);
-    }
-  }, []);
+    await queryClient.invalidateQueries({ queryKey: threadKeys.list });
+  }, [queryClient]);
 
-  const removeThread = useCallback(async (id: string) => {
-    await apiDeleteThread(id);
-    setThreads(prev => prev.filter(t => t.id !== id));
-  }, []);
+  const remove = useMutation({
+    mutationFn: apiDeleteThread,
+    // Optimistically drop the thread from the list + its cached detail; the list query
+    // reconciles on its next fetch.
+    onSuccess: (_data, id) => {
+      queryClient.setQueryData<ThreadSummary[]>(threadKeys.list, prev => prev?.filter(t => t.id !== id));
+      queryClient.removeQueries({ queryKey: threadKeys.detail(id) });
+    },
+  });
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  const removeThread = useCallback(
+    async (id: string) => {
+      await remove.mutateAsync(id);
+    },
+    [remove]
+  );
 
   return <ThreadsContext.Provider value={{ threads, refresh, removeThread }}>{children}</ThreadsContext.Provider>;
 }

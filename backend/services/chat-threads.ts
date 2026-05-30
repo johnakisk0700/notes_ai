@@ -5,7 +5,7 @@
 // (clients/mongoose_client.ts) a down Mongo makes writes reject instantly
 // (callers no-op) and reads return empty here, instead of stalling ~10s.
 import mongoose from "mongoose";
-import type { ThreadDetail, ThreadMessageRole, ThreadSummary } from "@shared";
+import type { ThreadDetail, ThreadMessageStatus, ThreadSummary } from "@shared";
 import { UserThread } from "model/mongo-db/UserThreads";
 import { logger } from "utils/logger";
 import { deleteChatImage, imageIdsFromMessages } from "services/chat-images";
@@ -25,60 +25,176 @@ export function deriveThreadTitle(firstMessage: string): string {
 }
 
 /**
- * Record an incoming user turn WITHOUT blocking the response. The thread id is
- * generated locally — so the caller can stream it back and route the client right
- * away — and the actual write runs in the background, taking Mongo off the chat's
- * critical path so a slow or down Mongo never delays the first token.
+ * Record an incoming user turn WITHOUT blocking the response, and seed the assistant
+ * placeholder for the turn it kicks off. The client supplies the thread id (so it can
+ * poll for the answer before the first byte arrives, even on flaky mobile), and the
+ * write runs in the background — Mongo stays off the chat's critical path so a slow or
+ * down Mongo never delays the first token.
  *
- * Returns the active thread id, whether it was newly created, and `persisted`: the
- * in-flight write, which the assistant turn awaits before appending so its push
- * always targets an existing doc. `persisted` never rejects (the writer logs and
- * swallows) — all thread persistence is best-effort.
+ * Returns the active thread id, `serverMinted` (true only when the client gave no usable
+ * id and we minted a fallback — then the caller echoes it via a `data-thread` part), and
+ * `persisted`: the in-flight write the assistant turn awaits before finalizing. `persisted`
+ * never rejects (the writer logs and swallows) — all thread persistence is best-effort.
  */
-export function recordUserTurn(opts: { threadId?: string; userId: string; text: string; parts?: unknown[] }): {
-  threadId: string;
-  isNew: boolean;
-  persisted: Promise<void>;
-} {
-  const { userId, text, parts } = opts;
-  const existingId = opts.threadId && mongoose.isValidObjectId(opts.threadId) ? opts.threadId : undefined;
+export function recordUserTurn(opts: {
+  threadId?: string;
+  userId: string;
+  text: string;
+  parts?: unknown[];
+  // Client-minted id for the assistant turn this message starts. Persisted on an assistant
+  // placeholder in the SAME write (no ordering race) and surfaced as that message's DTO id,
+  // so the live stream and the polled/persisted state reconcile to one message.
+  generationId: string;
+  // Edit/retry only: keep just the first N persisted messages, then append this turn — so the
+  // discarded tail can't resurface from the source of truth on the next poll. Omitted for a
+  // normal append.
+  truncateToCount?: number;
+}): { threadId: string; serverMinted: boolean; persisted: Promise<void> } {
+  const { userId, text, parts, generationId, truncateToCount } = opts;
+  const provided = opts.threadId && mongoose.isValidObjectId(opts.threadId) ? opts.threadId : undefined;
+  // We can't tell a new client-minted thread from an existing one by the id alone, so a normal
+  // turn is an idempotent upsert. A fallback id is only minted for an old/edge client that sent none.
+  const threadId = provided ?? String(new mongoose.Types.ObjectId());
 
-  if (existingId) {
-    // `parts` carries the user turn's full UIMessage parts (e.g. an attached image
-    // reference) so the thread re-renders the thumbnail after a reload; omitted for plain text.
-    const persisted = appendMessage(existingId, userId, { role: "user", content: text, parts }).catch(err =>
-      logger.error("Thread persistence (user message) failed:", err)
-    );
-    return { threadId: existingId, isNew: false, persisted };
-  }
+  const persisted = upsertUserTurn(threadId, userId, text, parts, generationId, truncateToCount).catch(err =>
+    logger.error("Thread persistence (user turn) failed:", err)
+  );
 
-  // New thread: fold the first user message into the create (one write, no
-  // create→append race), keyed by the locally-generated id we hand back now.
-  const id = new mongoose.Types.ObjectId();
-  const persisted = UserThread.create({
-    _id: id,
-    user_id: userId,
-    title: deriveThreadTitle(text),
-    messages: [{ role: "user", content: text, parts, timestamp: new Date() }],
-  })
-    .then(() => undefined)
-    .catch(err => logger.error("Thread persistence (new thread) failed:", err));
-
-  return { threadId: String(id), isNew: true, persisted };
+  return { threadId, serverMinted: !provided, persisted };
 }
 
-export async function appendMessage(
+/** The assistant placeholder subdoc written at generation start. */
+function assistantPlaceholder(generationId: string, now: Date) {
+  // status "streaming" + a fresh heartbeat; metadata/parts stay empty until finalize.
+  return { role: "assistant", content: "", status: "streaming", generationId, updatedAt: Date.now(), timestamp: now };
+}
+
+// Create-or-append the user message + the assistant placeholder. Folding both into one write
+// removes the placeholder-vs-user ordering race. Two shapes:
+//  • normal: an idempotent upsert keyed on (threadId, generationId) — a new thread is created,
+//    an existing one appended, and a replayed/duplicated POST is a no-op (the generationId guard
+//    blocks a second append; a collision on the existing _id surfaces as E11000, swallowed here).
+//  • edit/retry (truncateToCount set): an atomic pipeline update that keeps the first N messages
+//    and concatenates the new turn — so the discarded tail is durably removed, not just hidden
+//    client-side. Existing thread only (you can't edit a turn that isn't persisted yet); itself
+//    idempotent on replay (re-slicing to the same N + re-appending yields the same array).
+async function upsertUserTurn(
   threadId: string,
   userId: string,
-  // `parts` carries the full AI SDK UIMessage parts (tool calls + text) for assistant
-  // turns; user turns pass `content` only. `metadata` holds the model + cost for the
-  // answer badge. All stored so the thread round-trips.
-  message: { role: ThreadMessageRole; content?: string; parts?: unknown[]; metadata?: unknown }
+  text: string,
+  parts: unknown[] | undefined,
+  generationId: string,
+  truncateToCount?: number
+): Promise<void> {
+  const now = new Date();
+  const userMessage = { role: "user", content: text, parts, timestamp: now };
+  const placeholder = assistantPlaceholder(generationId, now);
+
+  if (typeof truncateToCount === "number" && Number.isInteger(truncateToCount) && truncateToCount >= 0) {
+    await UserThread.updateOne({ _id: threadId, user_id: userId }, [
+      {
+        $set: {
+          messages: { $concatArrays: [{ $slice: ["$messages", truncateToCount] }, [userMessage, placeholder]] },
+        },
+      },
+    ]);
+    return;
+  }
+
+  try {
+    await UserThread.updateOne(
+      { _id: threadId, user_id: userId, "messages.generationId": { $ne: generationId } },
+      {
+        $setOnInsert: { title: deriveThreadTitle(text) },
+        $push: { messages: { $each: [userMessage, placeholder] } },
+      },
+      { upsert: true }
+    );
+  } catch (err) {
+    // A replayed POST whose generationId already exists fails the $ne guard, so the upsert tries
+    // to insert and collides on the existing _id — that duplicate-key error IS the desired no-op.
+    if ((err as { code?: number })?.code !== 11000) throw err;
+  }
+}
+
+// Throttled partial-text write for a streaming assistant placeholder — drives the
+// poll-first live catch-up. Targets the placeholder by generationId AND status:"streaming"
+// so a write that lands after finalize can't clobber the finished answer, and bumps the
+// `updatedAt` heartbeat the staleness rule reads. Best-effort: a dropped partial just means
+// the next poll shows slightly older text. NEVER awaited on the model's hot path (it would
+// add backpressure to token streaming) — see agentic-rag.ts onChunk.
+export async function updateAssistantPartial(
+  threadId: string,
+  userId: string,
+  generationId: string,
+  content: string
 ): Promise<void> {
   if (!mongoose.isValidObjectId(threadId)) return;
   await UserThread.updateOne(
     { _id: threadId, user_id: userId },
-    { $push: { messages: { ...message, timestamp: new Date() } } }
+    { $set: { "messages.$[m].content": content, "messages.$[m].updatedAt": Date.now() } },
+    { arrayFilters: [{ "m.generationId": generationId, "m.status": "streaming" }] }
+  );
+}
+
+// Finalize the assistant placeholder: full text + parts + metadata + terminal status in
+// ONE atomic $set, so a poll never sees status:"complete" without its badge metadata. This
+// is the durable answer, so — unlike the partials — the caller awaits + best-effort logs it.
+// If the placeholder is missing (its create was lost) but the thread exists, append the
+// finished turn instead so the answer still persists.
+export async function finalizeAssistant(
+  threadId: string,
+  userId: string,
+  generationId: string,
+  message: { content: string; parts: unknown[]; metadata: unknown; status: "complete" | "error" }
+): Promise<void> {
+  if (!mongoose.isValidObjectId(threadId)) return;
+  const now = Date.now();
+  const res = await UserThread.updateOne(
+    { _id: threadId, user_id: userId },
+    {
+      $set: {
+        "messages.$[m].content": message.content,
+        "messages.$[m].parts": message.parts,
+        "messages.$[m].metadata": message.metadata,
+        "messages.$[m].status": message.status,
+        "messages.$[m].updatedAt": now,
+      },
+    },
+    { arrayFilters: [{ "m.generationId": generationId }] }
+  );
+  if ((res.modifiedCount ?? 0) > 0) return; // placeholder updated — done
+  if ((res.matchedCount ?? 0) === 0) return; // no such thread (Mongo down / never created) — best-effort lost
+  // Thread exists but the placeholder is gone — append the finished turn so it isn't lost.
+  await UserThread.updateOne(
+    { _id: threadId, user_id: userId },
+    {
+      $push: {
+        messages: {
+          role: "assistant",
+          content: message.content,
+          parts: message.parts,
+          metadata: message.metadata,
+          status: message.status,
+          generationId,
+          updatedAt: now,
+          timestamp: new Date(),
+        },
+      },
+    }
+  );
+}
+
+// Mark a streaming placeholder errored WITHOUT touching its content/parts — used when the
+// stream throws, so any partial text already shown survives while the client stops polling
+// and renders an interrupted state. Guarded on status:"streaming" so it can't override a
+// turn that already finalized.
+export async function failAssistant(threadId: string, userId: string, generationId: string): Promise<void> {
+  if (!mongoose.isValidObjectId(threadId)) return;
+  await UserThread.updateOne(
+    { _id: threadId, user_id: userId },
+    { $set: { "messages.$[m].status": "error", "messages.$[m].updatedAt": Date.now() } },
+    { arrayFilters: [{ "m.generationId": generationId, "m.status": "streaming" }] }
   );
 }
 
@@ -111,7 +227,9 @@ export async function getThread(threadId: string, userId: string): Promise<Threa
   return {
     ...toSummary(doc),
     messages: (doc.messages ?? []).map((m: any) => ({
-      id: String(m._id),
+      // Assistant turns surface their generationId as id, so the live stream and the
+      // polled/persisted state reconcile to the same message; user turns keep their Mongo id.
+      id: m.generationId ? String(m.generationId) : String(m._id),
       role: m.role,
       content: m.content ?? "",
       // Present for assistant turns (tool steps + text); absent for plain user text,
@@ -119,9 +237,32 @@ export async function getThread(threadId: string, userId: string): Promise<Threa
       parts: Array.isArray(m.parts) && m.parts.length ? m.parts : undefined,
       // Model + cost for the answer badge (assistant turns only).
       metadata: m.metadata ?? undefined,
+      // Lifecycle for poll-first durability, with the read-time staleness rule applied.
+      status: effectiveStatus(m),
       timestamp: toIso(m.timestamp),
     })),
   };
+}
+
+// A "streaming" placeholder whose heartbeat (updatedAt) is older than STALE_MS was
+// abandoned — the generating worker crashed or its deadline passed, so no finalize will
+// ever run — and is served as "error". PURE: the read path never writes (concurrent GETs
+// would race the real finalize). STALE_MS sits comfortably above TURN_DEADLINE_MS
+// (agentic-rag.ts, 60s) plus a slow finalize, and a live-but-slow turn keeps its heartbeat
+// fresh (bumped on every partial write), so a healthy turn is never mis-aged.
+export const STALE_MS = 120_000;
+
+export function effectiveStatus(
+  m: { status?: ThreadMessageStatus; updatedAt?: number; timestamp?: unknown },
+  now: number = Date.now()
+): ThreadMessageStatus | undefined {
+  if (m.status !== "streaming") return m.status ?? undefined;
+  const heartbeat = typeof m.updatedAt === "number" ? m.updatedAt : msFromDate(m.timestamp);
+  return now - heartbeat > STALE_MS ? "error" : "streaming";
+}
+
+function msFromDate(value: unknown): number {
+  return value instanceof Date ? value.getTime() : 0;
 }
 
 export async function deleteThread(threadId: string, userId: string): Promise<boolean> {
