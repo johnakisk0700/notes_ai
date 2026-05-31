@@ -6,8 +6,13 @@ import { winesTable } from "@shared/db/schema/wines";
 import { drizzlePg } from "clients/drizzle_postgres_client";
 
 // Seeds the `wines` / `customers` tables (editor autocomplete) from the JSON
-// files the project already uses for Qdrant seeding. Tolerant of shape:
-// accepts arrays of strings or arrays of { name, title }.
+// files the project already uses for Qdrant seeding.
+//   - wines:     `gptNormalizedWines_v2_grouped.json` — each row carries both a
+//                full `product_name` and a `producer`; we seed both (deduped).
+//   - customers: `polites.json` ({ Sheet: [{ name, title }] }). This file holds
+//                customer PII (emails, AFM, addresses) and is intentionally NOT
+//                bundled — drop it in `data/` yourself if you need it; otherwise
+//                customer seeding no-ops.
 // Run: `bun run scripts/seed-wines-customers.ts`
 const DATA_DIR = path.resolve(process.cwd(), "data");
 
@@ -30,7 +35,16 @@ async function seedWines() {
   const raw = readJson("gptNormalizedWines_v2_grouped.json");
   if (!raw) return;
   const items: any[] = Array.isArray(raw) ? raw : (raw.Sheet ?? []);
-  const names = [...new Set(items.map(extractName).filter(Boolean) as string[])];
+  // Seed both the specific bottle (`product_name`) and its maker (`producer`),
+  // so autocomplete matches either granularity.
+  const names = [
+    ...new Set(
+      items
+        .flatMap(w => [w?.product_name, w?.producer])
+        .map(v => (v ?? "").toString().trim())
+        .filter(Boolean),
+    ),
+  ];
   for (const name of names) {
     await drizzlePg.insert(winesTable).values({ name }).onConflictDoNothing();
   }
