@@ -33,7 +33,9 @@ export const ThinkingIndicator = () => {
 
   return (
     <span
-      className="inline-flex items-center gap-1.5 font-mono text-xs text-muted-foreground"
+      // mt-3 gives the "Lexi is…" line room to breathe below the answer/tool cards above it.
+      // flex (not inline-flex) so the top margin reliably renders; w-fit keeps it content-width.
+      className="mt-3 flex w-fit items-center gap-1.5 font-mono text-xs text-muted-foreground"
       role="status"
       // Stable label so screen readers announce the state once, not every rotation.
       aria-label={t('chat_thinking')}

@@ -1,8 +1,8 @@
-import { customersTable } from "@shared/db/schema/customers";
-import { drizzlePg } from "clients/drizzle_postgres_client";
+import { lookupsRepo } from "repositories/lookups";
 
+// Editor "@mention" autocomplete source — the customer name list (shared with the chat's
+// lookup_names tool via repositories/lookups).
 export async function getCustomers(req, res) {
-  const rows = await drizzlePg.select({ name: customersTable.name }).from(customersTable);
-
-  res.status(200).json({ names: rows.map(r => r.name).filter(Boolean) });
+  const names = await lookupsRepo.allNames("customers");
+  res.status(200).json({ names });
 }

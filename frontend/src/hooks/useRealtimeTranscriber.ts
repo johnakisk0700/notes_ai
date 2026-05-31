@@ -101,27 +101,23 @@ const connectToOpenAIRTC = async (
     }
   });
 
-  // Tell OpenAI HOW we want the session to behave
+  // Configure the transcription session once the channel opens (GA Realtime API shape).
   dc.addEventListener('open', () =>
     dc.send(
       JSON.stringify({
-        type: 'transcription_session.update',
+        type: 'session.update',
         session: {
-          input_audio_transcription: {
-            model: 'gpt-4o-transcribe',
-            prompt: '',
-            language: 'el',
+          type: 'transcription',
+          audio: {
+            input: {
+              // gpt-realtime-whisper streams continuously — it rejects turn_detection/VAD.
+              transcription: {
+                model: 'gpt-realtime-whisper',
+                language: 'el',
+                delay: 'minimal', // controllable latency — as real-time as possible
+              },
+            },
           },
-          turn_detection: {
-            type: 'server_vad',
-            prefix_padding_ms: 400,
-            silence_duration_ms: 650,
-          },
-          input_audio_noise_reduction: {
-            type: 'near_field',
-          },
-          // uncomment for more metadata
-          // include: ['item.input_audio_transcription.logprobs'],
         },
       })
     )
@@ -130,7 +126,7 @@ const connectToOpenAIRTC = async (
   // 4. SDP offer/answer
   await pc.setLocalDescription(await pc.createOffer());
 
-  const resp = await fetch('https://api.openai.com/v1/realtime?intent=transcription', {
+  const resp = await fetch('https://api.openai.com/v1/realtime/calls', {
     method: 'POST',
     body: pc.localDescription!.sdp,
     headers: {

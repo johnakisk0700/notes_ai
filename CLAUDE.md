@@ -74,14 +74,15 @@ bun scripts/seed-wines-customers.ts   # seed Postgres wines/customers (autocompl
 ```
 
 Docker host ports: frontend dev (Vite) `5173`, frontend prod (nginx) `8081`,
-backend `5100`, qdrant `6971`, redis `6380`, postgres `5433`, mongo `27018`.
+backend `5100`, qdrant `6971`, redis `6380`, postgres `5433`, mongo `27018` (searxng is
+internal-only — no host port).
 See the `docker-compose.yml` header. Compose files: `docker-compose.yml` (base) +
 `docker-compose.override.yml` (dev, auto-applied) + `docker-compose.prod.yml` (prod).
 
 ## Architecture at a glance
 
 ```
-frontend (axios, Bearer token) ─► backend /api/* ─► Postgres (notes/reminders/profiles)
+frontend (axios, Bearer token) ─► backend /api/* ─► Postgres (notes/profiles)
                                        │
                                        ├─► OpenRouter (gemini-embedding-001 embeddings + selectable Qwen/GLM/GPT agentic chat) + Jina (rerank)
                                        ├─► Qdrant (vector search over note embeddings)
@@ -93,34 +94,65 @@ frontend (axios, Bearer token) ─► backend /api/* ─► Postgres (notes/remi
   see `docs/deployment.md`). Entry: `backend/server.ts` (all routes registered here).
 - Chat flow (agentic RAG on the Vercel AI SDK): `POST /api/search-notes` runs a streaming
   multi-step tool loop (`streamText` + `stopWhen`) where the model calls note-retrieval
-  tools (`search_notes`, `filter_by_date`, `list_recent_notes` — `services/ai/notes-tools.ts`), reads the
-  results, and answers grounded in them. The same loop can also **act on notes** (all hard-scoped to the
-  logged-in `userId`, never an id from the model): `create_note` saves immediately via the shared
-  `services/notes-write.ts` save+embed transaction (the same path `/store-note` uses); `propose_note_edit`
-  returns a before→after that the user Applies (→ `/update-note`, forwarding the existing `remindAt` so a
-  content edit can't wipe a reminder) or discards — it does **not** write; `draft_note` persists nothing and
-  just hands a draft to the client, which auto-opens it pre-filled in the note editor. Failure
+  tools (`search_notes`, `filter_by_date`, `list_recent_notes`, `read_note` (full text of one note by
+  id), and `lookup_names` (fuzzy-resolves a wine/customer/user name) — `services/ai/notes-tools.ts`),
+  reads the results, and answers grounded in them. `search_notes` returns each reranked hit's **full**
+  content (the list/date tools return a short preview); any clipped note carries `truncated:true` so the
+  model can pull the rest with `read_note` — so it never answers off a half-note. It can also reach **outside** the notes via two web tools (`services/ai/web-tools.ts`):
+  `web_search` (self-hosted SearXNG with a DuckDuckGo fallback — `clients/web_search_client.ts`) and
+  `fetch_page` (SSRF-guarded page→text reader — `clients/web_fetch.ts`). The same loop can also **act on
+  notes**. All note-write tools are hard-scoped to the logged-in `userId`, never an id from the model.
+  `create_note` makes a NEW note: `mode:"save"` persists it immediately via the shared
+  `services/notes-write.ts` save+embed transaction (the same path `/store-note` uses); `mode:"draft"`
+  persists nothing and hands a draft to the client, which auto-opens it pre-filled in the note editor.
+  Editing ONE existing note (find it first) is **two SEPARATE tools** — split out from the old unified
+  `edit_note` because a single mode-flipping tool made the model call it twice (propose **and** save) in
+  one turn: **`propose_edit`** (the default) returns a before→after the user Applies (→ `/update-note`) or
+  discards — it does **not** write; **`save_edit`** writes immediately through the shared owner-scoped
+  `updateNote` (the same path `/update-note` uses), for when the user clearly wants it committed now. A
+  **per-turn guard** in `buildNoteTools` enforces ONE edit action per note per turn (first wins; a 2nd
+  propose/save for the same note returns `{skipped:true}`, rendered as nothing) — a deterministic backstop
+  so a stray propose+save can't double-write. Failure
   handling is **structural, not model-trusted**: a note tool's `execute` never throws — it returns a
   typed `{saved:false}`/`{found:false}` the card renders as a terminal *failed* state with a
-  deterministic **Retry** (re-hits `/store-note`; safe because a failed create rolls back); external
+  deterministic **Retry** (re-hits `/store-note` or `/update-note`; safe because a failed create rolls back
+  and an update is idempotent); external
   calls are time-bounded (`embedding_client` 12s / `qdrant_client` 10s — the OpenAI SDK default is 10
-  MINUTES) and the whole turn has a 60s `AbortController` backstop (`TURN_DEADLINE_MS`), so a wedged
-  embed/Qdrant/provider can't leave the card spinning or the response open. The loop is capped at `MAX_STEPS` (runaway guard —
+  MINUTES) and the turn has a **silence watchdog**: an idle `AbortController` (`TURN_IDLE_MS` 30s, reset
+  on every stream chunk incl. `reasoning-delta` + each step) catches a *wedged* provider without killing
+  a model that's slowly-but-actively reasoning, plus an absolute `TURN_MAX_MS` (180s) backstop — so a
+  wedged embed/Qdrant/provider can't leave the card spinning or the response open, yet a long Qwen
+  reasoning turn finishes instead of being guillotined mid-thought. (The heartbeat that the read-time
+  staleness rule keys off is bumped on every chunk too, so a long reasoning turn stays "alive" to a
+  polling client.) An **empty-answer guard** in the finalize downgrades a `complete` turn that produced
+  no visible text and no note action to `error` (retryable) — covers a reasoning model that leaves its
+  whole answer stuck in the reasoning channel with empty content (seen intermittently with Qwen3.6-Plus
+  over OpenRouter). The loop is capped at `MAX_STEPS` (runaway guard —
   the SDK default is a single step; the last step drops tools via `prepareStep` to force an
-  answer), and `result.consumeStream()` keeps the turn persisting even if the client
+  answer) and ALSO stops the moment the model calls `propose_edit` (`stopWhen: [stepCountIs(MAX_STEPS),
+  hasToolCall("propose_edit")]`) — a proposal hands the decision to the user's Apply/Discard card, so
+  the turn ends there and can't take any further action. `result.consumeStream()` keeps the turn persisting even if the client
   disconnects. The system prompt carries only persona + answer policy — the SDK injects each
   tool's name/description/schema, so the prompt does **not** re-describe them. Default model
-  **Qwen3.6-Plus via OpenRouter** when `OPENROUTER_API_KEY` is set, else **gpt-5-mini** on
-  `OPENAI_API_KEY` (`clients/llm_providers.ts`) — one of several user-selectable models
-  (`shared/ai/chatModels.ts`: Qwen/GLM via OpenRouter + GPT via OpenAI). Streamed as an AI SDK UI message stream
+  **Qwen3.7-Max via OpenRouter** when `OPENROUTER_API_KEY` is set, else **gpt-5.4-mini** on
+  `OPENAI_API_KEY` (`clients/llm_providers.ts`, wired to `DEFAULT_CHAT_MODEL`) — one of four
+  user-selectable models (`shared/ai/chatModels.ts`: **Qwen3.7-Max** default + **Qwen3.6-Plus**
+  (the multimodal/vision pick) via OpenRouter, **GLM-5.1**, and **GPT-5.4-mini** (the OpenAI option,
+  also vision-capable). 3.7-Max leads on reasoning but is text-only, so the composer steers users to a
+  vision model for image turns. The `ChatModelId` TYPE stays broader than this selector — it also
+  covers the OpenAI fallback + the legacy note-titling path. A per-model reasoning-effort control rides each request — `minimal/low/medium/high`
+  gated to each model's `efforts` allow-list via `clampEffortForModel`; `minimal` is OpenAI-only since
+  OpenRouter has no level below `low`). Streamed as an AI SDK UI message stream
   (text + `tool-*` + `reasoning` parts); the client consumes it with `useChat`
   (`experimental_throttle` coalesces token re-renders; `CustomMarkdown` is memoized so only
   the streaming message re-parses) and renders tool calls + reasoning (`ToolCallCard`/`ReasoningCard`;
-  the three note-action tools render as a richer `NotePreviewCard` instead — saved note / before→after
-  with Apply·Discard / draft. Tool outputs are hydrated into the finalized parts before Mongo
+  the note-action tools render as a richer `NotePreviewCard` instead, keyed off each tool's `mode` —
+  saved note / updated-&-saved / before→after with Apply·Discard / draft. Tool outputs are hydrated into
+  the finalized parts before Mongo
   persistence, and Apply/Discard/manual-retry decisions are written back via
   `POST /api/update-tool-transaction` as a tiny `transaction` marker/log keyed by `toolCallId`, so a
-  refresh re-renders the same terminal card state even if the click happened mid-stream. A live `draft_note` result auto-opens the editor via `NoteEditorContext`,
+  refresh re-renders the same terminal card state even if the click happened mid-stream. A live `create_note`
+  `mode:"draft"` result auto-opens the editor via `NoteEditorContext`,
   gated to the streaming turn so reopening a thread doesn't re-pop it),
   plus a `ThinkingIndicator` while no answer text is streaming yet (`context/StreamChatContext.tsx`,
   `components/Chat/`).
@@ -138,7 +170,12 @@ frontend (axios, Bearer token) ─► backend /api/* ─► Postgres (notes/remi
   up on reconnect/foreground (`refetchOnReconnect`/`refetchOnWindowFocus` `'always'`); the live `useChat`
   stream is a best-effort **overlay** (rendered only while a turn streams on this client), reconciled by
   writing the finished turn into the RQ cache (`setQueryData`, keyed by `generationId`) then invalidating
-  — so a Mongo-down or empty refetch can't wipe a streamed answer. `result.consumeStream()` keeps the
+  — so a Mongo-down or empty refetch can't wipe a streamed answer. A clean **pure-text** turn skips the
+  reconcile refetch (the optimistic write is authoritative → no flicker), but a **tool-bearing** turn
+  still refetches so its tool chips adopt the server's terminal `output-available` state (the live
+  overlay can leave a chip mid-state); `mergeThreadNoRegress` guards the flicker. A turn that **writes a
+  note** (create/edit "save") also calls `fetchNotes()` so the Notes page reflects it without a reload
+  (the notes list is a plain context, not RQ; it also refetches on navigation). `result.consumeStream()` keeps the
   server generating through a client disconnect. `GET /api/get-threads` / `GET /api/get-thread` /
   `POST /api/delete-thread` back the sidebar + history (`['threads']` query). See
   `docs/chat-durability-plan.md`, `backend/apis/notes/search-relevant-notes.ts`,
@@ -165,8 +202,10 @@ frontend (axios, Bearer token) ─► backend /api/* ─► Postgres (notes/remi
   served back owner-scoped by `GET /api/chat-image/:id`), and the user message carries only a
   `/api/chat-image/<id>` file-part **reference** (persisted in Mongo, rendered via the authed
   `useAuthedImageUrl` blob fetch since an `<img>` can't send the bearer). A provider can't fetch that
-  bearer-gated url, so `agentic-rag.ts` inlines the **most-recent** image's bytes as a model
-  `ImagePart` before the call and turns older images into `[εικόνα <id>]` placeholders; the model
+  bearer-gated url, so `agentic-rag.ts` inlines the bytes of the image(s) on the **current (last) user
+  turn** as a model `ImagePart` before the call and turns images from **earlier** turns into `[εικόνα
+  <id>]` placeholders (scoped to the current turn so a single attachment isn't re-sent in full on every
+  later text-only turn); the model
   re-examines one via the **`view_image`** tool, which makes the server re-inject those bytes as a
   **user** message in `prepareStep` (images aren't honored on `role:"tool"` messages over OpenRouter's
   OpenAI-compatible transport). Vision is enforced **server-side** too (`agentic-rag.ts` checks
@@ -187,7 +226,7 @@ frontend (axios, Bearer token) ─► backend /api/* ─► Postgres (notes/remi
 ## Data stores (who owns what)
 
 - **Postgres** (Drizzle, schema in `shared/db/schema/`) — source of truth for
-  `notes`, `reminders`, `profile`, `tefteri` (cost ledger), `kataskopos` (per-request
+  `notes`, `profile`, `tefteri` (cost ledger), `kataskopos` (per-request
   AI cost), `wines`/`customers` (editor autocomplete lists), and
   `ecb_conversion_rates` (USD→EUR rate cache). Migrations in `shared/drizzle/`.
 - **Qdrant** — note embeddings (`notes` collection, **3072-dim**, `gemini-embedding-001`). Domain collections

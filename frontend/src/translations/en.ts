@@ -78,6 +78,17 @@ const enContent = {
   select_theme: 'Theme',
   ask_anything: 'Ask anything...',
   select_lang: 'Select Language',
+  // ── Settings page ──
+  appearance: 'Appearance',
+  interface_mode: 'Interface mode',
+  mode_light: 'Light',
+  mode_dark: 'Dark',
+  mode_system: 'System',
+  palette_hint: 'Choose your paper & ink',
+  account: 'Account',
+  sign_out: 'Sign out',
+  role_admin: 'Admin',
+  role_user: 'User',
   // Collapsible label for the model's reasoning disclosure (see ReasoningCard).
   chat_reasoning: 'Thoughts',
   // Stable label for screen readers (the visible text rotates through chat_thinking_verbs).

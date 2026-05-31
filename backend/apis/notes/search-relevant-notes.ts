@@ -8,6 +8,7 @@ import mongoose from "mongoose";
 import { recordUserTurn } from "services/chat-threads";
 import { streamNotesChat } from "services/ai/agentic-rag";
 import { isChatModelId, isReasoningEffort } from "@shared/ai/chatModels";
+import { chatTrace } from "utils/chat-trace";
 
 interface SearchNotesBody {
   messages?: UIMessage[];
@@ -27,7 +28,7 @@ interface SearchNotesBody {
   truncateToCount?: number;
   // Chat model the user picked in the UI; validated against the allowlist below.
   model?: string;
-  // Reasoning effort (low/medium/high); validated below.
+  // Reasoning effort (minimal/low/medium/high); validated below, then clamped per-model.
   effort?: string;
 }
 
@@ -128,6 +129,23 @@ async function searchRelevantNotes(req: Request, res: Response) {
     if (turn.serverMinted) newThreadId = turn.threadId;
     persisted = turn.persisted;
   }
+
+  chatTrace(generationId, "request", {
+    providedThreadId: threadId,
+    activeThreadId,
+    newThreadId,
+    userId,
+    userIds,
+    isAdmin: req.user.isAdmin,
+    selectedUsers,
+    extraUsersApplied: extraUsers,
+    model,
+    effort,
+    truncateToCount,
+    messageCount: messages.length,
+    userTextLen: userText.length,
+    hasFileParts: Boolean(userParts),
+  });
 
   streamNotesChat({
     req,

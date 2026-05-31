@@ -1,18 +1,20 @@
 import { Brain } from 'lucide-react';
-import { REASONING_EFFORTS, type ReasoningEffort } from '@shared/ai/chatModels';
+import type { ReasoningEffort } from '@shared/ai/chatModels';
 import { cn } from '@/lib/utils';
 
-const LABELS: Record<ReasoningEffort, string> = { low: 'Low', medium: 'Medium', high: 'High' };
+const LABELS: Record<ReasoningEffort, string> = { minimal: 'Min', low: 'Low', medium: 'Medium', high: 'High' };
 
 interface EffortSelectorProps {
   value: ReasoningEffort;
+  /** The selected model's allowed effort levels (low→high) — only these are offered. */
+  efforts: ReasoningEffort[];
   onChange: (effort: ReasoningEffort) => void;
 }
 
-// Minimal reasoning-effort control: a brain + small "Thinking" label on the left, the
-// Low/Medium/High levels grouped on the right. No border/separator. The group's aria-label
+// Minimal reasoning-effort control: a brain + small "Thinking" label on the left, the levels
+// the current model allows grouped on the right. No border/separator. The group's aria-label
 // ("Thinking effort") gives screen readers context for the levels. Render only for thinking models.
-export const EffortSelector = ({ value, onChange }: EffortSelectorProps) => {
+export const EffortSelector = ({ value, efforts, onChange }: EffortSelectorProps) => {
   return (
     <div className="flex w-full items-center justify-between" role="group" aria-label="Thinking effort">
       <span className="flex items-center gap-1.5 text-muted-foreground" aria-hidden>
@@ -20,7 +22,7 @@ export const EffortSelector = ({ value, onChange }: EffortSelectorProps) => {
         <span className="text-xs">Thinking</span>
       </span>
       <div className="flex items-center gap-0.5">
-        {REASONING_EFFORTS.map(effort => (
+        {efforts.map(effort => (
           <button
             key={effort}
             type="button"

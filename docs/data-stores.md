@@ -29,7 +29,6 @@ for every table). Migrations live in `shared/drizzle/`:
 | ------------ | ------------------------------------------------------------ | -- |
 | `profile`    | User profile + `role` (user/admin) + `settings` (jsonb, reserved for future per-user prefs — theme, model). **PK = Clerk user ID** (`text`). | id |
 | `notes`      | User notes (title, **Markdown** content). `user_id` = Clerk ID. | uuid |
-| `reminders`  | One reminder per note (`note_id` unique).                    | uuid |
 | `tefteri`    | Per-user cost ledger (totalCost) joined to profile.          | — |
 | `kataskopos` | Per-request AI cost tracking (model, in/out cost).           | uuid |
 | `wines`      | Editor autocomplete list (unique `name`). Seeded by `scripts/seed-wines-customers.ts`. | uuid |

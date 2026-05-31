@@ -1,11 +1,13 @@
 import NotesList from '@/components/Notes/NotesList';
+import { NotesHeader } from '@/components/Notes/NotesHeader';
 import { Page } from '@/components/Common/Page';
-import { useTranslation } from 'react-i18next';
 
 export const NotesPage = () => {
-  const { t } = useTranslation();
+  // No Page `title`: NotesHeader owns the dated heading so it can stay sticky and carry the
+  // search. `pt-0` lets that header sit flush at the top of the scroll surface.
   return (
-    <Page width="full" title={t('personal_notes')}>
+    <Page width="full" contentClassName="pt-0">
+      <NotesHeader />
       <NotesList />
     </Page>
   );

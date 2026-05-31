@@ -22,12 +22,9 @@ export type ModelNames =
   | "accounts/fireworks/models/qwen3-235b-a22b"
   // Agentic chat (AI SDK) models, reached OpenAI-compatibly via OpenRouter.
   | "qwen/qwen3.6-plus"
-  | "qwen/qwen3.6-flash"
-  | "qwen/qwen3.5-flash-02-23"
-  | "qwen/qwen3-max"
-  | "qwen/qwen3-next-80b-a3b-instruct"
-  | "z-ai/glm-5.1"
-  | "z-ai/glm-4.7-flash";
+  | "qwen/qwen3.6-max"
+  | "qwen/qwen3.7-max"
+  | "z-ai/glm-5.1";
 
 export interface ModelInfo {
   provider: "gpt" | "claude" | "fireworks-ai" | "deepseek" | "azure-openai" | "openrouter";
@@ -141,40 +138,24 @@ export const AI_MODELS: ModelsMap = {
     inputCost: new Decimal(0.000000325),
     outputCost: new Decimal(0.00000195),
   },
-  // Qwen3.6-Flash via OpenRouter — $0.1875 / $1.125 per 1M tokens.
-  "qwen/qwen3.6-flash": {
-    provider: "openrouter",
-    inputCost: new Decimal(0.0000001875),
-    outputCost: new Decimal(0.000001125),
-  },
-  // Qwen3.5-Flash via OpenRouter — $0.065 / $0.26 per 1M tokens.
-  "qwen/qwen3.5-flash-02-23": {
-    provider: "openrouter",
-    inputCost: new Decimal(0.000000065),
-    outputCost: new Decimal(0.00000026),
-  },
-  // Qwen3-Max via OpenRouter — $0.78 / $3.90 per 1M tokens.
-  "qwen/qwen3-max": {
+  // Qwen3.6-Max via OpenRouter — Max tier. (VERIFY slug + pricing on OpenRouter; placeholder
+  // pricing mirrors the prior Qwen3-Max: $0.78 / $3.90 per 1M tokens.)
+  "qwen/qwen3.6-max": {
     provider: "openrouter",
     inputCost: new Decimal(0.00000078),
     outputCost: new Decimal(0.0000039),
   },
-  // Qwen3-Next-80B-A3B-Instruct via OpenRouter — $0.09 / $1.10 per 1M tokens.
-  "qwen/qwen3-next-80b-a3b-instruct": {
+  // Qwen3.7-Max via OpenRouter — newest Max tier. (VERIFY slug + pricing on OpenRouter;
+  // placeholder pricing mirrors the prior Qwen3-Max: $0.78 / $3.90 per 1M tokens.)
+  "qwen/qwen3.7-max": {
     provider: "openrouter",
-    inputCost: new Decimal(0.00000009),
-    outputCost: new Decimal(0.0000011),
+    inputCost: new Decimal(0.00000078),
+    outputCost: new Decimal(0.0000039),
   },
   // GLM-5.1 via OpenRouter — $0.98 / $3.08 per 1M tokens.
   "z-ai/glm-5.1": {
     provider: "openrouter",
     inputCost: new Decimal(0.00000098),
     outputCost: new Decimal(0.00000308),
-  },
-  // GLM-4.7-Flash via OpenRouter — $0.06 / $0.40 per 1M tokens.
-  "z-ai/glm-4.7-flash": {
-    provider: "openrouter",
-    inputCost: new Decimal(0.00000006),
-    outputCost: new Decimal(0.0000004),
   },
 };

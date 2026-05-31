@@ -1,0 +1,21 @@
+# SearXNG config for the chat's web_search tool (backend/clients/web_search_client.ts).
+#
+# Internal-only: the backend reaches this over the docker network and uses the JSON API, so
+#   - the bot limiter is OFF (it would 403 our server-to-server JSON calls), and
+#   - `json` is added to formats (SearXNG ships with JSON output disabled by default).
+# Not exposed publicly. `use_default_settings: true` merges this over SearXNG's defaults, so we
+# only override what we need.
+use_default_settings: true
+
+server:
+  # Required by SearXNG. Localhost-bound here; override via the SEARXNG_SECRET env in a hardened setup.
+  secret_key: "mneme-searxng-local-secret-change-me"
+  limiter: false
+  public_instance: false
+  image_proxy: false
+
+search:
+  safe_search: 1
+  formats:
+    - html
+    - json

@@ -1,7 +1,6 @@
 import { pgTable, uuid, text, index } from "drizzle-orm/pg-core";
-import { sql, relations } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { timestamps } from "../timestamps";
-import { remindersTable } from "./reminders";
 
 export const notesTable = pgTable(
   "notes",
@@ -36,14 +35,6 @@ export const notesTable = pgTable(
     ),
   ]
 );
-
-export const notesRelations = relations(notesTable, ({ one }) => ({
-  // Defines a one-to-one relationship. A note can have one reminder.
-  reminder: one(remindersTable, {
-    fields: [notesTable.id],
-    references: [remindersTable.noteId],
-  }),
-}));
 
 export type Note = typeof notesTable.$inferSelect;
 export type InsertNote = typeof notesTable.$inferInsert;

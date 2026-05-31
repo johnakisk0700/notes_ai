@@ -2,7 +2,6 @@ import { drizzlePg } from "clients/drizzle_postgres_client";
 import { qdrantClient } from "clients/qdrant_client";
 import { validateRequestBody } from "middleware/common/validation/requiredValidator";
 import { notesTable } from "@shared/db/schema/notes";
-import { remindersTable } from "@shared/db/schema/reminders";
 import { eq, and } from "drizzle-orm";
 import { logger } from "utils/logger";
 
@@ -20,8 +19,6 @@ export async function deleteNote(req, res) {
   await drizzlePg.transaction(async tx => {
     const [deleted] = await tx.delete(notesTable).where(whereClause).returning({ id: notesTable.id });
     if (!deleted) throw new Error("Note not found or access denied.");
-    // Remove the note's reminder too (the note FK also cascades, but be explicit).
-    await tx.delete(remindersTable).where(eq(remindersTable.noteId, deleted.id));
   });
 
   // Qdrant cleanup runs after the PG commit and is best-effort: a Qdrant hiccup must not

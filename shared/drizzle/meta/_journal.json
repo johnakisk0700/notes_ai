@@ -22,6 +22,13 @@
       "when": 1779753551925,
       "tag": "0002_dusty_maestro",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1780183724121,
+      "tag": "0003_drop_reminders",
+      "breakpoints": true
     }
   ]
 }

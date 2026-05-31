@@ -6,9 +6,25 @@ import { useNoteEditor } from '@/context/NoteEditorContext';
 import { PageRule } from '../Common/PageRule';
 import { useTranslation } from 'react-i18next';
 
-// A draft_note tool result means "open this draft in the editor". Fire openWithDraft once
-// per tool call, and ONLY for drafts produced in the live turn (isStreaming) — a draft part
-// rehydrated from thread history is marked handled without reopening the editor.
+// A draft note result means "open this draft in the editor": create_note with mode "draft"
+// (output.mode === 'draft'/openedInEditor), or the legacy standalone draft_note tool. Fire
+// openWithDraft once per tool call, and ONLY for drafts produced in the live turn (isStreaming)
+// — a draft part rehydrated from thread history is marked handled without reopening the editor.
+type DraftPart = {
+  type: string;
+  toolCallId?: string;
+  state?: string;
+  output?: { mode?: string; openedInEditor?: boolean; title?: string; content?: string };
+};
+
+function draftOutput(part: DraftPart): { title?: string; content?: string } | null {
+  if (part.state !== 'output-available' || !part.output) return null;
+  const isDraft =
+    part.type === 'tool-draft_note' || // legacy
+    (part.type === 'tool-create_note' && (part.output.mode === 'draft' || part.output.openedInEditor === true));
+  return isDraft ? part.output : null;
+}
+
 function useDraftNoteAutoOpen(
   messages: ReturnType<typeof useStreamChat>['messages'],
   isStreaming: boolean,
@@ -27,14 +43,13 @@ function useDraftNoteAutoOpen(
     for (const m of messages) {
       if (m.role !== 'assistant') continue;
       for (const part of m.parts) {
-        if (part.type !== 'tool-draft_note') continue;
-        const p = part as { toolCallId?: string; state?: string; output?: { title?: string; content?: string } };
-        if (p.state !== 'output-available' || !p.output) continue;
+        const output = draftOutput(part as DraftPart);
+        if (!output) continue;
+        const id = (part as DraftPart).toolCallId;
         // Drafts always carry a toolCallId; without one we can't dedupe safely, so skip it.
-        if (!p.toolCallId) continue;
-        if (handledRef.current.has(p.toolCallId)) continue;
-        handledRef.current.add(p.toolCallId);
-        if (isStreaming) openWithDraft({ title: p.output.title ?? '', content: p.output.content ?? '' });
+        if (!id || handledRef.current.has(id)) continue;
+        handledRef.current.add(id);
+        if (isStreaming) openWithDraft({ title: output.title ?? '', content: output.content ?? '' });
       }
     }
   }, [messages, isStreaming, openWithDraft]);

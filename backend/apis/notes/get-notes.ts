@@ -14,9 +14,6 @@ export async function getNotes(req, res) {
 
   const notesQuery = drizzlePg.query.notesTable.findMany({
     where: whereClause,
-    with: {
-      reminder: true, // This includes the related reminder
-    },
     orderBy: (notes, { asc, desc }) =>
       sorting?.length
         ? sorting.map(s => (s.direction.toLowerCase() === "asc" ? asc(notes[s.field]) : desc(notes[s.field])))
@@ -25,7 +22,7 @@ export async function getNotes(req, res) {
     offset: pagination.fetchAll ? undefined : pagination.offset,
   });
 
-  const [[{ count: totalCount }], notesWithReminders] = await Promise.all([countQuery, notesQuery]);
+  const [[{ count: totalCount }], notes] = await Promise.all([countQuery, notesQuery]);
 
-  res.status(200).json(buildPaginationResponse(notesWithReminders, pagination, totalCount));
+  res.status(200).json(buildPaginationResponse(notes, pagination, totalCount));
 }

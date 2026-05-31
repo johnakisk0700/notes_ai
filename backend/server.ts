@@ -10,7 +10,6 @@ import { getProfile } from "apis/profiles/get-profile.js";
 import { getProfiles } from "apis/profiles/get-profiles.js";
 import { updateProfileRole } from "apis/profiles/update-profile-role.js";
 import { updateProfileName } from "apis/profiles/update-profile-name.js";
-import { getReminders } from "apis/reminders/get-reminders";
 import { getOpenAIEphemeralToken } from "apis/transcription/get-openai-ephemeral-token.js";
 import { getTranscription } from "apis/transcription/get-transcription.js";
 import { deleteUser } from "apis/users/delete-user.js";
@@ -127,7 +126,6 @@ if (cluster.isPrimary) {
   app.get("/api/get-notes", verifyJWT, queryMiddleware, asyncHandler(getNotes));
   app.get("/api/get-note", verifyJWT, asyncHandler(getNote));
   app.get("/api/get-note-admin", verifyJWT, asyncHandler(getNoteAdmin));
-  app.get("/api/get-reminders", verifyJWT, queryMiddleware, asyncHandler(getReminders));
 
   app.post("/api/search-notes", verifyJWT, asyncHandler(searchRelevantNotes));
   app.post("/api/store-note", verifyJWT, asyncHandler(storeNote));

@@ -34,18 +34,24 @@ Vercel AI SDK** — it records the user turn and delegates to `streamNotesChat`
 
 1. Run a streaming multi-step tool loop (`streamText` + `stopWhen: stepCountIs(MAX_STEPS)`).
    The model is handed note-retrieval tools (`search_notes`, `filter_by_date`,
-   `list_recent_notes` — `services/ai/notes-tools.ts`, which read through
-   `repositories/notes.ts`), calls them, reads the results, and answers grounded in them. On
-   the final allowed step `prepareStep` drops the tools to force an answer.
+   `list_recent_notes`, and `lookup_names` for fuzzy wine/customer/user name resolution —
+   `services/ai/notes-tools.ts`, reading through `repositories/notes.ts` /
+   `repositories/lookups.ts`), plus web tools (`web_search`, `fetch_page` —
+   `services/ai/web-tools.ts`) for information outside the notes. It calls them, reads the
+   results, and answers grounded in them. On the final allowed step `prepareStep` drops the
+   tools to force an answer.
 2. `search_notes` embeds the query with `google/gemini-embedding-001` (via OpenRouter —
    `clients/embedding_client.ts`), ranks candidate ids in the `notes` Qdrant collection
    (scoped to the requesting user, plus any selected users for admins), then reads the **live
    rows from Postgres** (the read-time source of truth) and reranks them with Jina.
 3. The answer **streams** to the client as an AI SDK UI message stream (text + `tool-*` +
    `reasoning` parts). The chat model is **user-selectable** (`shared/ai/chatModels.ts`):
-   default **Qwen3.6-Plus via OpenRouter** when `OPENROUTER_API_KEY` is set (other Qwen/GLM
-   on OpenRouter + GPT on OpenAI are offered), else `gpt-5-mini` (`clients/llm_providers.ts`).
-   Reasoning-effort is sent only to reasoning-capable models. Per-turn cost is computed from
+   default **Qwen3.6-Plus via OpenRouter** when `OPENROUTER_API_KEY` is set (the Qwen3.6/3.7
+   **Max** tier + **GLM-5.1** on OpenRouter, plus GPT mini/nano on OpenAI, are also offered),
+   else `gpt-5-mini` (`clients/llm_providers.ts`). Only Qwen ≥3.6 Plus is listed — older/smaller
+   Qwen tiers were weak in Greek + tool calling. Reasoning-effort (`minimal/low/medium/high`,
+   gated to each model's allowed range via `clampEffortForModel`; `minimal` is OpenAI-only as
+   OpenRouter has no level below `low`) is sent only to reasoning-capable models. Per-turn cost is computed from
    usage and recorded. (Note-title generation is separate: `get-note-title` → `getAiChatResponse`
    in `services/ai/ai_chat.ts`, always on `gpt-5-mini`.)
 4. The turn is persisted to a Mongo thread (`services/chat-threads.ts`, over the
@@ -69,8 +75,11 @@ The worker opens the Mongo connection in the background at startup
 (`connectToDatabase`, retry/backoff) and relies on the driver to auto-reconnect on
 drops — also best-effort.
 
-Notes are embedded on write: `store-note` / `update-note` call
-`createAndSaveNoteEmbedding` (`services/embeddings.ts`) which upserts into Qdrant.
+Notes are embedded on write: `store-note` / `update-note` (and the chat's `create_note` /
+`edit_note` tools) go through the shared `services/notes-write.ts` (`createNote` / `updateNote`),
+which calls `createAndSaveNoteEmbedding` (`services/embeddings.ts`) inside the write transaction to
+upsert into Qdrant. `updateNote` scopes its WHERE to the owner, so an update can't touch another
+user's note.
 
 ## Deployment
 
@@ -81,7 +90,7 @@ reverse-proxies `/api/` to the Dockerized backend on `127.0.0.1:5100` (plain HTT
 prod is same-origin and there's no extra container hop. `bun deploy.ts eu` builds the SPA,
 rsyncs the repo + build to the VM, and runs `docker compose -f docker-compose.yml -f
 docker-compose.prod.yml up -d --build`, which brings up the backend +
-Postgres/Mongo/Qdrant/Redis + the one-shot migrate/qdrant-init in order, so migrations
+Postgres/Mongo/Qdrant/Redis/SearXNG + the one-shot migrate/qdrant-init in order, so migrations
 apply before the API serves. The host nginx server block lives in `deploy/nginx/`;
 secrets stay in `backend/.env` on the VM (never rsynced — see `.rsyncignore`).
 

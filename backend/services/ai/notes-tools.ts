@@ -12,9 +12,10 @@ import { z } from "zod";
 import { embedText } from "clients/embedding_client";
 import { qdrantClient } from "clients/qdrant_client";
 import { notesRepo, type NoteRow } from "repositories/notes";
+import { lookupsRepo } from "repositories/lookups";
 import { cleanNoteText } from "utils/noteText";
 import { rerank } from "./rerank.js";
-import { createNote } from "services/notes-write";
+import { createNote, updateNote } from "services/notes-write";
 import { chatImageExists } from "services/chat-images";
 import { logger } from "utils/logger";
 
@@ -27,7 +28,13 @@ const RERANK_MIN_SCORE = Number(process.env.NOTES_RERANK_MIN_SCORE ?? 0.2);
 // strictness lever. Tune per corpus; leave unset to let the reranker do the gating.
 const MIN_COSINE = process.env.NOTES_MIN_COSINE ? Number(process.env.NOTES_MIN_COSINE) : undefined;
 
-const SNIPPET_CHARS = 800; // shown to the model
+// Char budgets for the note text handed to the model. search_notes returns the FULL note for its
+// small reranked set (the relevant few), so the model isn't answering off a half-note; the list/date
+// tools return a short preview because they can return many rows (keeps tokens bounded). Either way,
+// a clipped note carries `truncated:true` and the model can call read_note for the rest.
+// FULL_NOTE_CHARS is a high safety cap, not an expected clip — it only bites a pathologically huge note.
+const PREVIEW_CHARS = 600; // list_recent_notes / filter_by_date (possibly many rows)
+const FULL_NOTE_CHARS = 8000; // search_notes' final few + read_note — effectively the whole note
 const RERANK_CHARS = 2000; // sent to the reranker (more signal)
 
 // `notes.id` is a Postgres uuid, so querying it with a non-uuid string throws ("invalid
@@ -39,7 +46,10 @@ interface NoteHit {
   noteId: string;
   title: string;
   date: string;
-  snippet: string;
+  content: string;
+  // True when `content` was clipped to the budget — tells the model the note has more text it can
+  // pull with read_note, so it never silently answers off a half-note.
+  truncated: boolean;
 }
 
 function clip(text: string, max: number): string {
@@ -50,13 +60,16 @@ function isoOrEmpty(date: Date | string | null): string {
   return date ? new Date(date as unknown as string).toISOString() : "";
 }
 
-// A PG row → the hit handed back to the model: mention markup stripped, snippet clipped.
-function toNoteHit(row: NoteRow): NoteHit {
+// A PG row → the hit handed back to the model: mention markup stripped, content clipped to `maxChars`
+// (with the truncation flagged so the model can read_note for the full text).
+function toNoteHit(row: NoteRow, maxChars: number): NoteHit {
+  const full = cleanNoteText(row.content ?? "");
   return {
     noteId: String(row.id),
     title: row.title ?? "",
     date: isoOrEmpty(row.created_at),
-    snippet: clip(cleanNoteText(row.content ?? ""), SNIPPET_CHARS),
+    content: full.length > maxChars ? full.slice(0, maxChars) + "…" : full,
+    truncated: full.length > maxChars,
   };
 }
 
@@ -83,12 +96,19 @@ function safeNotesQuery(run: () => Promise<NotesResult>): Promise<NotesResult> {
 }
 
 export function buildNoteTools({ userIds, userId }: { userIds: string[]; userId: string }) {
+  // One edit action per note per turn. The agentic loop can't pause for the user mid-turn, so a
+  // model that calls BOTH propose_edit and save_edit for the same note (it does) would show a review
+  // card AND write immediately — the "saved despite Discard" surprise. The FIRST edit tool to touch a
+  // note this turn wins; a later propose/save for the SAME note returns {skipped:true} (no write, no
+  // second card). Per-turn because buildNoteTools is constructed once per turn.
+  const editedNotesThisTurn = new Set<string>();
   return {
     search_notes: tool({
       description:
         "Search the user's notes by meaning. Use this for ANY question about note content. " +
-        "Results are reranked by relevance, so only the most relevant notes are returned. " +
-        "Call it again with a different phrasing to refine or to compare topics.",
+        "Results are reranked by relevance, so only the most relevant notes are returned, each with " +
+        "its full content. (If a result is ever marked `truncated`, call read_note with its id for " +
+        "the complete text.) Call it again with a different phrasing to refine or to compare topics.",
       inputSchema: z.object({
         query: z
           .string()
@@ -121,14 +141,14 @@ export function buildNoteTools({ userIds, userId }: { userIds: string[]; userId:
           const candidates = ids
             .map(id => byId.get(id))
             .filter((r): r is NoteRow => r != null)
-            .map(row => ({ ...toNoteHit(row), text: rerankText(row) }));
+            .map(row => ({ ...toNoteHit(row, FULL_NOTE_CHARS), text: rerankText(row) }));
 
           // 3) Rerank → keep only the relevance-gated top few (the strict step). The ranked
           //    items are candidates (a NoteHit plus the reranker-only `text`); drop `text`.
           const ranked = await rerank(query, candidates, { topN: top_k ?? FINAL_K, minScore: RERANK_MIN_SCORE });
           return {
             count: ranked.length,
-            notes: ranked.map(({ noteId, title, date, snippet }) => ({ noteId, title, date, snippet })),
+            notes: ranked.map(({ noteId, title, date, content, truncated }) => ({ noteId, title, date, content, truncated })),
           };
         }),
     }),
@@ -137,7 +157,8 @@ export function buildNoteTools({ userIds, userId }: { userIds: string[]; userId:
       description:
         "List the user's notes created within a date range (newest first), BY CREATION DATE — " +
         "not by meaning. Use for time-scoped questions like 'what did I write last week / in May / " +
-        "between two dates'. For a topic within a period, also call search_notes.",
+        "between two dates'. For a topic within a period, also call search_notes. Notes come back as a " +
+        "short preview; if one is `truncated` and you need its full text, call read_note with its id.",
       inputSchema: z.object({
         from: z
           .string()
@@ -159,22 +180,75 @@ export function buildNoteTools({ userIds, userId }: { userIds: string[]; userId:
       execute: ({ from, to, limit }) =>
         safeNotesQuery(async () => {
           const rows = await notesRepo.byDateRange(userIds, { from, to, limit: limit ?? 20 });
-          return { count: rows.length, notes: rows.map(toNoteHit) };
+          return { count: rows.length, notes: rows.map(r => toNoteHit(r, PREVIEW_CHARS)) };
         }),
     }),
 
     list_recent_notes: tool({
       description:
         "List the user's most recent notes (newest first), without a search query. " +
-        "Use for questions like 'what did I write recently' or 'my latest notes'.",
+        "Use for questions like 'what did I write recently' or 'my latest notes'. Notes come back as " +
+        "a short preview; if one is `truncated` and you need its full text, call read_note with its id.",
       inputSchema: z.object({
         limit: z.number().int().min(1).max(30).optional().describe("How many notes (default 10)."),
       }),
       execute: ({ limit }) =>
         safeNotesQuery(async () => {
           const rows = await notesRepo.recent(userIds, limit ?? 10);
-          return { count: rows.length, notes: rows.map(toNoteHit) };
+          return { count: rows.length, notes: rows.map(r => toNoteHit(r, PREVIEW_CHARS)) };
         }),
+    }),
+
+    // The "read the rest" companion to the list/search tools: those return a clipped preview (or a
+    // note flagged `truncated`); this returns ONE note's full content by id, so the model can ground
+    // an answer on the complete text instead of half of it. Scoped to `userIds` like the other reads.
+    read_note: tool({
+      description:
+        "Read the FULL text of ONE note by id. Use when a note from search_notes/filter_by_date/" +
+        "list_recent_notes came back with `truncated: true` (its content was cut off) and you need the " +
+        "whole note to answer accurately. Pass the note's id from that earlier result.",
+      inputSchema: z.object({
+        noteId: z.string().describe("Id of the note to read in full, from a prior search/list result."),
+      }),
+      // Never throw: a bad/non-uuid id or a transient DB fault degrades to found:false, not a tool error.
+      execute: async ({ noteId }) => {
+        if (!UUID_RE.test(noteId)) return { found: false as const, noteId };
+        try {
+          const [row] = await notesRepo.candidatesByIds(userIds, [noteId]);
+          if (!row) return { found: false as const, noteId };
+          return { found: true as const, ...toNoteHit(row, FULL_NOTE_CHARS) };
+        } catch (err) {
+          logger.error("read_note failed:", err);
+          return { found: false as const, noteId };
+        }
+      },
+    }),
+
+    lookup_names: tool({
+      description:
+        "Look up KNOWN names the app already has on file — wine names, customer names, or user names " +
+        "(the same lists used for the editor's @-mentions). These are app-wide lists, NOT 'names the user " +
+        "wrote about'. Give a `query` to fuzzy-match a name (tolerant of typos and missing accents, Greek " +
+        "or English) and resolve it to its canonical spelling before calling search_notes; omit `query` to " +
+        "list what's on file. Returns the closest names, best match first.",
+      inputSchema: z.object({
+        kind: z.enum(["wines", "customers", "users"]).describe("Which list to look in."),
+        query: z
+          .string()
+          .optional()
+          .describe("A name (or partial/misspelled name) to fuzzy-match. Omit to just list the names."),
+        limit: z.number().int().min(1).max(50).optional().describe("Max names to return (default 20)."),
+      }),
+      // Never throw: degrade to an empty list so a transient DB fault can't error the turn.
+      execute: async ({ kind, query, limit }) => {
+        try {
+          const names = await lookupsRepo.searchNames(kind, query, limit ?? 20);
+          return { kind, count: names.length, names };
+        } catch (err) {
+          logger.error("lookup_names failed:", err);
+          return { kind, count: 0, names: [] as string[] };
+        }
+      },
     }),
 
     // Re-examine an OLDER attached image. The most-recent image is already inlined for the
@@ -202,20 +276,27 @@ export function buildNoteTools({ userIds, userId }: { userIds: string[]; userId:
 
     create_note: tool({
       description:
-        "Save a NEW note for the user — it is persisted IMMEDIATELY. Use when the user asks you to " +
-        "write/keep/save a note (e.g. 'κράτα σημείωση…', 'save a note about…'). Write a short title and " +
-        "the body as Markdown, in the user's language. Do NOT use this to change an existing note " +
-        "(use propose_note_edit) or when the user wants to edit it themselves first (use draft_note).",
+        "Create a NEW note for the user. `mode` decides what happens with it: \"save\" persists it " +
+        "IMMEDIATELY (use when the user asks you to keep/save a note — 'κράτα σημείωση…', 'save a note about…'); " +
+        "\"draft\" persists NOTHING and instead opens it pre-filled in the user's note editor so THEY finish and " +
+        "save it (use when the user wants to write/edit it themselves — 'φτιάξε ένα προσχέδιο να το πειράξω'). " +
+        "Write a short title and the body as Markdown, in the user's language. To change an EXISTING note, use propose_edit (or save_edit to commit immediately).",
       inputSchema: z.object({
         title: z.string().describe("A short title in the user's language."),
         content: z.string().describe("The note body as Markdown, in the user's language."),
+        mode: z
+          .enum(["save", "draft"])
+          .optional()
+          .describe('"save" = persist it now (default). "draft" = open it in the editor for the user to finish; saves nothing.'),
       }),
       // Never throw: a thrown execute can abort the tool stream and leave the UI card stuck
       // on a spinner. On failure return a typed error result the card can render instead.
-      execute: async ({ title, content }) => {
+      execute: async ({ title, content, mode }) => {
+        if (mode === "draft") return { mode: "draft" as const, openedInEditor: true as const, title, content };
         try {
           const note = await createNote({ userId, title, content });
           return {
+            mode: "save" as const,
             saved: true as const,
             noteId: note.id,
             title: note.title ?? title,
@@ -223,38 +304,41 @@ export function buildNoteTools({ userIds, userId }: { userIds: string[]; userId:
             date: isoOrEmpty(note.created_at),
           };
         } catch (err) {
-          return { saved: false as const, error: err instanceof Error ? err.message : "Save failed." };
+          return { mode: "save" as const, saved: false as const, error: err instanceof Error ? err.message : "Save failed." };
         }
       },
     }),
 
-    propose_note_edit: tool({
+    // Propose a change to ONE existing note: returns a before→after card the user Applies/discards.
+    // Writes NOTHING — the user's Apply commits it (client-side /update-note). The DEFAULT edit path.
+    propose_edit: tool({
       description:
-        "Propose an edit to ONE existing note (find it first with search_notes/list_recent_notes). This " +
-        "does NOT save — it shows the user a before→after they Apply or discard. Use for requests like " +
-        "'διόρθωσε/πρόσθεσε/ενημέρωσε τη σημείωσή μου'. Provide the FULL new content (the entire note after " +
-        "your changes), not a diff — for an addition, repeat the existing text plus the new part.",
+        "Propose a change to ONE existing note (find it first with search_notes/list_recent_notes/read_note). " +
+        "Shows the user a before→after card they Apply or discard — writes NOTHING; the user's Apply commits it. " +
+        "This is the DEFAULT for edits. After calling it you are DONE — do NOT also call save_edit for the same " +
+        "note; the user decides via the card. Give the FULL new content (the entire note after your change), not a " +
+        "diff — for an addition, repeat the existing text plus the new part.",
       inputSchema: z.object({
         noteId: z.string().describe("Id of the note to edit, from a prior search/list result."),
         title: z.string().optional().describe("New title, if it should change. Omit to keep the current title."),
         newContent: z.string().describe("The FULL new note body as Markdown (the complete note after edits)."),
       }),
-      // Never throw (a bad/non-uuid noteId would otherwise crash the query and freeze the
-      // card on a spinner): validate the id, guard the DB read, and return found:false instead.
+      // Never throw: a bad/non-uuid id or DB fault degrades to found:false, not a tool error.
       execute: async ({ noteId, title, newContent }) => {
         if (!UUID_RE.test(noteId)) return { found: false as const, noteId };
         try {
           const current = await notesRepo.findForUser(noteId, userId);
           if (!current) return { found: false as const, noteId };
+          const newTitle = title ?? current.title ?? "";
+          // One edit per note per turn — skip a duplicate (see editedNotesThisTurn).
+          if (editedNotesThisTurn.has(noteId)) return { found: true as const, skipped: true as const, noteId, title: newTitle };
+          editedNotesThisTurn.add(noteId);
           return {
             found: true as const,
             noteId,
-            title: title ?? current.title ?? "",
+            title: newTitle,
             before: current.content ?? "",
             after: newContent,
-            // Carry the existing reminder so Apply can preserve it (a content-only update that
-            // dropped remindAt would wipe the reminder — see apis/notes/update-note).
-            remindAt: current.reminder?.remindAt ? new Date(current.reminder.remindAt).toISOString() : "",
           };
         } catch {
           return { found: false as const, noteId };
@@ -262,17 +346,48 @@ export function buildNoteTools({ userIds, userId }: { userIds: string[]; userId:
       },
     }),
 
-    draft_note: tool({
+    // Write a change to ONE existing note IMMEDIATELY (no review card). Only when the user clearly
+    // wants it committed now; otherwise propose_edit. The per-turn guard makes a save for a note
+    // already proposed/saved this turn a no-op, so a stray propose+save can't double-write.
+    save_edit: tool({
       description:
-        "Prepare a DRAFT note and open it in the user's note editor so THEY review/edit and save it " +
-        "themselves — you save NOTHING. Use when the user wants to write it themselves, or asks for a " +
-        "'προσχέδιο/draft να το πειράξω'. Provide a short title and the body as Markdown, in their language.",
+        "Save a change to ONE existing note IMMEDIATELY (find it first). Writes the change now, no review card. " +
+        "Use ONLY when the user clearly wants it done at once ('διόρθωσέ το και αποθήκευσέ το', 'απλά πρόσθεσέ το') " +
+        "— otherwise prefer propose_edit so the user reviews. Give the FULL new content (the entire note), not a diff.",
       inputSchema: z.object({
-        title: z.string().describe("A short title in the user's language."),
-        content: z.string().describe("The draft body as Markdown, in the user's language."),
+        noteId: z.string().describe("Id of the note to edit, from a prior search/list result."),
+        title: z.string().optional().describe("New title, if it should change. Omit to keep the current title."),
+        newContent: z.string().describe("The FULL new note body as Markdown (the complete note after edits)."),
       }),
-      // No persistence — the client opens the editor pre-filled with this draft.
-      execute: async ({ title, content }) => ({ openedInEditor: true as const, title, content }),
+      // Never throw: validate the id, guard the read, keep a failed write a typed {saved:false}.
+      execute: async ({ noteId, title, newContent }) => {
+        if (!UUID_RE.test(noteId)) return { found: false as const, noteId };
+        try {
+          const current = await notesRepo.findForUser(noteId, userId);
+          if (!current) return { found: false as const, noteId };
+          const newTitle = title ?? current.title ?? "";
+          // One edit per note per turn: if this note was already proposed/saved this turn, skip the
+          // duplicate save — this is what stops a propose+save double-write on the same note.
+          if (editedNotesThisTurn.has(noteId)) return { found: true as const, skipped: true as const, noteId, title: newTitle };
+          editedNotesThisTurn.add(noteId);
+          try {
+            const updated = await updateNote({ userId, noteId, content: newContent, title: newTitle });
+            if (!updated) return { found: true as const, saved: false as const, noteId, title: newTitle, error: "Note not found." };
+            return {
+              found: true as const,
+              saved: true as const,
+              noteId,
+              title: updated.title ?? newTitle,
+              content: updated.content,
+              date: isoOrEmpty(updated.created_at),
+            };
+          } catch (err) {
+            return { found: true as const, saved: false as const, noteId, title: newTitle, error: err instanceof Error ? err.message : "Update failed." };
+          }
+        } catch {
+          return { found: false as const, noteId };
+        }
+      },
     }),
   };
 }

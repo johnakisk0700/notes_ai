@@ -41,9 +41,26 @@ function decisionText(status: unknown): string {
   return "The user has not applied or discarded this edit in the UI.";
 }
 
+function draftSummary(output: Record<string, unknown>): string {
+  return [
+    `A draft note was opened in the editor: ${quoted(output.title)}.`,
+    clip(output.content) ? `Draft content: ${clip(output.content)}.` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 function noteToolSummary(part: ToolPart): string | null {
   const output = obj(part.output);
   const transaction = obj(part.transaction);
+
+  // create_note "draft" mode (mode:"draft"), and the legacy standalone draft_note tool.
+  if (
+    (part.type === "tool-create_note" && output.mode === "draft") ||
+    (part.type === "tool-draft_note" && output.openedInEditor === true)
+  ) {
+    return draftSummary(output);
+  }
 
   if (part.type === "tool-create_note") {
     if (output.saved === true) {
@@ -67,11 +84,32 @@ function noteToolSummary(part: ToolPart): string | null {
     }
   }
 
-  if (part.type === "tool-propose_note_edit") {
+  // Edit tools: propose_edit (before→after card) + save_edit (immediate write), and the legacy
+  // unified edit_note / propose_note_edit. Keyed off the OUTPUT shape (not the tool name or `mode`)
+  // so all variants summarize the same: a write (saved) vs a proposal (before→after) vs not-found.
+  if (
+    part.type === "tool-propose_edit" ||
+    part.type === "tool-save_edit" ||
+    part.type === "tool-edit_note" ||
+    part.type === "tool-propose_note_edit"
+  ) {
     if (output.found === false) {
       return `A note edit was attempted, but the note was not found${output.noteId ? ` (${String(output.noteId)})` : ""}.`;
     }
-    if (output.found === true) {
+    // Committed immediately (save_edit, legacy edit_note "save", or a manual retry).
+    if (output.saved === true || transaction.status === "retry_saved") {
+      return [
+        `A note was edited and saved: ${quoted(output.title)}${output.noteId ? ` (${String(output.noteId)})` : ""}.`,
+        clip(output.content) ? `New content: ${clip(output.content)}.` : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+    }
+    if (output.saved === false) {
+      return `A note-edit save attempt failed${output.error ? `: ${clip(output.error)}` : "."}`;
+    }
+    // Proposed a before→after for the user to apply/discard.
+    if (output.found === true && (output.before !== undefined || output.after !== undefined)) {
       return [
         `A note edit was proposed for ${quoted(output.title)}${output.noteId ? ` (${String(output.noteId)})` : ""}.`,
         clip(output.before) ? `Before: ${clip(output.before)}.` : "",
@@ -81,15 +119,8 @@ function noteToolSummary(part: ToolPart): string | null {
         .filter(Boolean)
         .join(" ");
     }
-  }
-
-  if (part.type === "tool-draft_note" && output.openedInEditor === true) {
-    return [
-      `A draft note was opened in the editor: ${quoted(output.title)}.`,
-      clip(output.content) ? `Draft content: ${clip(output.content)}.` : "",
-    ]
-      .filter(Boolean)
-      .join(" ");
+    // A duplicate that the one-edit-per-turn guard skipped (skipped:true) — no durable summary.
+    return null;
   }
 
   return null;

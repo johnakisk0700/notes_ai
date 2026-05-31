@@ -4,7 +4,7 @@ import * as schema from "@shared/db/schema";
 
 // Register the full schema barrel so the relational query API
 // (`drizzlePg.query.<table>.findMany`) and all defined `relations()` work for
-// every table — not just notes/reminders. The barrel exports tables, enums and
+// every table that defines them. The barrel exports tables, enums and
 // relations; drizzle reads what it needs and ignores the rest.
 export const drizzlePg = drizzle({
   schema,

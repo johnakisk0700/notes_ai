@@ -6,19 +6,20 @@
    re-declares the custom properties it wants to change; anything it leaves out
    (e.g. --highlight, --destructive, --chart-*) falls back to the base :root/.dark.
 
-   Two blocks, one per mode. The selectors are deliberately more specific than the
-   base (:root / .dark are specificity 0,1,0; these are 0,2,1), so a theme always
-   wins regardless of @import order, and the :not(.dark) / .dark pair is mutually
-   exclusive so light values never leak into dark mode.
+   Two blocks, one per mode. The selectors are element-scoped (not pinned to <html>) so a
+   nested wrapper can preview a palette in isolation (Settings gallery), and deliberately more
+   specific than the base (:root / .dark are specificity 0,1,0; these are 0,2,0), so a theme
+   always wins regardless of @import order. The :not(.dark) / .dark pair is mutually exclusive
+   so light values never leak into dark mode.
 
-     html[data-theme="<name>"]:not(.dark) { … light … }
-     html[data-theme="<name>"].dark       { … dark  … }
+     [data-theme="<name>"]:not(.dark) { … light … }
+     [data-theme="<name>"].dark       { … dark  … }
 
    To add a theme: copy this file, rename, retune the tokens, then (1) @import it in
    index.css and (2) register its name in ThemeProvider's PALETTES. That's it.
    ──────────────────────────────────────────────────────────────────────── */
 
-html[data-theme='paper']:not(.dark) {
+[data-theme='paper']:not(.dark) {
   --background: oklch(0.988 0 0); /* soft white — a hair off pure, no glare */
   --foreground: oklch(0.23 0 0); /* near-black ink */
   --card: oklch(1 0 0); /* pure-white card lifts a touch off the paper */
@@ -45,10 +46,11 @@ html[data-theme='paper']:not(.dark) {
   --sidebar-accent-foreground: oklch(0.27 0 0);
   --sidebar-border: oklch(0.9 0 0);
   --sidebar-ring: oklch(0.28 0 0);
-  --nb-grain: var(--nb-fiber); /* fiber tooth instead of the warm fractal grain */
+  --nb-grain: var(--tex-tooth);
+  --nb-grain-sidebar: var(--tex-tooth-fine);
 }
 
-html[data-theme='paper'].dark {
+[data-theme='paper'].dark {
   --background: oklch(0.165 0 0); /* near-black — softer than pure, no halation */
   --foreground: oklch(0.92 0 0);
   --card: oklch(0.2 0 0);
@@ -74,5 +76,6 @@ html[data-theme='paper'].dark {
   --sidebar-accent-foreground: oklch(0.9 0 0);
   --sidebar-border: oklch(0.26 0 0);
   --sidebar-ring: oklch(0.85 0 0);
-  --nb-grain: var(--nb-fiber);
+  --nb-grain: var(--tex-tooth);
+  --nb-grain-sidebar: var(--tex-tooth-fine);
 }

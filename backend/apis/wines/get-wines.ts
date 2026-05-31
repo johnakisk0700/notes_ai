@@ -1,8 +1,8 @@
-import { winesTable } from "@shared/db/schema/wines";
-import { drizzlePg } from "clients/drizzle_postgres_client";
+import { lookupsRepo } from "repositories/lookups";
 
+// Editor "@mention" autocomplete source — the wine name list (shared with the chat's
+// lookup_names tool via repositories/lookups).
 export async function getWines(req, res) {
-  const rows = await drizzlePg.select({ name: winesTable.name }).from(winesTable);
-
-  res.status(200).json({ names: rows.map(r => r.name).filter(Boolean) });
+  const names = await lookupsRepo.allNames("wines");
+  res.status(200).json({ names });
 }

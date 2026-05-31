@@ -7,6 +7,7 @@ import { Button } from '../ui/button';
 interface RealtimeAudioRecorderProps {
   onStreamingText?: (text: string) => void;
   onFinalText?: (text: string) => void;
+  onRecordingChange?: (recording: boolean) => void;
   className?: string;
   [key: string]: any;
 }
@@ -14,6 +15,7 @@ interface RealtimeAudioRecorderProps {
 export const RealtimeAudioRecorder = ({
   onStreamingText,
   onFinalText,
+  onRecordingChange,
   className,
   ...props
 }: RealtimeAudioRecorderProps) => {
@@ -33,6 +35,11 @@ export const RealtimeAudioRecorder = ({
       onFinalText(finalTranscript);
     }
   }, [finalTranscript, onFinalText]);
+
+  // Let the parent react to start/stop (e.g. commit a leftover interim on stop).
+  useEffect(() => {
+    onRecordingChange?.(isRecording);
+  }, [isRecording, onRecordingChange]);
 
   const isLoading = isConnecting;
   const showStopButton = isRecording;

@@ -2,15 +2,14 @@
 // each provider is just a base URL + key on the AI SDK provider packages.
 //
 // Default chat model resolution:
-//   - Qwen3.6-Plus via OpenRouter when OPENROUTER_API_KEY is set (the intended default —
-//     see docs/rag-execution-plan.md), else
-//   - gpt-5-mini on the existing OPENAI_API_KEY, so chat keeps working with zero new env.
+//   - DEFAULT_CHAT_MODEL (Qwen3.7-Max) via OpenRouter when OPENROUTER_API_KEY is set, else
+//   - gpt-5.4-mini on the existing OPENAI_API_KEY, so chat keeps working (with vision) on zero new env.
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { LanguageModel } from "ai";
 import type { ModelNames } from "services/ai/ai_models";
 import { AI_MODELS } from "services/ai/ai_models";
-import type { ChatModelId } from "@shared/ai/chatModels";
+import { DEFAULT_CHAT_MODEL, type ChatModelId } from "@shared/ai/chatModels";
 
 const openaiProvider = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -30,10 +29,11 @@ export function resolveChatModel(preferred?: ChatModelId): ResolvedChatModel {
   if (preferred && AI_MODELS[preferred].provider === "gpt") {
     return { model: openaiProvider(preferred), id: preferred };
   }
-  // No OpenRouter key → OpenAI fallback so chat keeps working with zero new env.
+  // No OpenRouter key → OpenAI fallback so chat keeps working with zero new env. gpt-5.4-mini
+  // is the kept OpenAI selector model (vision-capable), so the fallback keeps image support too.
   if (!openrouterProvider) {
-    return { model: openaiProvider("gpt-5-mini"), id: "gpt-5-mini" };
+    return { model: openaiProvider("gpt-5.4-mini"), id: "gpt-5.4-mini" };
   }
-  const id = preferred ?? "qwen/qwen3.6-plus";
+  const id = preferred ?? DEFAULT_CHAT_MODEL;
   return { model: openrouterProvider(id), id };
 }

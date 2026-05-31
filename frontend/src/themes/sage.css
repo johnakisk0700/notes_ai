@@ -3,7 +3,7 @@
    See paper.css for how theme files work.
 */
 
-html[data-theme='sage']:not(.dark) {
+[data-theme='sage']:not(.dark) {
   --background: oklch(0.962 0.012 132);
   --foreground: oklch(0.3 0.022 150);
   --card: oklch(0.982 0.008 132);
@@ -34,10 +34,11 @@ html[data-theme='sage']:not(.dark) {
   --sidebar-accent-foreground: oklch(0.32 0.022 150);
   --sidebar-border: oklch(0.85 0.012 132);
   --sidebar-ring: oklch(0.36 0.065 150);
-  --nb-grain: var(--nb-fiber);
+  --nb-grain: var(--tex-laid);
+  --nb-grain-sidebar: var(--tex-laid-fine);
 }
 
-html[data-theme='sage'].dark {
+[data-theme='sage'].dark {
   --background: oklch(0.19 0.012 160);
   --foreground: oklch(0.89 0.01 120);
   --card: oklch(0.225 0.014 160);
@@ -68,5 +69,6 @@ html[data-theme='sage'].dark {
   --sidebar-accent-foreground: oklch(0.89 0.01 120);
   --sidebar-border: oklch(0.285 0.014 160);
   --sidebar-ring: oklch(0.66 0.075 150);
-  --nb-grain: var(--nb-fiber);
+  --nb-grain: var(--tex-laid);
+  --nb-grain-sidebar: var(--tex-laid-fine);
 }

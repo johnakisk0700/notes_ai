@@ -127,31 +127,42 @@ CSS variables, `lucide` icons, aliases `@/components`, `@/lib/utils`, `@/compone
   `--color-*` / `--radius-*` / `--shadow-*` tokens. The base look is a **notebook**:
   dark "midnight notebook" (warm blue-charcoal paper), light warm ecru, fountain-pen
   ink accent (`--primary`), and one deliberate second tone `--highlight` (amber) for
-  the `<mark>` swipe + reminder flag (the `--chart-*` ramp is ink + graphite, no rainbow).
+  the `<mark>` swipe (the `--chart-*` ramp is ink + graphite, no rainbow).
 - **Palettes (pluggable themes).** On top of light/dark there's an orthogonal palette
   axis: each palette is a self-contained file in `src/themes/*.css` overriding the base
-  tokens under `html[data-theme="<name>"]:not(.dark)` / `html[data-theme="<name>"].dark`
-  (specificity 0,2,1 — wins over `:root`/`.dark` regardless of `@import` order, and the
-  `:not(.dark)`/`.dark` pair prevents light↔dark leakage). To add one: create the file,
+  tokens under `[data-theme="<name>"]:not(.dark)` / `[data-theme="<name>"].dark`
+  (specificity 0,2,0 — wins over `:root`/`.dark` regardless of `@import` order, and the
+  `:not(.dark)`/`.dark` pair prevents light↔dark leakage). The selector is **element-scoped**
+  (not pinned to `<html>`), so any wrapper can render a palette in isolation — the
+  `SettingsPage` palette gallery previews **every** theme live by setting `data-theme` on each
+  card. The base palette `classic` lives on `:root`/`.dark` and is **also** addressable as
+  `[data-theme="classic"]` for that same nested-preview reason. To add one: create the file,
   `@import` it in `index.css`, and append it to `ThemeProvider`'s `PALETTES`.
   `ThemeProvider` sets `data-theme` on `<html>` (state + `localStorage`; default =
-  `paper` / Graphite Paper; `classic` = no attribute = the base look) and
-  `SettingsPage` has the picker next to the language selector. Shipped: `paper`
+  `paper` / Graphite Paper; `classic` = no attribute when active globally = the base look) and
+  `SettingsPage` exposes a reworked picker: a light/dark/**system** segmented control plus a
+  visual palette gallery (each card a live mini-page in that palette's paper/ink/highlighter),
+  alongside the language toggle and an account card. Shipped: `paper`
   (Graphite Paper, neutral), `classic` (Midnight Ecru), `warm` (Warm Linen), `sage`
   (Sage Ledger), and `copper` (Copper Ink). `paper.css` is the documented template.
   Stale saved palette values are ignored, so removed palettes fall back to the default.
 - Ambient skeuomorphic touches: the page is **line-less paper** now — `.nb-paper` /
   `.nb-margin-rule` are inert hooks (no ruling, no margin line). Texture is a **`.nb-page`**
-  background (`--nb-grain`, blended `soft-light`): base/`classic` uses desaturated fractal
-  noise; the alternate palettes swap in a subtler **fibre** (`--nb-fiber` — anisotropic
-  turbulence → faint vertical laid-lines). The
-  sidebar keeps a coarser grain (`--nb-grain-sidebar`) as a different "cover stock". Two
+  background (`--nb-grain`, blended `soft-light`). `index.css` holds a small **paper-texture
+  library** (`--tex-*`, tone-neutral SVG noise) and each palette picks a **page grain + a
+  finer sidebar "cover stock" from one family**: `classic` warm fractal `grain`, `paper`
+  clean cold-press `tooth`, `copper` coarse hand-made `rough`, `sage` vertical `laid` lines,
+  `warm` woven `linen` crosshatch (`--nb-grain` / `--nb-grain-sidebar`, remapped per palette
+  in `themes/*.css`; amplitude = the `feComponentTransfer` slope). The sidebar carries the
+  family's `-fine` cut (`--nb-grain-sidebar`) — a quieter cover stock, not a different material. Two
   graphite wire coils share `.nb-coil-wire`, coloured by **`--nb-binder`** (tokenised so a
   future Settings control can recolour the binding): **`SpiralBinding`** (fixed overlay on
   the sidebar/page seam, tracks the sidebar, hidden on mobile) and **`TopSpiralBinding`**
   (loops along a top edge — crowns the note-editor dialog as a top-bound steno pad). Fonts
   load via a Google Fonts `<link>` in `index.html` (Greek coverage): **Inter** (sans/UI),
-  **Literata** (serif — Lexi's answers), **JetBrains Mono** (mono — code, charts, `❯`).
+  **Literata** (serif — the **Mneme** wordmark / brand, `--font-serif`), **Alegreya**
+  (serif — Lexi's answers, the softer book voice behind `--font-reading`; `.chat-md` +
+  the reasoning disclosure), **JetBrains Mono** (mono — code, charts, `❯`).
 - **`cn()`** (`src/lib/utils.ts`) merges class names (clsx + tailwind-merge).
 - **Local customizations to watch:** `dialog.tsx` adds a non-stock `onPressClose`
   prop (fires on overlay click and the X button) used by the global `NoteEditor`,
@@ -206,10 +217,25 @@ fills the view and manages its own scroll under that floating toggle.
   finished turn is written into the cache optimistically then reconciled. Helpers:
   `integrations/threadQueries.ts` (keys, poll decider, `mintObjectId`), `integrations/threadMessages.ts`
   (DTO↔UIMessage mapping + the optimistic projection). Full design: `docs/chat-durability-plan.md`.
-- **Note-action cards** — `NotePreviewCard` renders `create_note`, `propose_note_edit`, and
-  `draft_note` tool parts. Apply/Discard/manual-retry outcomes are written back to the thread with
+- **Note-action cards** — `NotePreviewCard` renders the `create_note` and `edit_note` tool parts,
+  keyed off each tool's `mode`: `create_note` → saved note (`save`) or opened-in-editor draft (`draft`);
+  `edit_note` → updated-&-saved (`save`) or, for `propose`, a **word-level inline diff** (jsdiff `diffWords`,
+  Unicode-aware so Greek tokenizes by word — only the changed words are tinted, not two full copies) that
+  the user Applies/Discards. (The old
+  `propose_note_edit` / `draft_note` part names still render, for threads from before the consolidation.)
+  Apply/Discard/manual-retry outcomes are written back to the thread with
   `POST /api/update-tool-transaction` and patched into the TanStack cache, so a refresh keeps the
   card in its terminal state instead of returning to a spinner or pending buttons.
+- **Tool / reasoning chips never stick on a spinner** — the generic `ToolCallCard` (search_notes,
+  lookup_names, web_search, …) and `ReasoningCard` show a spinner ONLY while their turn is still live.
+  Each is passed a `settled` flag (`!streaming`, derived from the message's `status`); once the turn
+  is `complete`/`error` a chip can't spin, even if the AI SDK live overlay left its part at
+  `input-available` and the poll/reconcile race preserved that copy (the reported "returned a result
+  but stayed loading" bug). The decision is the pure `toolCallVisualState` helper
+  (`components/Chat/toolCardState.ts`, unit-tested): `error` on a hard `output-error` **or** a web
+  tool's self-reported `{ ok:false }`, else `done` when output is in hand or the turn settled, else
+  `running`. The note-action cards apply the same backstop — a turn that settles with no result shows
+  a terminal state, not a forever-spinner.
 
 Base URL (`BASE_URL`) is `VITE_API_DEV_URL` in dev, `VITE_API_PROD_URL` in prod build.
 

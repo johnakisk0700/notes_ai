@@ -8,6 +8,7 @@ import mongoose from "mongoose";
 import type { ThreadDetail, ThreadMessageStatus, ThreadSummary, ThreadToolTransaction } from "@shared";
 import { UserThread } from "model/mongo-db/UserThreads";
 import { logger } from "utils/logger";
+import { chatTrace } from "utils/chat-trace";
 import {
   deleteChatImage,
   imageIdsFromMessages,
@@ -99,7 +100,10 @@ async function upsertUserTurn(
   truncateToCount?: number
 ): Promise<void> {
   const now = new Date();
-  const userMessage = { role: "user", content: text, parts, timestamp: now };
+  // Stamp an explicit _id: a raw $push of a plain object skips Mongoose subdoc _id generation,
+  // leaving user turns without a stable id (getThread surfaces _id as the message DTO id; without
+  // it the client keys collide). Reused by both the $push upsert and $concatArrays truncate paths.
+  const userMessage = { _id: new mongoose.Types.ObjectId(), role: "user", content: text, parts, timestamp: now };
   const placeholder = assistantPlaceholder(generationId, now);
 
   if (typeof truncateToCount === "number" && Number.isInteger(truncateToCount) && truncateToCount >= 0) {
@@ -112,6 +116,13 @@ async function upsertUserTurn(
         },
       },
     ]);
+    chatTrace(generationId, "persist:truncate", {
+      threadId,
+      truncateToCount,
+      matchedCount: res.matchedCount,
+      modifiedCount: res.modifiedCount,
+      fellThroughToUpsert: (res.matchedCount ?? 0) === 0,
+    });
     // If the thread isn't persisted yet (the user edited/retried the very first turn before its
     // create write landed — likely on slow/flaky Mongo), the pipeline update matches nothing. Don't
     // drop the turn: fall through to the normal create-or-append upsert below, which inserts the
@@ -120,7 +131,7 @@ async function upsertUserTurn(
   }
 
   try {
-    await UserThread.updateOne(
+    const res = await UserThread.updateOne(
       { _id: threadId, user_id: userId, "messages.generationId": { $ne: generationId } },
       {
         $setOnInsert: { title: deriveThreadTitle(text) },
@@ -128,10 +139,18 @@ async function upsertUserTurn(
       },
       { upsert: true }
     );
+    chatTrace(generationId, "persist:upsert", {
+      threadId,
+      matchedCount: res.matchedCount,
+      modifiedCount: res.modifiedCount,
+      upsertedId: res.upsertedId ? String(res.upsertedId) : undefined,
+      branch: res.upsertedId ? "inserted" : (res.modifiedCount ?? 0) > 0 ? "appended" : "noop-or-replay",
+    });
   } catch (err) {
     // A replayed POST whose generationId already exists fails the $ne guard, so the upsert tries
     // to insert and collides on the existing _id — that duplicate-key error IS the desired no-op.
     if ((err as { code?: number })?.code !== 11000) throw err;
+    chatTrace(generationId, "persist:upsert-e11000", { threadId });
   }
 }
 
@@ -148,11 +167,16 @@ export async function updateAssistantPartial(
   content: string
 ): Promise<void> {
   if (!mongoose.isValidObjectId(threadId)) return;
-  await UserThread.updateOne(
+  const res = await UserThread.updateOne(
     { _id: threadId, user_id: userId },
     { $set: { "messages.$[m].content": content, "messages.$[m].updatedAt": Date.now() } },
     { arrayFilters: [{ "m.generationId": generationId, "m.status": "streaming" }] }
   );
+  chatTrace(generationId, "persist:partial", {
+    matchedCount: res.matchedCount,
+    modifiedCount: res.modifiedCount,
+    len: content.length,
+  });
 }
 
 // Finalize the assistant placeholder: full text + parts + metadata + terminal status in
@@ -181,9 +205,26 @@ export async function finalizeAssistant(
     },
     { arrayFilters: [{ "m.generationId": generationId }] }
   );
-  if ((res.modifiedCount ?? 0) > 0) return; // placeholder updated — done
-  if ((res.matchedCount ?? 0) === 0) return; // no such thread (Mongo down / never created) — best-effort lost
+  if ((res.modifiedCount ?? 0) > 0) {
+    chatTrace(generationId, "persist:finalize", {
+      branch: "in-place",
+      matchedCount: res.matchedCount,
+      modifiedCount: res.modifiedCount,
+      status: message.status,
+    });
+    return; // placeholder updated — done
+  }
+  if ((res.matchedCount ?? 0) === 0) {
+    chatTrace(generationId, "persist:finalize", { branch: "lost-no-thread", matchedCount: 0, status: message.status });
+    return; // no such thread (Mongo down / never created) — best-effort lost
+  }
   // Thread exists but the placeholder is gone — append the finished turn so it isn't lost.
+  chatTrace(generationId, "persist:finalize", {
+    branch: "append-fallback",
+    matchedCount: res.matchedCount,
+    modifiedCount: res.modifiedCount,
+    status: message.status,
+  });
   await UserThread.updateOne(
     { _id: threadId, user_id: userId },
     {
@@ -209,11 +250,12 @@ export async function finalizeAssistant(
 // turn that already finalized.
 export async function failAssistant(threadId: string, userId: string, generationId: string): Promise<void> {
   if (!mongoose.isValidObjectId(threadId)) return;
-  await UserThread.updateOne(
+  const res = await UserThread.updateOne(
     { _id: threadId, user_id: userId },
     { $set: { "messages.$[m].status": "error", "messages.$[m].updatedAt": Date.now() } },
     { arrayFilters: [{ "m.generationId": generationId, "m.status": "streaming" }] }
   );
+  chatTrace(generationId, "persist:fail", { matchedCount: res.matchedCount, modifiedCount: res.modifiedCount });
 }
 
 // Persist the user's decision on a note-action tool card (apply/discard/manual retry).
@@ -248,6 +290,13 @@ export async function updateThreadToolTransaction(opts: {
     },
     { arrayFilters: [{ "m.generationId": assistantMessageId }] }
   );
+  chatTrace(assistantMessageId, "persist:tooltx-log", {
+    toolCallId,
+    status: transaction?.status,
+    hasOutput: output !== undefined,
+    matchedCount: logged.matchedCount,
+    modifiedCount: logged.modifiedCount,
+  });
   if ((logged.matchedCount ?? 0) === 0) return false;
 
   const set: Record<string, unknown> = {
@@ -260,7 +309,7 @@ export async function updateThreadToolTransaction(opts: {
 
   // Best-effort denormalization for stored parts. If the part does not exist yet,
   // getThread overlays the transaction log when it hydrates the thread.
-  await UserThread.updateOne(
+  const denorm = await UserThread.updateOne(
     {
       _id: threadId,
       user_id: userId,
@@ -274,6 +323,12 @@ export async function updateThreadToolTransaction(opts: {
     { $set: set },
     { arrayFilters: [{ "m.generationId": assistantMessageId }, { "p.toolCallId": toolCallId }] }
   );
+  chatTrace(assistantMessageId, "persist:tooltx-denorm", {
+    toolCallId,
+    matchedCount: denorm.matchedCount,
+    modifiedCount: denorm.modifiedCount,
+    note: (denorm.matchedCount ?? 0) === 0 ? "part not stored yet — getThread overlays the log" : undefined,
+  });
 
   return true;
 }
@@ -306,10 +361,12 @@ export async function getThread(threadId: string, userId: string): Promise<Threa
 
   return {
     ...toSummary(doc),
-    messages: (doc.messages ?? []).map((m: any) => ({
+    messages: (doc.messages ?? []).map((m: any, i: number) => ({
       // Assistant turns surface their generationId as id, so the live stream and the
       // polled/persisted state reconcile to the same message; user turns keep their Mongo id.
-      id: m.generationId ? String(m.generationId) : String(m._id),
+      // Legacy user messages written before subdocs got an explicit _id fall back to their
+      // position, so the DTO id is never "undefined" (which would collide as a React key).
+      id: m.generationId ? String(m.generationId) : m._id ? String(m._id) : `msg-${i}`,
       role: m.role,
       content: m.content ?? "",
       // Present for assistant turns (tool steps + text); absent for plain user text,
@@ -324,12 +381,14 @@ export async function getThread(threadId: string, userId: string): Promise<Threa
   };
 }
 
-// A "streaming" placeholder whose heartbeat (updatedAt) is older than STALE_MS was
-// abandoned — the generating worker crashed or its deadline passed, so no finalize will
-// ever run — and is served as "error". PURE: the read path never writes (concurrent GETs
-// would race the real finalize). STALE_MS sits comfortably above TURN_DEADLINE_MS
-// (agentic-rag.ts, 60s) plus a slow finalize, and a live-but-slow turn keeps its heartbeat
-// fresh (bumped on every partial write), so a healthy turn is never mis-aged.
+// A "streaming" placeholder whose heartbeat (updatedAt) is older than STALE_MS was abandoned —
+// the generating worker crashed, so no finalize will ever run — and is served as "error". PURE:
+// the read path never writes (concurrent GETs would race the real finalize). The threshold is set
+// against the longest GAP between heartbeats in a HEALTHY turn — not the turn's total length: the
+// heartbeat is bumped on every stream chunk incl. reasoning (agentic-rag.ts onChunk), so the only
+// quiet stretch is a single tool's execution (web/embed/qdrant clients all ≤12s). 120s clears that
+// with wide margin, so a long but live turn is never mis-aged — even one running up to the turn's
+// absolute ceiling (TURN_MAX_MS, 180s), which exceeds STALE_MS yet keeps its heartbeat fresh.
 export const STALE_MS = 120_000;
 
 export function effectiveStatus(

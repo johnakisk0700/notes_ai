@@ -7,16 +7,13 @@ export async function getAllUsersNotes(req, res) {
   if (!isAdmin) throw new AppError({ message: "Admins only." });
 
   const notesQuery = drizzlePg.query.notesTable.findMany({
-    with: {
-      reminder: true, // This includes the related reminder
-    },
     orderBy: (notes, { asc, desc }) => [desc(notes.updated_at)],
   });
 
-  const notesWithReminders = await notesQuery;
+  const notes = await notesQuery;
 
   const response: { notes: FullNote[] } = {
-    notes: notesWithReminders,
+    notes,
   };
 
   res.status(200).json(response);

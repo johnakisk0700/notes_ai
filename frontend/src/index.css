@@ -2,8 +2,12 @@
 @import 'tw-animate-css';
 
 /* Theme palettes — each is a self-contained extension that overrides the base tokens
-   under html[data-theme="<name>"]. Add a theme: drop a file in themes/, @import it
-   here, and register its name in ThemeProvider's PALETTES. See docs/frontend.md → Theming. */
+   under [data-theme="<name>"]. The selector is element-scoped (not pinned to <html>), so a
+   nested wrapper can render any palette in isolation — e.g. the Settings palette gallery
+   previews every theme live by setting data-theme on each card. The base palette is "classic":
+   its tokens live on :root/.dark below and are ALSO addressable as [data-theme="classic"] for
+   that same nested-preview reason. Add a theme: drop a file in themes/, @import it here, and
+   register its name in ThemeProvider's PALETTES. See docs/frontend.md → Theming. */
 @import './themes/paper.css';
 @import './themes/warm.css';
 @import './themes/sage.css';
@@ -22,27 +26,40 @@
    it is no longer pure grayscale.
    ──────────────────────────────────────────────────────────────────────── */
 
-:root {
+:root,
+[data-theme='classic']:not(.dark) {
   /* warm paper */
   --background: oklch(0.9647 0.0118 84.59);
   --foreground: oklch(0.32 0.025 264);
   /* spiral binder wire colour — graphite by default (ink mixed toward the paper).
      Tokenised so a future user setting can recolour the binding via one property. */
   --nb-binder: color-mix(in srgb, var(--foreground) 25%, var(--background));
-  /* paper grain — desaturated fractal noise, CONTRAST-COMPRESSED and centred on
-     mid-grey (feComponentTransfer: small slope, intercept ≈ (1-slope)/2) with
-     forced-opaque alpha, then blended (soft-light) into the page + sidebar
-     backgrounds ONLY. Centring on 0.5 keeps soft-light tone-neutral, so a grained
-     .nb-page matches the plain --background used by the gutter and the notes
-     search bar / masthead — no dark mismatch patch. Keep it subtle: widen the
-     feFunc slope to strengthen the grain, narrow it to soften. The sidebar grain
-     is finer and fainter (a quieter, different "cover stock"). */
-  --nb-grain: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='140'%20height='140'%3E%3Cfilter%20id='nbg'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.6'%20numOctaves='3'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='saturate'%20values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR%20type='linear'%20slope='0.3'%20intercept='0.34'/%3E%3CfeFuncG%20type='linear'%20slope='0.3'%20intercept='0.34'/%3E%3CfeFuncB%20type='linear'%20slope='0.3'%20intercept='0.34'/%3E%3CfeFuncA%20type='linear'%20slope='0'%20intercept='1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23nbg)'/%3E%3C/svg%3E");
-  --nb-grain-sidebar: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='120'%20height='120'%3E%3Cfilter%20id='nbgs'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.85'%20numOctaves='2'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='saturate'%20values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR%20type='linear'%20slope='0.18'%20intercept='0.41'/%3E%3CfeFuncG%20type='linear'%20slope='0.18'%20intercept='0.41'/%3E%3CfeFuncB%20type='linear'%20slope='0.18'%20intercept='0.41'/%3E%3CfeFuncA%20type='linear'%20slope='0'%20intercept='1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23nbgs)'/%3E%3C/svg%3E");
-  /* paper fibre — anisotropic turbulence stretched into faint vertical laid-lines;
-     tone-neutral (centred on mid-grey) so it reads on white or black paper via
-     soft-light. Alternate palettes opt in with --nb-grain: var(--nb-fiber). */
-  --nb-fiber: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='160'%20height='200'%3E%3Cfilter%20id='nbf'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.009%200.45'%20numOctaves='4'%20seed='11'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='saturate'%20values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR%20type='linear'%20slope='0.26'%20intercept='0.37'/%3E%3CfeFuncG%20type='linear'%20slope='0.26'%20intercept='0.37'/%3E%3CfeFuncB%20type='linear'%20slope='0.26'%20intercept='0.37'/%3E%3CfeFuncA%20type='linear'%20slope='0'%20intercept='1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23nbf)'/%3E%3C/svg%3E");
+  /* ── Paper textures ────────────────────────────────────────────────────────
+     A small library of tone-neutral SVG-noise "papers". Each is desaturated and
+     centred on mid-grey (feComponentTransfer: slope = strength, intercept =
+     (1-slope)/2) with opaque alpha, so background-blend-mode:soft-light adds tooth
+     WITHOUT shifting the paper's colour — the same texture reads on white or black
+     stock. Every palette picks a page grain + a finer, fainter sidebar "cover stock"
+     from one family (wired through --nb-grain / --nb-grain-sidebar — here for the
+     base look, remapped per palette in themes/*.css). Widen a slope to strengthen a
+     paper, narrow it to soften.
+       grain — warm fractal tooth (classic)   ·  tooth — clean cold-press (paper)
+       rough — coarse hand-made rag (copper)  ·  laid  — vertical laid lines (sage)
+       linen — woven crosshatch (warm) */
+  --tex-grain: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='140'%20height='140'%3E%3Cfilter%20id='n'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.55'%20numOctaves='3'%20seed='0'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='saturate'%20values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR%20type='linear'%20slope='0.4'%20intercept='0.3'/%3E%3CfeFuncG%20type='linear'%20slope='0.4'%20intercept='0.3'/%3E%3CfeFuncB%20type='linear'%20slope='0.4'%20intercept='0.3'/%3E%3CfeFuncA%20type='linear'%20slope='0'%20intercept='1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23n)'/%3E%3C/svg%3E");
+  --tex-grain-fine: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='120'%20height='120'%3E%3Cfilter%20id='n'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.9'%20numOctaves='2'%20seed='4'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='saturate'%20values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR%20type='linear'%20slope='0.24'%20intercept='0.38'/%3E%3CfeFuncG%20type='linear'%20slope='0.24'%20intercept='0.38'/%3E%3CfeFuncB%20type='linear'%20slope='0.24'%20intercept='0.38'/%3E%3CfeFuncA%20type='linear'%20slope='0'%20intercept='1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23n)'/%3E%3C/svg%3E");
+  --tex-tooth: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='140'%20height='140'%3E%3Cfilter%20id='n'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.72'%20numOctaves='2'%20seed='5'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='saturate'%20values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR%20type='linear'%20slope='0.34'%20intercept='0.33'/%3E%3CfeFuncG%20type='linear'%20slope='0.34'%20intercept='0.33'/%3E%3CfeFuncB%20type='linear'%20slope='0.34'%20intercept='0.33'/%3E%3CfeFuncA%20type='linear'%20slope='0'%20intercept='1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23n)'/%3E%3C/svg%3E");
+  --tex-tooth-fine: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='120'%20height='120'%3E%3Cfilter%20id='n'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='1.05'%20numOctaves='2'%20seed='9'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='saturate'%20values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR%20type='linear'%20slope='0.22'%20intercept='0.39'/%3E%3CfeFuncG%20type='linear'%20slope='0.22'%20intercept='0.39'/%3E%3CfeFuncB%20type='linear'%20slope='0.22'%20intercept='0.39'/%3E%3CfeFuncA%20type='linear'%20slope='0'%20intercept='1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23n)'/%3E%3C/svg%3E");
+  --tex-rough: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='140'%20height='140'%3E%3Cfilter%20id='n'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.4'%20numOctaves='4'%20seed='7'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='saturate'%20values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR%20type='linear'%20slope='0.48'%20intercept='0.26'/%3E%3CfeFuncG%20type='linear'%20slope='0.48'%20intercept='0.26'/%3E%3CfeFuncB%20type='linear'%20slope='0.48'%20intercept='0.26'/%3E%3CfeFuncA%20type='linear'%20slope='0'%20intercept='1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23n)'/%3E%3C/svg%3E");
+  --tex-rough-fine: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='120'%20height='120'%3E%3Cfilter%20id='n'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.62'%20numOctaves='3'%20seed='12'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='saturate'%20values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR%20type='linear'%20slope='0.3'%20intercept='0.35'/%3E%3CfeFuncG%20type='linear'%20slope='0.3'%20intercept='0.35'/%3E%3CfeFuncB%20type='linear'%20slope='0.3'%20intercept='0.35'/%3E%3CfeFuncA%20type='linear'%20slope='0'%20intercept='1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23n)'/%3E%3C/svg%3E");
+  --tex-laid: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='140'%20height='140'%3E%3Cfilter%20id='n'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.5%200.013'%20numOctaves='3'%20seed='11'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='saturate'%20values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR%20type='linear'%20slope='0.38'%20intercept='0.31'/%3E%3CfeFuncG%20type='linear'%20slope='0.38'%20intercept='0.31'/%3E%3CfeFuncB%20type='linear'%20slope='0.38'%20intercept='0.31'/%3E%3CfeFuncA%20type='linear'%20slope='0'%20intercept='1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23n)'/%3E%3C/svg%3E");
+  --tex-laid-fine: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='120'%20height='120'%3E%3Cfilter%20id='n'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.72%200.02'%20numOctaves='2'%20seed='5'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='saturate'%20values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR%20type='linear'%20slope='0.26'%20intercept='0.37'/%3E%3CfeFuncG%20type='linear'%20slope='0.26'%20intercept='0.37'/%3E%3CfeFuncB%20type='linear'%20slope='0.26'%20intercept='0.37'/%3E%3CfeFuncA%20type='linear'%20slope='0'%20intercept='1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23n)'/%3E%3C/svg%3E");
+  --tex-linen: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='140'%20height='140'%3E%3Cfilter%20id='n'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.022%200.5'%20numOctaves='1'%20seed='3'%20stitchTiles='stitch'%20result='warp'/%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.5%200.022'%20numOctaves='1'%20seed='8'%20stitchTiles='stitch'%20result='weft'/%3E%3CfeComposite%20in='warp'%20in2='weft'%20operator='arithmetic'%20k1='0'%20k2='0.5'%20k3='0.5'%20k4='0'%20result='cloth'/%3E%3CfeColorMatrix%20in='cloth'%20type='saturate'%20values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR%20type='linear'%20slope='0.42'%20intercept='0.29'/%3E%3CfeFuncG%20type='linear'%20slope='0.42'%20intercept='0.29'/%3E%3CfeFuncB%20type='linear'%20slope='0.42'%20intercept='0.29'/%3E%3CfeFuncA%20type='linear'%20slope='0'%20intercept='1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23n)'/%3E%3C/svg%3E");
+  --tex-linen-fine: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='120'%20height='120'%3E%3Cfilter%20id='n'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.03%200.68'%20numOctaves='1'%20seed='8'%20stitchTiles='stitch'%20result='warp'/%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.68%200.03'%20numOctaves='1'%20seed='13'%20stitchTiles='stitch'%20result='weft'/%3E%3CfeComposite%20in='warp'%20in2='weft'%20operator='arithmetic'%20k1='0'%20k2='0.5'%20k3='0.5'%20k4='0'%20result='cloth'/%3E%3CfeColorMatrix%20in='cloth'%20type='saturate'%20values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR%20type='linear'%20slope='0.28'%20intercept='0.36'/%3E%3CfeFuncG%20type='linear'%20slope='0.28'%20intercept='0.36'/%3E%3CfeFuncB%20type='linear'%20slope='0.28'%20intercept='0.36'/%3E%3CfeFuncA%20type='linear'%20slope='0'%20intercept='1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23n)'/%3E%3C/svg%3E");
+  /* base / "classic" palette: the warm fractal grain is the hero; the sidebar takes a
+     finer, quieter cut of the same family. Alternate palettes remap both slots. */
+  --nb-grain: var(--tex-grain);
+  --nb-grain-sidebar: var(--tex-grain-fine);
   --card: oklch(0.984 0.009 84.59);
   --card-foreground: oklch(0.32 0.025 264);
   --popover: oklch(0.984 0.009 84.59);
@@ -77,7 +94,10 @@
   --sidebar-border: oklch(0.865 0.015 84.59);
   --sidebar-ring: oklch(0.38 0.095 256);
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  /* brand serif — the "Mneme" wordmark + login title */
   --font-serif: 'Literata', Georgia, 'Times New Roman', serif;
+  /* Lexi's reading voice — a softer, warmer book serif for her answers (Greek-covered) */
+  --font-reading: 'Alegreya', Georgia, 'Times New Roman', serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'Fira Code', monospace;
   --radius: 0.35rem;
   --shadow-2xs: 0px 2px 0px 0px hsl(0 0% 20% / 0.07);
@@ -90,10 +110,16 @@
   --shadow-2xl: 0px 2px 0px 0px hsl(0 0% 20% / 0.38);
 }
 
-.dark {
+.dark,
+[data-theme='classic'].dark {
   /* midnight notebook — warm blue-charcoal paper */
   --background: oklch(0.205 0.012 264);
   --foreground: oklch(0.9 0.008 84.59);
+  /* classic's paper grain, made explicit in dark too (the light base sets it above) so a nested
+     [data-theme="classic"] preview — the Settings gallery — shows the base grain instead of
+     inheriting the active palette's. A real palette's own [data-theme=x].dark still wins (0,2,0). */
+  --nb-grain: var(--tex-grain);
+  --nb-grain-sidebar: var(--tex-grain-fine);
   --card: oklch(0.24 0.014 264);
   --card-foreground: oklch(0.9 0.008 84.59);
   --popover: oklch(0.24 0.014 264);
@@ -128,7 +154,10 @@
   --sidebar-border: oklch(0.32 0.013 264);
   --sidebar-ring: oklch(0.705 0.105 256);
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  /* brand serif — the "Mneme" wordmark + login title */
   --font-serif: 'Literata', Georgia, 'Times New Roman', serif;
+  /* Lexi's reading voice — a softer, warmer book serif for her answers (Greek-covered) */
+  --font-reading: 'Alegreya', Georgia, 'Times New Roman', serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'Fira Code', monospace;
   --radius: 0.35rem;
   --shadow-2xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.16);
@@ -179,6 +208,7 @@
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
   --font-serif: var(--font-serif);
+  --font-reading: var(--font-reading);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -372,8 +402,10 @@ div:has(> .tiptap) {
 
 /* ── Lexi's chat answers: the "written page" ─────────────────────────────── */
 .chat-md {
-  font-family: var(--font-serif);
-  font-size: 0.9rem;
+  font-family: var(--font-reading);
+  /* Alegreya runs a touch smaller (lower x-height) than Literata, so nudge the body up
+     a hair — keeps the effective reading size comfortable and a bit softer/airier. */
+  font-size: 0.95rem;
   line-height: 1.6;
   color: var(--foreground);
 }
@@ -481,6 +513,21 @@ div:has(> .tiptap) {
   border: 1px solid var(--border);
   border-radius: 0.3rem;
   box-shadow: var(--shadow-sm);
+}
+
+/* ── Inset notebook panels — tool calls, reasoning, note previews ─────────────
+   SOLID fills. The page sits on paper grain (.nb-page), so the old translucent
+   tints (bg-primary/5, bg-muted/30) let the texture bleed through and read as
+   washed-out / see-through. Each panel is the card tone nudged a few percent
+   toward ink (.nb-panel) or graphite (.nb-panel-quiet) — opaque, a stamped inset
+   that still belongs to the ink-on-paper world. */
+.nb-panel {
+  background-color: color-mix(in srgb, var(--primary) 7%, var(--card));
+  border-color: color-mix(in srgb, var(--primary) 25%, var(--border));
+}
+.nb-panel-quiet {
+  background-color: color-mix(in srgb, var(--foreground) 5%, var(--card));
+  border-color: color-mix(in srgb, var(--foreground) 14%, var(--border));
 }
 
 /* ── Tiny inline charts (NotebookChart) — ink on paper ───────────────────── */
@@ -602,7 +649,7 @@ div:has(> .tiptap) {
   box-shadow: -4px 0 10px -4px rgb(0 0 0 / 0.42);
 }
 
-/* A strip of the SAME paper as .nb-page (its --background + the per-theme grain/fibre), minus the
+/* A strip of the SAME paper as .nb-page (its --background + the palette's --nb-grain), minus the
    sheet's shadow/positioning — for opaque elements that must read as part of the paper rather than a
    separate block, e.g. the sticky notes search masking notes scrolling under it. A flat tinted fill
    (bg-background/80) looked like a separate dark rectangle on the textured paper; this matches it. */
@@ -636,12 +683,56 @@ div:has(> .tiptap) {
   fill: color-mix(in srgb, #000 55%, transparent);
 }
 
-/* The sidebar carries its own, slightly coarser grain — a different "cover stock"
-   than the page paper. Same soft-light blend, contained to the sidebar panel. */
+/* The sidebar carries a finer, quieter cut of the SAME paper family as the page
+   (--nb-grain-sidebar, the palette's "-fine" texture) — a calmer cover stock, not a
+   different material. Same soft-light blend, contained to the sidebar panel. */
 [data-slot='sidebar-inner'] {
   background-image: var(--nb-grain-sidebar);
   background-size: 120px;
   background-blend-mode: soft-light;
+}
+
+/* ── Sidebar chat history — written index entries, not an app list ───────────
+   Each thread title reads as a line jotted into the notebook: the reading serif
+   (Alegreya) in ink, led by a small margin dash. The open thread gets the one
+   highlighter swipe over its words (the same --highlight tone as a .chat-md
+   <mark>) instead of a filled row — a marker stroke, the notebook's native
+   "you are here". These rules are unlayered, so they win over the shadcn sidebar
+   button's hover/active block fills (Tailwind utilities live in @layer) without
+   !important — and the swipe outranks the global a.active ink wash by specificity. */
+.nb-thread {
+  font-family: var(--font-reading);
+  font-size: 0.9rem;
+  color: color-mix(in srgb, var(--sidebar-foreground) 82%, transparent);
+}
+.nb-thread::before {
+  content: '–';
+  flex: none;
+  color: var(--muted-foreground);
+}
+.nb-thread:hover,
+.nb-thread[aria-current='page'] {
+  background: transparent;
+  color: var(--sidebar-foreground);
+}
+.nb-thread[aria-current='page']::before {
+  color: var(--primary);
+}
+/* The swipe sits behind the title text ONLY (a marker stroke, cloned across the
+   line if it ever wraps) — a constant box in every state, so only the colour
+   appears/disappears and the text never shifts. */
+.nb-thread-title {
+  padding: 0.03em 0.22em;
+  margin-left: -0.22em;
+  border-radius: 0.15rem;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.nb-thread:hover .nb-thread-title {
+  background: color-mix(in srgb, var(--highlight) 18%, transparent);
+}
+.nb-thread[aria-current='page'] .nb-thread-title {
+  background: color-mix(in srgb, var(--highlight) 42%, transparent);
 }
 
 /* The page is line-less paper now — no horizontal ruling and no left margin line.

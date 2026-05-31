@@ -5,7 +5,6 @@ export * from "./ecbConversionRates";
 export * from "./kataskopos";
 export * from "./notes";
 export * from "./profile";
-export * from "./reminders";
 export * from "./tefteri";
 export * from "./wines";
 

@@ -4,11 +4,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { BASE_URL, getClerkToken } from '@/integrations/api';
+import { useNotes } from '@/context/NotesContext';
 import { fetchThread } from '@/integrations/threads';
 import { latestAssistantStatus, mintObjectId, THREAD_POLL_MS, threadKeys } from '@/integrations/threadQueries';
 import { mergeThreadNoRegress, optimisticThread, textOf, toUIMessage } from '@/integrations/threadMessages';
 import { getNowToLocalISOString } from '@/utils/getNowToLocalISOString';
 import {
+  clampEffortForModel,
   DEFAULT_CHAT_MODEL,
   DEFAULT_REASONING_EFFORT,
   isChatModelId,
@@ -67,6 +69,9 @@ export const StreamChatProvider = ({ children }: { children: ReactNode }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  // The notes list is its own (non-RQ) context; when a turn writes a note (create/edit save) we
+  // refresh it so the Notes page reflects the change without a manual reload (see onFinish).
+  const { fetchNotes } = useNotes();
 
   // Active thread id from the URL (/thread/:id). Derived from pathname rather than useParams
   // so it works from this provider, which sits above the param route.
@@ -112,22 +117,29 @@ export const StreamChatProvider = ({ children }: { children: ReactNode }) => {
     return isChatModelId(saved) ? saved : DEFAULT_CHAT_MODEL;
   });
   const modelRef = useRef(model);
-  const setModel = (next: ChatModelId) => {
-    modelRef.current = next;
-    setModelState(next);
-    localStorage.setItem('chat_model', next);
-  };
 
-  // Reasoning effort, same persisted-state + ref pattern as the model.
+  // Reasoning effort, same persisted-state + ref pattern as the model. Clamped to the saved
+  // model's allowed range up front so a stale localStorage effort can't fall outside it.
   const [effort, setEffortState] = useState<ReasoningEffort>(() => {
     const saved = localStorage.getItem('chat_effort');
-    return isReasoningEffort(saved) ? saved : DEFAULT_REASONING_EFFORT;
+    const initial = isReasoningEffort(saved) ? saved : DEFAULT_REASONING_EFFORT;
+    return clampEffortForModel(model, initial) ?? DEFAULT_REASONING_EFFORT;
   });
   const effortRef = useRef(effort);
   const setEffort = (next: ReasoningEffort) => {
     effortRef.current = next;
     setEffortState(next);
     localStorage.setItem('chat_effort', next);
+  };
+
+  const setModel = (next: ChatModelId) => {
+    modelRef.current = next;
+    setModelState(next);
+    localStorage.setItem('chat_model', next);
+    // Keep the effort within the new model's range (e.g. high → medium when switching to a
+    // capped model) so we never send an effort the model rejects.
+    const clamped = clampEffortForModel(next, effortRef.current);
+    if (clamped && clamped !== effortRef.current) setEffort(clamped);
   };
 
   const transport = useMemo(
@@ -204,7 +216,21 @@ export const StreamChatProvider = ({ children }: { children: ReactNode }) => {
       // turn instead of flagging it 'error'/interrupted. A network disconnect stays 'streaming' so the
       // catch-up poll picks up the server-side completion; only a real stream error is terminal 'error'.
       const settled = !isError && !isDisconnect; // clean finish or intentional stop
-      if (settled) needsReconcileRef.current = false;
+      const parts = (message.parts ?? []) as Array<{ type?: string; output?: { saved?: boolean } }>;
+      // A clean PURE-TEXT turn: the optimistic write is authoritative, skip the reconcile refetch (no
+      // flicker). A clean TOOL turn STILL reconciles: the live overlay can leave a tool chip mid-state
+      // (the optimistic write copies it verbatim), so we refetch to adopt the server's terminal
+      // output-available — mergeThreadNoRegress guards against a streaming-flicker meanwhile.
+      const hasTool = parts.some(p => typeof p.type === 'string' && p.type.startsWith('tool-'));
+      if (settled && !hasTool) needsReconcileRef.current = false;
+      // If the turn actually WROTE a note (create/edit "save"), refresh the notes list so the Notes
+      // page reflects it. A card's Apply/Retry already calls fetchNotes; this covers the model's auto-save.
+      const wroteNote = parts.some(
+        p =>
+          (p.type === 'tool-create_note' || p.type === 'tool-save_edit' || p.type === 'tool-edit_note') &&
+          p.output?.saved === true
+      );
+      if (settled && wroteNote) fetchNotes();
       const finalStatus = settled ? 'complete' : isDisconnect ? 'streaming' : 'error';
       queryClient.setQueryData<ThreadDetail>(threadKeys.detail(turn.threadId), prev =>
         optimisticThread(turn.threadId, turnMessages, message.id, turn.generationId, finalStatus, prev)

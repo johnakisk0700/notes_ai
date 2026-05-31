@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from './ui/button';
 import { ArrowUp, ImageIcon, Loader2Icon, Square, X } from 'lucide-react';
-import AudioRecorder from './Common/AudioRecorder';
+import { RealtimeAudioRecorder } from './Common/RealtimeAudioRecorder';
 import { toast } from 'sonner';
 import { api } from '@/integrations/api';
 import { UserSelector } from './Admin/UserSelector';
@@ -60,7 +60,6 @@ export const MainTextArea = ({ sendQuery, stopTextStream, isStreaming }: MainTex
   const { model, setModel, effort, setEffort } = useStreamChat();
   const [query, setQuery] = useState('');
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
-  const [isTranscribing, setIsTranscribing] = useState(false);
   const [image, setImage] = useState<PendingImage | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -68,6 +67,11 @@ export const MainTextArea = ({ sendQuery, stopTextStream, isStreaming }: MainTex
   // Mirrors the staged image's previewUrl so the unmount cleanup (empty deps) can revoke
   // the latest one — navigating away mid-stage otherwise leaks the object URL.
   const previewUrlRef = useRef<string | null>(null);
+  // Voice dictation inserts streamed words at the caret captured when recording started
+  // (or at the end if the box has no caret), keeping the surrounding text intact.
+  const voiceAnchorRef = useRef<{ before: string; after: string } | null>(null);
+  // Where to drop the caret after a programmatic (dictation) update to the textarea.
+  const voiceCaretRef = useRef<number | null>(null);
 
   const canAttachImages = modelHasVision(model);
 
@@ -180,29 +184,48 @@ export const MainTextArea = ({ sendQuery, stopTextStream, isStreaming }: MainTex
     }
   };
 
-  const handleRecordingComplete = async (base64Audio: string) => {
-    try {
-      setIsTranscribing(true);
-      const request = {
-        audio: {
-          content: base64Audio, // The base64-encoded audio content
-        },
-        config: {
-          encoding: 'WEBM_OPUS',
-          sampleRateHertz: 48000, // Adjust based on your recording
-          languageCode: 'en-US', // Adjust based on your needs
-        },
-      };
-
-      const { data } = await api.post('/get-transcription', request);
-      setQuery(prev => prev + data.transcript);
-    } catch (error) {
-      if (import.meta.env.DEV) console.error('Error transcribing audio:', error);
-      toast.error('Failed to transcribe audio');
-    } finally {
-      setIsTranscribing(false);
+  // Capture the insertion point when recording starts — the caret if the box has one (it
+  // persists across the blur from clicking the mic), otherwise the end — and split the text
+  // around it. The two halves stay fixed for the whole dictation, so streamed words can
+  // never clobber the surrounding text; they only rewrite the span in between.
+  const handleRecordingChange = useCallback((recording: boolean) => {
+    if (!recording) {
+      voiceAnchorRef.current = null;
+      return;
     }
-  };
+    const el = textareaRef.current;
+    const value = el?.value ?? '';
+    const start = el ? el.selectionStart : value.length;
+    const end = el ? el.selectionEnd : value.length;
+    voiceAnchorRef.current = { before: value.slice(0, start), after: value.slice(end) };
+  }, []);
+
+  // Drop the streamed words at the anchor, keeping `before`/`after` intact, adding a space
+  // on either side when they'd fuse onto existing words. `commit` bakes a finalized utterance
+  // into the anchor so the next words land after it — only relevant for models that emit
+  // end-of-turn finals; gpt-realtime-whisper streams continuously and doesn't.
+  const insertDictation = useCallback((text: string, commit: boolean) => {
+    const anchor = voiceAnchorRef.current ?? { before: textareaRef.current?.value ?? '', after: '' };
+    const sepBefore = anchor.before && !/\s$/.test(anchor.before) ? ' ' : '';
+    const sepAfter = anchor.after && !/^\s/.test(anchor.after) ? ' ' : '';
+    const dictatedEnd = anchor.before + sepBefore + text;
+    voiceCaretRef.current = dictatedEnd.length;
+    setQuery(dictatedEnd + sepAfter + anchor.after);
+    if (commit) voiceAnchorRef.current = { before: dictatedEnd, after: anchor.after };
+  }, []);
+
+  const handleStreamingText = useCallback((text: string) => insertDictation(text, false), [insertDictation]);
+  const handleFinalText = useCallback((text: string) => insertDictation(text, true), [insertDictation]);
+
+  // Keep the caret at the end of freshly dictated text — but only when the textarea is
+  // focused, so dictation never steals focus. No-op for normal typing (ref stays null).
+  useEffect(() => {
+    const pos = voiceCaretRef.current;
+    if (pos == null) return;
+    voiceCaretRef.current = null;
+    const el = textareaRef.current;
+    if (el && document.activeElement === el) el.setSelectionRange(pos, pos);
+  }, [query]);
 
   return (
     <div className="absolute bottom-0 right-0 left-0 flex justify-center px-3">
@@ -272,7 +295,11 @@ export const MainTextArea = ({ sendQuery, stopTextStream, isStreaming }: MainTex
             >
               {isUploading ? <Loader2Icon className="size-4 animate-spin" /> : <ImageIcon className="size-4.5" />}
             </Button>
-            <AudioRecorder onTranscriptionComplete={handleRecordingComplete} isTranscribing={isTranscribing} />
+            <RealtimeAudioRecorder
+              onStreamingText={handleStreamingText}
+              onFinalText={handleFinalText}
+              onRecordingChange={handleRecordingChange}
+            />
             {!isStreaming ? (
               <Button className="size-8.5 rounded-md" onClick={handleSendMessage}>
                 <ArrowUp />

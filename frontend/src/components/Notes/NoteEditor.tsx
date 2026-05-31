@@ -1,22 +1,17 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useNoteEditor } from '@/context/NoteEditorContext';
 import { useNotes } from '@/context/NotesContext';
 import { useDebouncedLocalstorageSync } from '@/hooks/useDebouncedLocalstorageSync';
 import { useNoteOperations } from '@/hooks/useNoteOperations';
 import type { Note } from '@shared/db/schema/notes';
-import type { Reminder } from '@shared/db/schema/reminders';
 import { EditorContent } from '@tiptap/react';
-import { format } from 'date-fns';
-import { Bell, Loader2Icon, SaveIcon, Sparkles, Trash2Icon, X } from 'lucide-react';
+import { Loader2Icon, SaveIcon, Sparkles, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { BarLoader } from 'react-spinners';
 import { toast } from 'sonner';
 import { useCustomTiptap } from '../Common/TiptapEditor/TiptapEditor';
 import { Button } from '../ui/button';
-import { Calendar } from '../ui/calendar';
 import { Input } from '../ui/input';
-import { Label } from '../ui/label';
 import { Separator } from '../ui/separator';
 import { useAuth } from '@/context/AuthContext/AuthContext';
 import { RealtimeAudioRecorder } from '../Common/RealtimeAudioRecorder';
@@ -110,9 +105,6 @@ const EditorCore = () => {
   }, [isProcessing]);
 
   // Note specific
-  const [isReminderOpen, setIsReminderOpen] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>();
-  const [selectedTime, setSelectedTime] = useState('12:00');
   const [noteTitle, setNoteTitle] = useState<string>('');
   const [noteToEdit, setNoteToEdit] = useState<Note | null>(null);
   const mode = noteId || noteToEdit ? 'edit' : 'create';
@@ -131,19 +123,20 @@ const EditorCore = () => {
   });
   useDebouncedLocalstorageSync(noteTitle, mode === 'edit' && noteId ? `${noteId}_draft_title` : 'latest_draft_title');
 
+  // Cancel any pending content-draft write on unmount so it can't fire after the
+  // editor closes and resurrect a draft the save already cleared from localStorage.
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    };
+  }, []);
+
   // util for updating both editor and state
-  const updateNoteState = (title: any, content: any, reminder: Reminder | null = null) => {
+  const updateNoteState = (title: any, content: any) => {
     // Note content is stored as Markdown; parse it back into the editor.
     // Plain-text legacy notes are valid Markdown, so they load unchanged.
     editor?.commands.setContent(content, { emitUpdate: false, contentType: 'markdown' });
     setNoteTitle(title);
-    if (reminder) {
-      const date = new Date(reminder.remindAt);
-      const hours = date.getHours().toString().padStart(2, '0');
-      const minutes = date.getMinutes().toString().padStart(2, '0');
-      setSelectedDate(date);
-      setSelectedTime(`${hours}:${minutes}`);
-    }
   };
 
   const handleRefetchTitle = async (content: string) => {
@@ -218,8 +211,11 @@ const EditorCore = () => {
 
     setSaveError(false);
     setAfterProcessing(true);
+    // Cancel the pending debounced draft write so it can't land after saveNote()
+    // clears localStorage on success and bring the draft back from the dead.
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     // Persist as Markdown so formatting (bold/italic/lists/headings) survives.
-    const saved = await saveNote(noteTitle, editor?.getMarkdown() || '', noteToEdit?.id, selectedDate, selectedTime);
+    const saved = await saveNote(noteTitle, editor?.getMarkdown() || '', noteToEdit?.id);
     setAfterProcessing(false);
     if (saved) {
       closeEditor();
@@ -242,7 +238,7 @@ const EditorCore = () => {
           const maybeCached = notes.find(note => note.id === noteId);
           if (maybeCached) {
             setNoteToEdit(maybeCached);
-            updateNoteState(maybeCached?.title, maybeCached?.content, maybeCached?.reminder);
+            updateNoteState(maybeCached?.title, maybeCached?.content);
             return;
           }
 
@@ -250,13 +246,13 @@ const EditorCore = () => {
           const fullNote = await fetchNote(noteId, isAdmin);
           if (!fullNote) throw new Error();
           setNoteToEdit(fullNote);
-          updateNoteState(fullNote?.title, fullNote?.content, fullNote?.reminder);
+          updateNoteState(fullNote?.title, fullNote?.content);
         } else {
           // create mode
           setNoteToEdit(null);
           if (pendingDraft) {
-            // A note handed in by the chat (draft_note) — seed it once, then forget it so a
-            // later blank "new note" falls back to the user's own localStorage draft.
+            // A note handed in by the chat (create_note "draft" mode) — seed it once, then forget it
+            // so a later blank "new note" falls back to the user's own localStorage draft.
             updateNoteState(pendingDraft.title || '', pendingDraft.content || '');
             consumePendingDraft();
           } else {
@@ -277,79 +273,18 @@ const EditorCore = () => {
     );
   }
 
-  const isReminderSet = selectedDate && selectedTime;
   return (
-    <div className="relative z-10 grid h-full min-h-0 grid-rows-[auto_auto_auto_1fr] gap-3 p-4 pt-6 lg:pt-14" tabIndex={0}>
-      {/* Header — reminder controls on the left, primary actions on the right */}
+    <div className="relative z-10 grid h-full min-h-0 grid-rows-[auto_auto_1fr] gap-3 p-4 pt-6 lg:pt-14" tabIndex={0}>
+      {/* Header — primary actions on the right */}
       <DialogHeader>
         <DialogTitle hidden={true}>Note Editor</DialogTitle>
         <div className="flex items-center gap-2">
-          <Popover open={isReminderOpen} onOpenChange={setIsReminderOpen}>
-            <PopoverTrigger asChild>
-              {isReminderSet ? (
-                <Button variant="secondary" size="sm" className="gap-1.5 bg-highlight/30 text-xs dark:bg-highlight/25">
-                  <Bell className="size-3.5" />
-                  {format(selectedDate, 'PP')}, {selectedTime}
-                </Button>
-              ) : (
-                <Button variant="outline" size="sm" className="gap-1.5 text-muted-foreground">
-                  <Bell className="size-3.5" />
-                  Remind me
-                </Button>
-              )}
-            </PopoverTrigger>
-            <PopoverContent align="start">
-              <div className="flex flex-col gap-2.5">
-                <div className="flex">
-                  <Label htmlFor="time-picker" className="px-1">
-                    Time:
-                  </Label>{' '}
-                  <Input
-                    type="time"
-                    id="time-picker"
-                    value={selectedTime}
-                    onChange={e => setSelectedTime(e.target.value)}
-                    className="bg-background appearance-none w-fit ml-auto"
-                  />
-                </div>
-                <Separator />
-                <Calendar
-                  mode="single"
-                  className="p-0 self-center w-full"
-                  selected={selectedDate}
-                  onSelect={setSelectedDate}
-                />
-
-                {isReminderSet && (
-                  <>
-                    <Separator />
-                    <div className="flex justify-between">
-                      <div className="text-muted-foreground">Set for: </div>
-                      {format(selectedDate, 'PPP')}, {selectedTime}
-                    </div>
-                  </>
-                )}
-              </div>
-            </PopoverContent>
-          </Popover>
-          {isReminderSet ? (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              title="Clear reminder"
-              onClick={() => {
-                setSelectedDate(undefined);
-                setSelectedTime('12:00');
-              }}
-            >
-              <Trash2Icon className="size-3.5" />
-            </Button>
-          ) : null}
-
           <div className="ml-auto flex items-center gap-2">
             <Button
               variant={saveError ? 'destructive' : 'default'}
-              className="gap-2"
+              // Enhanced primary for the editor: a hard offset shadow makes it read as a stamped key
+              // that lifts on hover and presses in on click — the theme's "stamped" ink-on-paper depth.
+              className="gap-2 shadow-sm hover:shadow-md active:translate-y-px active:shadow-none"
               onClick={handleSaveNote}
               disabled={isProcessing}
               title={saveError ? 'Saving failed — your note is still here. Try again.' : undefined}
@@ -364,34 +299,47 @@ const EditorCore = () => {
         </div>
       </DialogHeader>
 
-      {/* Title with AI fill */}
-      <div className="flex items-center overflow-hidden rounded-lg bg-background/40">
-        <Input
-          id="note_title"
-          name="note_title"
-          type="text"
-          value={noteTitle || ''}
-          onChange={e => setNoteTitle(e.target.value)}
-          className="h-11 w-full border-0 bg-transparent text-base font-medium shadow-none focus-visible:ring-0 dark:bg-transparent"
-          placeholder="Title — leave empty to let AI name it"
-        />
-        <Button
-          variant="ghost"
-          size="icon"
-          className="mr-1 shrink-0 text-foreground/60 hover:text-foreground"
-          title="Generate a title with AI"
-          disabled={isHttpOperationActive}
-          onClick={() => handleRefetchTitle(editor.getText().trim())}
-        >
-          {isFetchingTitle ? <Loader2Icon className="animate-spin" /> : <Sparkles />}
-        </Button>
+      {/* Control panel — the penned title and the formatting rail framed as one stamped inset
+          (.nb-panel-quiet: a SOLID graphite-tinted card, so it reads as a defined control zone
+          without a translucent fill bleeding the paper grain). A separator splits the title from
+          the tools; the writing field below stays open on the bare page. */}
+      <div className="nb-panel-quiet flex flex-col gap-2 rounded-lg border p-2 shadow-sm">
+        <div className="flex items-center gap-2">
+          <Input
+            id="note_title"
+            name="note_title"
+            type="text"
+            value={noteTitle || ''}
+            onChange={e => setNoteTitle(e.target.value)}
+            // Penned title: borderless, straight on the paper, brand serif (the "Mneme" voice).
+            // Fixed h-11 (not h-auto) lets the browser vertically centre the serif cleanly and gives
+            // it breathing room; px-1.5 keeps the caret off the edge and lines the first glyph up
+            // with the toolbar icons below (they're inset inside their toggles). The empty state
+            // drops to a small sans hint so the placeholder isn't a giant serif line.
+            className="h-11 flex-1 border-0 bg-transparent px-1.5 font-serif text-2xl font-medium tracking-tight shadow-none focus-visible:ring-0 placeholder:font-sans placeholder:text-sm placeholder:font-normal placeholder:tracking-normal md:text-2xl dark:bg-transparent"
+            placeholder="Untitled — leave blank to let AI name it"
+          />
+          {/* AI title-fill: bordered so it reads as a control, not a stray glyph on the panel. */}
+          <Button
+            variant="outline"
+            size="icon-sm"
+            className="shrink-0 text-foreground/60 hover:text-primary"
+            title="Generate a title with AI"
+            disabled={isHttpOperationActive}
+            onClick={() => handleRefetchTitle(editor.getText().trim())}
+          >
+            {isFetchingTitle ? <Loader2Icon className="animate-spin" /> : <Sparkles />}
+          </Button>
+        </div>
+
+        <Separator className="bg-border/70" />
+
+        <NoteToolbar editor={editor} disabled={editorUnavailable} />
       </div>
 
-      {/* Formatting toolbar */}
-      <NoteToolbar editor={editor} disabled={editorUnavailable} />
-
-      {/* Editor surface — ruled paper, so writing sits on notebook lines */}
-      <div className="nb-paper relative min-h-0 overflow-hidden rounded-lg bg-background/40 text-sm text-foreground/90">
+      {/* Writing field — the open page itself; the notepad sheet (card + grain) shows straight
+          through, so the text sits on paper rather than in a sunken translucent box. */}
+      <div className="nb-paper relative min-h-0 overflow-hidden text-sm text-foreground/90">
         <RealtimeAudioRecorder
           onStreamingText={handleStreamingText}
           onFinalText={handleFinalText}

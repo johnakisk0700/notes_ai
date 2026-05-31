@@ -1,42 +1,27 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 
-type Theme = 'dark' | 'light' | 'system';
+export type Theme = 'dark' | 'light' | 'system';
 const PALETTE_VALUES = ['paper', 'classic', 'warm', 'sage', 'copper'] as const;
 export type Palette = (typeof PALETTE_VALUES)[number];
 type PaletteOption = {
   value: Palette;
   label: string;
-  swatch: {
-    surface: string;
-    primary: string;
-  };
+  /** One-line "paper & ink" tagline shown under the name in the Settings palette gallery. */
+  blurb: string;
 };
 
-// Registered palettes — shown in Settings. "classic" is the base CSS look
-// (warm ecru / midnight) and carries NO data-theme attribute; the others map to the theme files
-// @imported in index.css. Add one: create themes/<value>.css, @import it, append here.
+// Registered palettes — shown in Settings. "classic" is the base CSS look (warm ecru /
+// midnight) and carries NO data-theme attribute when active globally; the others map to the
+// theme files @imported in index.css. Every palette is also addressable as [data-theme="<value>"]
+// on any element, so the Settings gallery can preview each one live (classic included) — the
+// preview pulls true colours straight from the CSS, so these entries only carry the name +
+// tagline. Add one: create themes/<value>.css, @import it, append here.
 export const PALETTES: PaletteOption[] = [
-  { value: 'paper', label: 'Graphite Paper', swatch: { surface: 'oklch(0.988 0 0)', primary: 'oklch(0.28 0 0)' } },
-  {
-    value: 'classic',
-    label: 'Midnight Ecru',
-    swatch: { surface: 'oklch(0.9647 0.0118 84.59)', primary: 'oklch(0.38 0.095 256)' },
-  },
-  {
-    value: 'warm',
-    label: 'Warm Linen',
-    swatch: { surface: 'oklch(0.978 0.006 84.59)', primary: 'oklch(0.38 0.07 256)' },
-  },
-  {
-    value: 'sage',
-    label: 'Sage Ledger',
-    swatch: { surface: 'oklch(0.962 0.012 132)', primary: 'oklch(0.36 0.065 150)' },
-  },
-  {
-    value: 'copper',
-    label: 'Copper Ink',
-    swatch: { surface: 'oklch(0.96 0.012 64)', primary: 'oklch(0.42 0.075 50)' },
-  },
+  { value: 'paper', label: 'Graphite Paper', blurb: 'Pencil on bright white' },
+  { value: 'classic', label: 'Midnight Ecru', blurb: 'Fountain-pen ink on warm ecru' },
+  { value: 'warm', label: 'Warm Linen', blurb: 'Soft ink on woven linen' },
+  { value: 'sage', label: 'Sage Ledger', blurb: 'Evergreen on quiet green' },
+  { value: 'copper', label: 'Copper Ink', blurb: 'Copper on warm stock' },
 ];
 
 const isPalette = (value: string | null): value is Palette =>

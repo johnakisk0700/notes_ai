@@ -3,8 +3,9 @@ import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 import {
   CHAT_MODELS,
-  supportsReasoning,
+  effortsForModel,
   type ChatModelId,
+  type ModelBrand,
   type ModelCapability,
   type ReasoningEffort,
 } from '@shared/ai/chatModels';
@@ -14,16 +15,27 @@ import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { ProviderIcon } from '../icons/ProviderIcon';
 import { EffortSelector } from './EffortSelector';
 
-// Capability → icon + label. Lives here (not in @shared) so the shared module stays
-// dependency-free; add a capability in chatModels.ts, then map its icon here.
-const CAPABILITY_META: Record<ModelCapability, { icon: LucideIcon; label: string }> = {
-  reasoning: { icon: Brain, label: 'Thinking' },
-  vision: { icon: Image, label: 'Vision' },
-  tools: { icon: Wrench, label: 'Tools' },
+// Capability → icon + label + a muted hue so the row reads as a colour legend at a glance.
+// Lives here (not in @shared) so the shared module stays dependency-free; add a capability in
+// chatModels.ts, then map its icon + colour here. Colours are a deliberate, contained exception to
+// the app's one-ink rule — kept low-key (colored-pencil, not neon) with a dark-mode tone each.
+const CAPABILITY_META: Record<ModelCapability, { icon: LucideIcon; label: string; color: string }> = {
+  reasoning: { icon: Brain, label: 'Thinking', color: 'text-amber-600 dark:text-amber-400' },
+  vision: { icon: Image, label: 'Vision', color: 'text-sky-600 dark:text-sky-400' },
+  tools: { icon: Wrench, label: 'Tools', color: 'text-emerald-600 dark:text-emerald-400' },
 };
 
-// Single-letter effort shown as a read-only hint on the trigger (the full control is in the popover).
-const EFFORT_SHORT: Record<ReasoningEffort, string> = { low: 'L', medium: 'M', high: 'H' };
+// Muted brand tints for the provider marks — a little colour on the left to balance the capability
+// hues on the right (the "one ink" elsewhere stays). Low saturation so they sit inside the notebook
+// palette; softened when unselected and brought to full when a row is picked (see the rows below).
+const BRAND_COLOR: Record<ModelBrand, string> = {
+  openai: 'text-teal-600 dark:text-teal-400',
+  qwen: 'text-violet-500 dark:text-violet-400',
+  glm: 'text-blue-600 dark:text-blue-400',
+};
+
+// Short effort code shown as a read-only hint on the trigger (the full control is in the popover).
+const EFFORT_SHORT: Record<ReasoningEffort, string> = { minimal: 'Min', low: 'L', medium: 'M', high: 'H' };
 
 interface ModelSelectorProps {
   value: ChatModelId;
@@ -38,13 +50,14 @@ interface ModelSelectorProps {
 export const ModelSelector = ({ value, onChange, effort, onEffortChange }: ModelSelectorProps) => {
   const [open, setOpen] = useState(false);
   const current = CHAT_MODELS.find(m => m.id === value) ?? CHAT_MODELS[0];
-  const reasoning = supportsReasoning(value);
+  const efforts = effortsForModel(value);
+  const reasoning = efforts.length > 0;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="sm" className="h-8 gap-1.5 px-2 text-xs">
-          <ProviderIcon brand={current.brand} className="size-4 text-foreground/70" />
+          <ProviderIcon brand={current.brand} className={cn('size-4 opacity-70', BRAND_COLOR[current.brand])} />
           {current.label}
           {reasoning ? (
             <span
@@ -74,8 +87,11 @@ export const ModelSelector = ({ value, onChange, effort, onEffortChange }: Model
                   selected ? 'border-border bg-accent' : 'border-border/40 hover:border-border/70 hover:bg-accent/35'
                 )}
               >
-                {/* Brand mark (tintable via currentColor) — glows in ink when selected. */}
-                <ProviderIcon brand={m.brand} className={cn('size-6', selected ? 'text-primary' : 'text-foreground/70')} />
+                {/* Brand mark (tintable via currentColor) — muted brand tint, brightens when selected. */}
+                <ProviderIcon
+                  brand={m.brand}
+                  className={cn('size-6', BRAND_COLOR[m.brand], selected ? 'opacity-85' : 'opacity-50')}
+                />
 
                 {/* Name + provider, with the description underneath. */}
                 <div className="flex min-w-0 flex-col gap-0.5">
@@ -88,12 +104,16 @@ export const ModelSelector = ({ value, onChange, effort, onEffortChange }: Model
                   <span className="truncate text-xs text-muted-foreground">{m.description}</span>
                 </div>
 
-                {/* Capability icons (hover for the label). */}
-                <div className={cn('flex items-center gap-2', selected ? 'text-primary' : 'text-muted-foreground')}>
+                {/* Capability icons, colour-coded (hover for the label); slightly dimmed until selected. */}
+                <div className="flex items-center gap-2">
                   {m.capabilities.map(cap => {
-                    const { icon: Icon, label } = CAPABILITY_META[cap];
+                    const { icon: Icon, label, color } = CAPABILITY_META[cap];
                     return (
-                      <span key={cap} title={label} className="inline-flex">
+                      <span
+                        key={cap}
+                        title={label}
+                        className={cn('inline-flex', color, selected ? 'opacity-85' : 'opacity-65')}
+                      >
                         <Icon className="size-4" />
                       </span>
                     );
@@ -108,7 +128,7 @@ export const ModelSelector = ({ value, onChange, effort, onEffortChange }: Model
             px-3 lines the brain up under the model brand marks (cards: border + px-3). */}
         {reasoning ? (
           <div className="mt-2 px-3">
-            <EffortSelector value={effort} onChange={onEffortChange} />
+            <EffortSelector value={effort} efforts={efforts} onChange={onEffortChange} />
           </div>
         ) : null}
       </PopoverContent>

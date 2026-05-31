@@ -78,6 +78,17 @@ const elContent = {
   select_theme: 'Θέμα',
   ask_anything: 'Ρώτα οτιδήποτε...',
   select_lang: 'Επιλογή γλώσσας',
+  // ── Settings page ──
+  appearance: 'Εμφάνιση',
+  interface_mode: 'Λειτουργία',
+  mode_light: 'Φωτεινό',
+  mode_dark: 'Σκοτεινό',
+  mode_system: 'Σύστημα',
+  palette_hint: 'Διάλεξε χαρτί & μελάνι',
+  account: 'Λογαριασμός',
+  sign_out: 'Αποσύνδεση',
+  role_admin: 'Διαχειριστής',
+  role_user: 'Χρήστης',
   // Collapsible label for the model's reasoning disclosure (see ReasoningCard).
   chat_reasoning: 'Σκέψεις',
   // Stable label for screen readers (the visible text rotates through chat_thinking_verbs).

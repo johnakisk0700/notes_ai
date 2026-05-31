@@ -1,12 +1,9 @@
 ## Personal Notes
 
-- [x]  **Save a note with a reminder**
-- [x]  **Update a note** without changing reminder
-- [x]  **Update a note** only changing reminder
-- [x]  **Save a note without a reminder**
+- [x]  **Save a note**
+- [x]  **Update a note**
 - [x]  **Transcribe from microphone** mention a wine
 - [x]  **Use @ mention feature** + save
-- [x] Set reminder without note should not be allowed
 
 ## AI Assistant
 
@@ -15,6 +12,8 @@
 - [x]  **Transcribe** should work
 - [x]  **Text-to-speech** for chat messages
 - [x]  Respond with toasted"**Please enter query**" if the query is empty
+- [ ]  **Web search** — ask something current (expect a web_search → fetch_page card + a cited answer)
+- [ ]  **Name lookup** — ask "ποιους πελάτες έχω;" or a misspelled name (expect lookup_names to resolve it)
 - [ ]  **Transcribe** should work in ios
 
 ## Admin Notes
@@ -28,7 +27,6 @@
 
 - [x]  **Notifications** should work on refresh
 - [x] Notifications should disappear on read
-- [x]  Set a **reminder for yesterday** to check
 
 ## Authentication
 

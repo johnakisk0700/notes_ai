@@ -27,6 +27,7 @@
 #   Redis:      6380  -> 6379
 #   Postgres:   5433  -> 5432
 #   MongoDB:    27018 -> 27017
+#   SearXNG:    (internal-only, no host port — see the searxng-ai-assistant service)
 services:
   backend:
     build:
@@ -48,6 +49,8 @@ services:
       REDIS_URL: redis://redis-ai-assistant:6379
       QDRANT_HOST: qdrant-ai-assistant
       QDRANT_PORT: 6333
+      # Self-hosted SearXNG for the chat's web_search tool (DuckDuckGo is the in-code fallback).
+      SEARXNG_URL: http://searxng-ai-assistant:8080
     ports:
       - "127.0.0.1:5100:5100"
     volumes:
@@ -73,6 +76,9 @@ services:
       # mongod boot and the connect fails with ECONNREFUSED on a cold `up`.
       mongo-ai-assistant:
         condition: service_healthy
+      # web_search degrades to DuckDuckGo if SearXNG isn't ready, so service_started is enough.
+      searxng-ai-assistant:
+        condition: service_started
 
   # One-shot: applies the shared/drizzle migrations, then exits. The backend
   # gates on this completing (service_completed_successfully), so tables always
@@ -134,6 +140,20 @@ services:
     container_name: ai-assistant-redis
     ports:
       - "127.0.0.1:6380:6379"
+
+  # Self-hosted metasearch for the chat's web_search tool (free, no external key). INTERNAL-ONLY:
+  # the backend reaches it over the docker network (SEARXNG_URL on the backend), so no host port is
+  # published — that also avoids a Windows reserved-port range breaking `up`. The web_search client
+  # falls back to DuckDuckGo if it's unreachable. Config in searxng/settings.yml. (To poke the JSON
+  # API from the host, temporarily add `ports: ["127.0.0.1:<free-port>:8080"]`.)
+  searxng-ai-assistant:
+    image: searxng/searxng:latest
+    restart: always
+    container_name: ai-assistant-searxng
+    volumes:
+      - ./searxng:/etc/searxng
+    environment:
+      SEARXNG_BASE_URL: http://searxng-ai-assistant:8080/
 
   postgres-ai-assistant:
     image: postgres:17

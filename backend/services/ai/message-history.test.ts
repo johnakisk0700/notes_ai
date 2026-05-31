@@ -74,6 +74,51 @@ describe("historyForModel", () => {
     expect((out[0].parts[0] as { text: string }).text).toContain("A note was created and saved");
   });
 
+  it("summarizes propose_edit (before→after) and save_edit (saved) for model history", () => {
+    const proposed = historyForModel([
+      msg("assistant", [
+        {
+          type: "tool-propose_edit",
+          toolCallId: "p1",
+          state: "output-available",
+          output: { found: true, noteId: "n1", title: "Shopping", before: "milk", after: "milk, eggs" },
+          transaction: { status: "discarded", updatedAt: "2026-05-30T00:00:00.000Z" },
+        },
+      ]),
+    ]);
+    const ptext = (proposed[0].parts[0] as { text: string }).text;
+    expect(ptext).toContain('A note edit was proposed for "Shopping" (n1).');
+    expect(ptext).toContain("The user declined/discarded this edit.");
+
+    const saved = historyForModel([
+      msg("assistant", [
+        {
+          type: "tool-save_edit",
+          toolCallId: "s1",
+          state: "output-available",
+          output: { found: true, saved: true, noteId: "n1", title: "Shopping", content: "milk, eggs" },
+        },
+      ]),
+    ]);
+    expect((saved[0].parts[0] as { text: string }).text).toContain("A note was edited and saved");
+  });
+
+  it("drops a skipped (one-edit-per-turn) edit — no summary, so a text-less turn falls out", () => {
+    const out = historyForModel([
+      msg("user", [{ type: "text", text: "q" }]),
+      msg("assistant", [
+        {
+          type: "tool-save_edit",
+          toolCallId: "s2",
+          state: "output-available",
+          output: { found: true, skipped: true, noteId: "n1", title: "X" },
+        },
+      ]),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].role).toBe("user");
+  });
+
   it("leaves user turns untouched (image file part survives)", () => {
     const user = msg("user", [
       { type: "file", url: "/api/chat-image/abc", mediaType: "image/png" },

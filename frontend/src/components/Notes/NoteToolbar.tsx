@@ -24,7 +24,9 @@ const ToolbarToggle = ({ pressed, disabled, onToggle, label, children }: Toolbar
     onPressedChange={onToggle}
     title={label}
     aria-label={label}
-    className="size-8 rounded-md text-foreground/70 data-[state=on]:text-foreground"
+    // Sits on the bare paper (no toolbar box), so style it as a graphite tool: faint ink wash on
+    // hover, and an *inked* fill when the format is on — the page's one accent, not shadcn grey.
+    className="size-8 rounded-md text-foreground/60 hover:bg-foreground/5 hover:text-foreground data-[state=on]:bg-primary/10 data-[state=on]:text-primary data-[state=on]:hover:bg-primary/15 data-[state=on]:hover:text-primary"
   >
     {children}
   </Toggle>
@@ -60,7 +62,7 @@ export const NoteToolbar = ({ editor, disabled, className }: NoteToolbarProps) =
   });
 
   return (
-    <div className={cn('flex flex-wrap items-center gap-0.5 rounded-lg bg-background/40 p-1', className)}>
+    <div className={cn('flex flex-wrap items-center gap-0.5', className)}>
       <ToolbarToggle
         pressed={active.bold}
         disabled={disabled}

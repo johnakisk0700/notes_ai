@@ -7,11 +7,11 @@ export async function getNote(req, res) {
     return res.status(400).json({ error: "noteId parameter is required" });
   }
 
-  const noteWithReminder = await notesRepo.findForUser(noteId, req.user.id);
+  const note = await notesRepo.findForUser(noteId, req.user.id);
 
-  if (!noteWithReminder) {
+  if (!note) {
     return res.status(404).json({ error: "Note not found" });
   }
 
-  res.status(200).json(noteWithReminder);
+  res.status(200).json(note);
 }

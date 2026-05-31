@@ -10,6 +10,18 @@ const WIDTHS = {
   full: 'max-w-7xl', // lists / grids that want the room
 } as const;
 
+// The title indents past the floating sidebar toggle (pl-9) so the toggle doesn't sit on top of
+// it. But once the column hits its max width and centres, it pulls clear of the toggle on its
+// own and that indent just reads as a stray gap — so we drop it past each width's centring point
+// (≈ the column's max width + the toggle's width). Driven by the `@container/page` below, so it
+// tracks the real available width and stays correct whether the sidebar is open or closed — a
+// viewport breakpoint can't tell, since the sidebar changes how much room the column has.
+const TITLE_INDENT = {
+  prose: 'pl-9 @min-[52rem]/page:pl-0',
+  wide: 'pl-9 @min-[68rem]/page:pl-0',
+  full: 'pl-9 @min-[84rem]/page:pl-0',
+} as const;
+
 interface PageProps {
   children: ReactNode;
   /** Content-column max width. Default 'wide'. */
@@ -33,9 +45,9 @@ interface PageProps {
  * (MainChatPage is the deliberate exception — it positions itself.)
  */
 export const Page = ({ children, width = 'wide', title, className, contentClassName }: PageProps) => (
-  <div className={cn('h-full w-full overflow-y-auto hide-scrollbar', className)}>
+  <div className={cn('@container/page h-full w-full overflow-y-auto hide-scrollbar', className)}>
     <div className={cn('mx-auto w-full px-4 pb-6 md:px-6', title ? 'pt-5' : 'pt-14', WIDTHS[width], contentClassName)}>
-      {title ? <PageRule label={title} className="mt-0" contentClassName="pl-9" /> : null}
+      {title ? <PageRule label={title} className="mt-0" contentClassName={TITLE_INDENT[width]} /> : null}
       {children}
     </div>
   </div>

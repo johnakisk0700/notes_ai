@@ -1,12 +1,17 @@
 import { cn } from '@/lib/utils';
 import { AlertTriangle, Check, ChevronDown, ChevronRight, Loader2, Search } from 'lucide-react';
 import { useState } from 'react';
+import { resolveOutput } from './notePreviewCache';
+import { toolCallVisualState } from './toolCardState';
 
-// One agent tool call (e.g. search_notes), rendered as a collapsible chip:
-// a friendly label + the query, a running/done/error indicator, and (expanded)
-// the raw input/output. Driven by the AI SDK `tool-<name>` message part.
+// One agent tool call (e.g. search_notes), rendered as a collapsible chip: a friendly label +
+// the query, a running/done/error indicator, and (expanded) the raw input/output. Driven by the
+// AI SDK `tool-<name>` message part. `settled` = its turn has finished — once settled the chip
+// never spins, so a result that arrived while the live overlay left the part at input-available
+// can't leave the chip stuck loading (see toolCallVisualState).
 interface ToolPart {
   type: string; // "tool-<name>"
+  toolCallId?: string;
   state?: string; // input-streaming | input-available | output-available | output-error
   input?: unknown;
   output?: unknown;
@@ -16,20 +21,31 @@ interface ToolPart {
 const TOOL_LABELS: Record<string, string> = {
   search_notes: 'Αναζήτηση σημειώσεων',
   list_recent_notes: 'Πρόσφατες σημειώσεις',
+  filter_by_date: 'Σημειώσεις ανά ημερομηνία',
+  read_note: 'Ανάγνωση σημείωσης',
+  lookup_names: 'Αναζήτηση ονομάτων',
+  view_image: 'Προβολή εικόνας',
+  web_search: 'Αναζήτηση στο διαδίκτυο',
+  fetch_page: 'Άνοιγμα σελίδας',
 };
 
-export const ToolCallCard = ({ part }: { part: ToolPart }) => {
+export const ToolCallCard = ({ part, settled }: { part: ToolPart; settled: boolean }) => {
   const [open, setOpen] = useState(false);
 
   const name = part.type.replace(/^tool-/, '');
   const label = TOOL_LABELS[name] ?? name;
-  const running = part.state === 'input-streaming' || part.state === 'input-available';
-  const isError = part.state === 'output-error';
-  const query = (part.input as { query?: string } | undefined)?.query;
-  const count = (part.output as { count?: number } | undefined)?.count;
+  // Cache-backed output so a mid-stream remount that momentarily drops it can't flash the chip
+  // back to a spinner (the same guard the note cards use).
+  const output = resolveOutput<{ count?: number; ok?: boolean }>(part);
+  const status = toolCallVisualState({ state: part.state, output, settled });
+  // The most informative bit of input to show inline, across tools: a search query, a name
+  // lookup term/kind, or a fetched url.
+  const input = part.input as { query?: string; search?: string; url?: string; kind?: string } | undefined;
+  const detail = input?.query ?? input?.search ?? input?.url ?? input?.kind;
+  const count = output?.count;
 
   return (
-    <div className="my-1.5 rounded-lg border border-primary/15 bg-primary/5 text-xs not-prose">
+    <div className="my-1.5 rounded-lg border nb-panel text-xs not-prose">
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
@@ -38,11 +54,11 @@ export const ToolCallCard = ({ part }: { part: ToolPart }) => {
         {open ? <ChevronDown className="size-3.5 shrink-0" /> : <ChevronRight className="size-3.5 shrink-0" />}
         <Search className="size-3.5 shrink-0 opacity-70" />
         <span className="font-medium shrink-0">{label}</span>
-        {query ? <span className="truncate text-muted-foreground">: “{query}”</span> : null}
+        {detail ? <span className="truncate text-muted-foreground">: “{detail}”</span> : null}
         <span className="ml-auto flex shrink-0 items-center gap-1 text-muted-foreground">
-          {running ? (
+          {status === 'running' ? (
             <Loader2 className="size-3.5 animate-spin" />
-          ) : isError ? (
+          ) : status === 'error' ? (
             <AlertTriangle className="size-3.5 text-destructive" />
           ) : (
             <Check className="size-3.5 text-emerald-600" />
@@ -57,7 +73,7 @@ export const ToolCallCard = ({ part }: { part: ToolPart }) => {
             'font-mono text-[11px] whitespace-pre-wrap break-words text-muted-foreground'
           )}
         >
-          {isError ? part.errorText : JSON.stringify(part.output ?? part.input ?? {}, null, 2)}
+          {part.state === 'output-error' ? part.errorText : JSON.stringify(output ?? part.input ?? {}, null, 2)}
         </pre>
       ) : null}
     </div>

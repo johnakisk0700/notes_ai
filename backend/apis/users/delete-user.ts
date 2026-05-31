@@ -1,6 +1,5 @@
 import { notesTable } from "@shared/db/schema/notes";
 import { profileTable } from "@shared/db/schema/profile";
-import { remindersTable } from "@shared/db/schema/reminders";
 import { clerkClient } from "@clerk/express";
 import { drizzlePg } from "clients/drizzle_postgres_client";
 import { qdrantClient } from "clients/qdrant_client";
@@ -23,7 +22,6 @@ export async function deleteUser(req, res) {
   const noteIds = await notesRepo.idsForUser(userId);
 
   await drizzlePg.transaction(async tx => {
-    await tx.delete(remindersTable).where(eq(remindersTable.userId, userId));
     await tx.delete(notesTable).where(eq(notesTable.userId, userId));
     await tx.delete(profileTable).where(eq(profileTable.id, userId));
   });

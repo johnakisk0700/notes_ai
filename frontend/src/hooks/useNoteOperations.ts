@@ -62,8 +62,6 @@ export const useNoteOperations = (onSuccess?: () => void) => {
     noteTitle: string,
     content: string,
     noteId: string | null | undefined,
-    selectedDate?: Date,
-    selectedTime?: string,
     signal?: AbortSignal
   ): Promise<boolean> => {
     const trimmedContent = content.trim();
@@ -82,13 +80,6 @@ export const useNoteOperations = (onSuccess?: () => void) => {
         if (!finalTitle) throw new Error('Could not decide on a title.');
       }
 
-      let remindAt;
-      if (selectedDate && selectedTime) {
-        const [hours, minutes] = selectedTime.split(':').map(Number);
-        selectedDate.setHours(hours, minutes, 0, 0);
-        remindAt = selectedDate.toISOString();
-      }
-
       const requestConfig = { signal: requestSignal };
 
       if (noteId) {
@@ -99,11 +90,12 @@ export const useNoteOperations = (onSuccess?: () => void) => {
             content: trimmedContent,
             title: finalTitle,
             noteId: noteId,
-            remindAt: remindAt ?? '',
           },
           requestConfig
         );
         toast.success('Note updated successfully');
+        localStorage.removeItem(`${noteId}_draft_title`);
+        localStorage.removeItem(`${noteId}_draft_content`);
       } else {
         // Create new note
         await api.post(
@@ -111,7 +103,6 @@ export const useNoteOperations = (onSuccess?: () => void) => {
           {
             noteText: trimmedContent,
             title: finalTitle,
-            remindAt,
           },
           requestConfig
         );

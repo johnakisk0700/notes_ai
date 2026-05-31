@@ -12,7 +12,15 @@ import { ThinkingIndicator } from './ThinkingIndicator';
 import { ToolCallCard } from './ToolCallCard';
 
 // Tool calls that get the rich note-preview card; every other tool stays on the chip.
-const NOTE_ACTION_TOOLS = new Set(['tool-create_note', 'tool-propose_note_edit', 'tool-draft_note']);
+// (tool-propose_note_edit / tool-draft_note are legacy names kept so old threads still render.)
+const NOTE_ACTION_TOOLS = new Set([
+  'tool-create_note',
+  'tool-propose_edit',
+  'tool-save_edit',
+  'tool-edit_note', // legacy unified edit
+  'tool-propose_note_edit', // legacy name
+  'tool-draft_note', // legacy standalone draft
+]);
 
 interface ChatMessageProps {
   message: AppUIMessage;
@@ -56,7 +64,10 @@ const ChatImageThumb = ({ url, alt }: { url: string; alt?: string }) => {
   const { src, loading, error } = useAuthedImageUrl(url);
   if (error)
     return (
-      <div className="flex size-24 items-center justify-center rounded-md border border-border bg-muted/40 text-muted-foreground">
+      <div
+        title={alt ?? 'Image unavailable'}
+        className="flex size-24 items-center justify-center rounded-md border border-border bg-muted/40 text-muted-foreground"
+      >
         <ImageOff className="size-5" />
       </div>
     );
@@ -181,6 +192,10 @@ const AIMessage = ({
   const status = statusOf(message.metadata);
   const streaming = thinking || status === 'streaming';
   const interrupted = !streaming && status === 'error';
+  // The turn has finished (a clean/complete or errored turn, vs one still streaming). Tool cards
+  // use this so a chip never stays on a spinner once the answer is in, even if the live overlay
+  // left its part mid-state (see ToolCallCard / toolCallVisualState).
+  const settled = !streaming;
   return (
     <div style={{ minHeight }} id={message.id}>
       {message.parts.map((part, i) => {
@@ -196,12 +211,13 @@ const AIMessage = ({
         }
         // Note-action tools (create/edit/draft) → rich note preview; the rest → tool chip.
         if (part.type.startsWith('tool-')) {
-          if (NOTE_ACTION_TOOLS.has(part.type)) return <NotePreviewCard key={key} part={part} messageId={message.id} />;
-          return <ToolCallCard key={key} part={part} />;
+          if (NOTE_ACTION_TOOLS.has(part.type))
+            return <NotePreviewCard key={key} part={part} messageId={message.id} settled={settled} />;
+          return <ToolCallCard key={key} part={part} settled={settled} />;
         }
         // The model's reasoning (when the provider streams it) → quiet disclosure.
         if (part.type === 'reasoning') {
-          return <ReasoningCard key={key} part={part} />;
+          return <ReasoningCard key={key} part={part} settled={settled} />;
         }
         return null;
       })}

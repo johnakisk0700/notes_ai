@@ -106,13 +106,13 @@ export function AppSidebar() {
           </Button>
         </div>
 
-        <div className="grid gap-1 rounded-lg border border-sidebar-border/70 bg-sidebar-accent/25 p-1.5">
+        <div className="grid gap-1.5">
           <Button className="h-10 w-full justify-between px-3 font-semibold shadow-sm" onClick={() => openEditor()}>
             {t('new_note')} <PenLine />
           </Button>
           <Button
             variant="ghost"
-            className="h-10 w-full justify-between border border-transparent px-3 font-semibold text-sidebar-foreground hover:border-sidebar-border hover:bg-sidebar-accent"
+            className="h-10 w-full justify-between border border-transparent px-3 font-medium text-sidebar-foreground hover:border-sidebar-border hover:bg-sidebar-accent/60"
             onClick={handleNewChat}
           >
             {t('new_chat')} <MessageSquarePlus />
@@ -183,7 +183,7 @@ export function AppSidebar() {
 
           {threads.length > 0 && (
             <SidebarGroupContent className="border-t border-sidebar-border/70 pt-2 text-sidebar-foreground/75">
-              <div className="px-2 pb-1 text-[0.6875rem] font-medium uppercase tracking-[0.12em] text-sidebar-foreground/45">
+              <div className="px-2 pb-1.5 font-serif text-[0.82rem] tracking-tight text-sidebar-foreground/55">
                 {t('recent_chats')}
               </div>
               <SidebarMenu>
@@ -192,12 +192,10 @@ export function AppSidebar() {
                     <SidebarMenuButton asChild>
                       <NavLink
                         to={`/thread/${thread.id}`}
-                        className={({ isActive }) =>
-                          `h-fit py-2 pr-8 ${isActive ? 'bg-sidebar-accent text-sidebar-accent-foreground' : ''}`
-                        }
+                        className="nb-thread h-fit py-2 pr-8"
                         onClick={() => handleNavigation(`/thread/${thread.id}`)}
                       >
-                        <span className="truncate">{thread.title || t('untitled_thread')}</span>
+                        <span className="nb-thread-title truncate">{thread.title || t('untitled_thread')}</span>
                       </NavLink>
                     </SidebarMenuButton>
                     <button

@@ -11,7 +11,7 @@ export interface PendingDraft {
 interface NoteEditorContextType {
   isOpen: boolean;
   noteId: string | null;
-  // A note drafted elsewhere (the chat's draft_note tool) waiting to seed a fresh
+  // A note drafted elsewhere (the chat's create_note "draft" mode) waiting to seed a fresh
   // create-mode editor; null once consumed. Read by NoteEditor's create-init.
   pendingDraft: PendingDraft | null;
   openEditor: (note?: Note) => void;

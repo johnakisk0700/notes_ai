@@ -4,7 +4,7 @@
    See paper.css for how theme files work.
    ──────────────────────────────────────────────────────────────────────── */
 
-html[data-theme='warm']:not(.dark) {
+[data-theme='warm']:not(.dark) {
   --background: oklch(0.978 0.006 84.59); /* calm warm paper */
   --foreground: oklch(0.3 0.018 264);
   --card: oklch(0.99 0.005 84.59);
@@ -30,10 +30,11 @@ html[data-theme='warm']:not(.dark) {
   --sidebar-accent-foreground: oklch(0.32 0.018 264);
   --sidebar-border: oklch(0.875 0.01 84.59);
   --sidebar-ring: oklch(0.38 0.07 256);
-  --nb-grain: var(--nb-fiber);
+  --nb-grain: var(--tex-linen);
+  --nb-grain-sidebar: var(--tex-linen-fine);
 }
 
-html[data-theme='warm'].dark {
+[data-theme='warm'].dark {
   --background: oklch(0.19 0.01 264);
   --foreground: oklch(0.9 0.008 84.59);
   --card: oklch(0.225 0.012 264);
@@ -59,5 +60,6 @@ html[data-theme='warm'].dark {
   --sidebar-accent-foreground: oklch(0.9 0.008 84.59);
   --sidebar-border: oklch(0.285 0.012 264);
   --sidebar-ring: oklch(0.68 0.08 256);
-  --nb-grain: var(--nb-fiber);
+  --nb-grain: var(--tex-linen);
+  --nb-grain-sidebar: var(--tex-linen-fine);
 }

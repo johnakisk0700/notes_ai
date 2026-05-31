@@ -7,9 +7,6 @@ import { notesTable } from "@shared/db/schema/notes";
 import type { FullNote } from "@shared/dto/GetNoteDTO";
 import { and, desc, eq, gte, inArray, lte, type SQL } from "drizzle-orm";
 
-// The "read a note" relation — kept in one place so adding a relation is a one-line change.
-const withReminder = { reminder: true } as const;
-
 // The column projection the chat retrieval tools select. Lives here so the shape is
 // declared once rather than re-typed in each tool.
 export const NOTE_COLUMNS = {
@@ -42,17 +39,15 @@ export const notesRepo = {
   findForUser: (noteId: string, userId: string): Promise<FullNote | undefined> =>
     drizzlePg.query.notesTable.findFirst({
       where: and(eq(notesTable.id, noteId), eq(notesTable.userId, userId)),
-      with: withReminder,
     }) as Promise<FullNote | undefined>,
 
   /** A single note with NO owner filter — the explicit admin path (intentionally unscoped). */
   findAny: (noteId: string): Promise<FullNote | undefined> =>
     drizzlePg.query.notesTable.findFirst({
       where: eq(notesTable.id, noteId),
-      with: withReminder,
     }) as Promise<FullNote | undefined>,
 
-  /** The ids of a user's notes (e.g. to scope reminders or purge vectors). */
+  /** The ids of a user's notes (e.g. to purge their vectors on delete). */
   idsForUser: async (userId: string): Promise<string[]> => {
     const rows = await drizzlePg.select({ id: notesTable.id }).from(notesTable).where(eq(notesTable.userId, userId));
     return rows.map(r => r.id);

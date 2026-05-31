@@ -11,16 +11,20 @@ interface ReasoningPart {
   state?: string; // 'streaming' | 'done'
 }
 
-export const ReasoningCard = ({ part }: { part: ReasoningPart }) => {
+export const ReasoningCard = ({ part, settled }: { part: ReasoningPart; settled: boolean }) => {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
 
-  const streaming = part.state === 'streaming';
+  // Only "streaming" while the turn is still live: a turn can settle with its reasoning part left
+  // at state:"streaming" (e.g. the Qwen case where the answer stays stuck in the reasoning channel
+  // and the turn is downgraded to error). Without the settled backstop that spins forever — and an
+  // empty such part would render a blank card with a perpetual spinner.
+  const streaming = !settled && part.state === 'streaming';
   const text = (part.text ?? '').trim();
   if (!text && !streaming) return null;
 
   return (
-    <div className="my-1.5 rounded-lg border border-border/60 bg-muted/30 text-xs not-prose">
+    <div className="my-1.5 rounded-lg border nb-panel-quiet text-xs not-prose">
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
@@ -32,7 +36,7 @@ export const ReasoningCard = ({ part }: { part: ReasoningPart }) => {
         {streaming ? <Loader2 className="ml-auto size-3.5 animate-spin" /> : null}
       </button>
       {open && text ? (
-        <div className="border-t border-border/50 px-2.5 py-2 font-serif text-[0.8rem] leading-relaxed break-words whitespace-pre-wrap text-muted-foreground italic">
+        <div className="border-t border-border/50 px-2.5 py-2 font-reading text-[0.8rem] leading-relaxed break-words whitespace-pre-wrap text-muted-foreground italic">
           {text}
         </div>
       ) : null}
