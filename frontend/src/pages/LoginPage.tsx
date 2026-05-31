@@ -4,6 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Logo } from '@/components/Common/Logo';
 import { api } from '@/integrations/api';
 import { useSignIn, useSignUp } from '@clerk/clerk-react';
 import { Loader2Icon } from 'lucide-react';
@@ -196,7 +197,9 @@ export const LoginPage = () => {
     <div className="flex min-h-dvh w-full flex-col items-center justify-center bg-background p-4">
       <div className="w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center gap-1.5 text-center">
-          <h1 className="font-serif text-3xl font-medium tracking-tight text-balance">Mneme Labs</h1>
+          <h1 aria-label="Mneme Labs">
+            <Logo size="lg" animate suffix="Labs" />
+          </h1>
           <p className="text-sm text-muted-foreground">{t('auth_subtitle')}</p>
         </div>
 

@@ -7,8 +7,8 @@ import { drizzlePg } from "clients/drizzle_postgres_client";
 
 // Seeds the `wines` / `customers` tables (editor autocomplete) from the JSON
 // files the project already uses for Qdrant seeding.
-//   - wines:     `gptNormalizedWines_v2_grouped.json` — each row carries both a
-//                full `product_name` and a `producer`; we seed both (deduped).
+//   - wines:     `wines.json` — each row carries both a full `product_name`
+//                and a `producer`; we seed both (deduped).
 //   - customers: `polites.json` ({ Sheet: [{ name, title }] }). This file holds
 //                customer PII (emails, AFM, addresses) and is intentionally NOT
 //                bundled — drop it in `data/` yourself if you need it; otherwise
@@ -32,7 +32,7 @@ function extractName(item: any): string | null {
 }
 
 async function seedWines() {
-  const raw = readJson("gptNormalizedWines_v2_grouped.json");
+  const raw = readJson("wines.json");
   if (!raw) return;
   const items: any[] = Array.isArray(raw) ? raw : (raw.Sheet ?? []);
   // Seed both the specific bottle (`product_name`) and its maker (`producer`),

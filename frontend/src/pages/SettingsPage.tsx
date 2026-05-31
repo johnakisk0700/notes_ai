@@ -1,7 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useClerk } from '@clerk/clerk-react';
-import { useNavigate } from 'react-router';
 import { Check, Languages, LogOut, Monitor, Moon, Paintbrush, Sun, UserRound } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Page } from '@/components/Common/Page';
@@ -10,12 +8,12 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { FlagGR } from '@/assets/flags/FlagGR';
 import { FlagUK } from '@/assets/flags/FlagUS';
-import { useAuth } from '@/context/AuthContext/AuthContext';
+import { useAccount } from '@/context/AuthContext/useAccount';
 import { DEV_AUTH_BYPASS } from '@/integrations/devAuth';
 import { PALETTES, useTheme, type Theme } from '@/context/ThemeContext/ThemeProvider';
 
 /**
- * Settings — a notebook's inside cover. Stacked sections (Appearance, Language, Account), each
+ * Settings — a notebook's inside cover. Stacked sections (Account, Appearance, Language), each
  * under a mono section rule that echoes the page's dated heading. The star is the palette
  * gallery: every theme is previewed *live* as a tiny page in its own paper, ink and highlighter.
  */
@@ -25,6 +23,10 @@ export const SettingsPage = () => {
   return (
     <Page width="prose" title={t('settings_header')}>
       <div className="flex flex-col pb-8">
+        <Section icon={<UserRound className="size-3.5" />} title={t('account')}>
+          <AccountCard />
+        </Section>
+
         <Section icon={<Paintbrush className="size-3.5" />} title={t('appearance')}>
           <div className="flex flex-col gap-6">
             <Field label={t('interface_mode')}>
@@ -38,10 +40,6 @@ export const SettingsPage = () => {
 
         <Section icon={<Languages className="size-3.5" />} title={t('select_language')}>
           <LanguageToggle />
-        </Section>
-
-        <Section icon={<UserRound className="size-3.5" />} title={t('account')}>
-          <AccountCard />
         </Section>
       </div>
     </Page>
@@ -254,14 +252,7 @@ const LanguageToggle = () => {
 
 const AccountCard = () => {
   const { t } = useTranslation();
-  const { user, isAdmin } = useAuth();
-  const { signOut } = useClerk();
-  const navigate = useNavigate();
-
-  const name = user?.fullName || [user?.firstName, user?.lastName].filter(Boolean).join(' ') || '—';
-  const email = user?.primaryEmailAddress?.emailAddress ?? '';
-  const initials =
-    `${user?.firstName?.[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase() || name.slice(0, 2).toUpperCase();
+  const { user, isAdmin, name, email, initials, signOut } = useAccount();
 
   return (
     <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-3 shadow-sm">
@@ -281,7 +272,7 @@ const AccountCard = () => {
       </div>
 
       {!DEV_AUTH_BYPASS ? (
-        <Button variant="outline" size="sm" className="shrink-0" onClick={() => void signOut(() => navigate('/auth'))}>
+        <Button variant="outline" size="sm" className="shrink-0" onClick={signOut}>
           <LogOut />
           {t('sign_out')}
         </Button>

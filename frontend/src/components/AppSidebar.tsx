@@ -12,10 +12,15 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/context/AuthContext/AuthContext';
+import { useAccount } from '@/context/AuthContext/useAccount';
 import { useNoteEditor } from '@/context/NoteEditorContext';
 import { useThreads } from '@/context/ThreadsContext';
+import { DEV_AUTH_BYPASS } from '@/integrations/devAuth';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Logo } from '@/components/Common/Logo';
 import {
   ChevronsUpDownIcon,
+  LogOut,
   MessageCircle,
   MessageSquarePlus,
   Notebook,
@@ -98,7 +103,7 @@ export function AppSidebar() {
         {/* Title row roughly level with the floating sidebar toggle, so the controls
             sit at a similar height across the sidebar/page edge. */}
         <div className="mb-2 flex h-10 items-center justify-between px-1">
-          <div className="font-serif text-xl tracking-tight">Mneme</div>
+          <Logo />
           <Button variant="ghost" size="icon" className="size-7 text-muted-foreground" asChild>
             <NavLink to={'/settings'} aria-label="Settings" onClick={() => handleNavigation()}>
               <SlidersHorizontal />
@@ -214,7 +219,52 @@ export function AppSidebar() {
           )}
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter />
+      <SidebarFooter className="p-2">
+        <AccountFooter />
+      </SidebarFooter>
     </Sidebar>
+  );
+}
+
+// A compact account strip pinned to the sidebar bottom: avatar + name link through to
+// Settings, with a quick sign-out beside it. Logout is hidden under the dev bypass
+// (no Clerk session to end) — the full account controls still live on the Settings page.
+function AccountFooter() {
+  const { t } = useTranslation();
+  const { setOpenMobile } = useSidebar();
+  const { user, isAdmin, name, email, initials, signOut } = useAccount();
+
+  return (
+    <div className="flex items-center gap-1.5 rounded-lg border border-sidebar-border/70 bg-sidebar-accent/30 p-1.5">
+      <NavLink
+        to="/settings"
+        aria-label={t('account')}
+        onClick={() => setOpenMobile(false)}
+        className="flex min-w-0 flex-1 items-center gap-2 rounded-md p-1 transition-colors hover:bg-sidebar-accent/60"
+      >
+        <Avatar size="sm">
+          {user?.imageUrl ? <AvatarImage src={user.imageUrl} alt={name} /> : null}
+          <AvatarFallback className="font-medium">{initials}</AvatarFallback>
+        </Avatar>
+        <div className="min-w-0 flex-1 leading-tight">
+          <div className="truncate text-sm font-medium text-sidebar-foreground">{name}</div>
+          <div className="truncate text-xs text-sidebar-foreground/55">
+            {email || (isAdmin ? t('role_admin') : t('role_user'))}
+          </div>
+        </div>
+      </NavLink>
+
+      {!DEV_AUTH_BYPASS ? (
+        <button
+          type="button"
+          onClick={signOut}
+          aria-label={t('sign_out')}
+          title={t('sign_out')}
+          className="shrink-0 rounded-md p-1.5 text-sidebar-foreground/55 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+        >
+          <LogOut className="size-4" />
+        </button>
+      ) : null}
+    </div>
   );
 }
